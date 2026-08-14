@@ -209,10 +209,15 @@ def register_strategy_routes(app: FastAPI, require_auth: AuthDep | None = None) 
     @app.get("/strategy/value/leaders", dependencies=[Depends(require_auth)])
     async def value_leaders(
         market: str = Query("CN"), sector_code: str | None = None, as_of: str | None = None,
+        candidate_track_limit: int | None = Query(None, ge=1, le=128),
     ):
         normalized = normalize_market(market)
         if normalized == "CN":
-            return {"market": normalized, **get_value_line_service().leaders(sector_code, as_of), "run": None}
+            return {
+                "market": normalized,
+                **get_value_line_service().leaders(sector_code, as_of, candidate_track_limit),
+                "run": None,
+            }
         store = get_engine_store()
         dashboard = store.dashboard("value", normalized)
         return {"market": normalized, "items": store.list_scores("value", normalized, engine="value_leader", limit=500), "run": dashboard["latest_run"]}

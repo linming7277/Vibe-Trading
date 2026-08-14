@@ -647,7 +647,12 @@ class ValueLineService:
         items.sort(key=lambda row: (row.get("score") is None, -(row.get("score") or 0), row.get("sector_code") or ""))
         return {"as_of": target, "items": items, "total": len(items), "formula_version": SECTOR_VERSION}
 
-    def leaders(self, sector_code: str | None = None, as_of: str | None = None) -> dict[str, Any]:
+    def leaders(
+        self,
+        sector_code: str | None = None,
+        as_of: str | None = None,
+        candidate_track_limit: int | None = None,
+    ) -> dict[str, Any]:
         target = as_of or self.status().get("latest_score_as_of")
         if not target:
             return {"as_of": as_of, "sector_code": sector_code, "items": [], "total": 0}
@@ -673,7 +678,9 @@ class ValueLineService:
             items = [
                 {**row, "candidate_sector_rank": sector_ranks.get(str(row.get("sector_code") or ""), 10_000)}
                 for row in items
-                if row.get("score") is not None and int(row.get("rank") or 1) <= TOTAL_LEADER_POOL_PER_TRACK
+                if row.get("score") is not None
+                and int(row.get("rank") or 1) <= TOTAL_LEADER_POOL_PER_TRACK
+                and (candidate_track_limit is None or sector_ranks.get(str(row.get("sector_code") or ""), 10_000) <= candidate_track_limit)
             ]
             # Leader scores are percentile ranks inside a track.  A total pool
             # must preserve the chosen track's priority before comparing its
@@ -700,6 +707,7 @@ class ValueLineService:
             "formula_version": LEADER_VERSION,
             "pool_rule": None if sector_code else {
                 "per_track_limit": TOTAL_LEADER_POOL_PER_TRACK,
+                "candidate_track_limit": candidate_track_limit,
                 "scored_only": True,
                 "deduplicated_by_symbol": True,
             },

@@ -160,6 +160,9 @@ def test_total_leader_pool_prioritizes_candidate_track_before_in_track_rank(tmp_
         result = service.leaders(as_of="2026-08-13")
         assert [item["symbol"] for item in result["items"]] == ["600000.SH", "000001.SZ"]
         assert result["items"][0]["candidate_sector_rank"] == 1
+        narrowed = service.leaders(as_of="2026-08-13", candidate_track_limit=1)
+        assert [item["symbol"] for item in narrowed["items"]] == ["600000.SH"]
+        assert narrowed["pool_rule"]["candidate_track_limit"] == 1
     finally:
         service.close()
 
@@ -182,7 +185,8 @@ def test_total_leader_pool_keeps_only_scored_top_five_per_track(tmp_path: Path) 
         result = service.leaders(as_of="2026-08-13")
         assert [item["rank"] for item in result["items"]] == [1, 2, 3, 5]
         assert result["pool_rule"] == {
-            "per_track_limit": 5, "scored_only": True, "deduplicated_by_symbol": True,
+            "per_track_limit": 5, "candidate_track_limit": None,
+            "scored_only": True, "deduplicated_by_symbol": True,
         }
     finally:
         service.close()

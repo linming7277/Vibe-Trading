@@ -21,6 +21,7 @@ type ValueWorkspaceContext = {
   leaders: ValueLeaderScore[];
   selectedTrack: ValueTrack | undefined;
   selectedTrackId: string;
+  candidateTrackLimit: number;
   selectedSymbols: string[];
   batches: CompanyResearchBatch[];
   monitors: ValueEntryMonitor[];
@@ -29,6 +30,7 @@ type ValueWorkspaceContext = {
   refreshing: boolean;
   selectProfile: (id: string) => void;
   selectTrack: (id: string) => void;
+  setCandidateTrackLimit: (limit: number) => void;
   toggleSymbol: (symbol: string) => void;
   clearSelection: () => void;
   refreshScores: () => Promise<void>;
@@ -38,6 +40,7 @@ type ValueWorkspaceContext = {
 };
 
 const ALL_TRACK_ID = "__all_candidate_tracks__";
+const CANDIDATE_TRACK_LIMIT_OPTIONS = [5, 10, 20, 50] as const;
 
 const MODEL_LABELS: Record<string, string> = {
   policy_cycle: "政策与产业周期",
@@ -155,6 +158,10 @@ export function ValueResearchWorkspace() {
   const [refreshing, setRefreshing] = useState(false);
 
   const profileId = params.get("profile") || "";
+  const requestedTrackLimit = Number(params.get("candidate_limit"));
+  const candidateTrackLimit = CANDIDATE_TRACK_LIMIT_OPTIONS.includes(requestedTrackLimit as 5 | 10 | 20 | 50)
+    ? requestedTrackLimit
+    : 20;
   const defaultTrackId = useMemo(() => {
     const candidateFirst = [...(workbench?.sector_scores || [])]
       .sort((left, right) => left.rank - right.rank)[0]?.sector_code;
@@ -204,11 +211,15 @@ export function ValueResearchWorkspace() {
   useEffect(() => {
     if (!selectedTrackId) { setLeaders([]); return; }
     let cancelled = false;
-    api.getValueLeaderScores(selectedTrackId === ALL_TRACK_ID ? undefined : selectedTrackId, workbench?.latest_run?.as_of || workbench?.macro?.as_of || undefined)
+    api.getValueLeaderScores(
+      selectedTrackId === ALL_TRACK_ID ? undefined : selectedTrackId,
+      workbench?.latest_run?.as_of || workbench?.macro?.as_of || undefined,
+      selectedTrackId === ALL_TRACK_ID ? candidateTrackLimit : undefined,
+    )
       .then((result) => { if (!cancelled) setLeaders(result.items); })
       .catch((error) => { if (!cancelled) { setLeaders([]); toast.error(error instanceof Error ? error.message : "龙头池加载失败"); } });
     return () => { cancelled = true; };
-  }, [selectedTrackId, workbench?.latest_run?.as_of, workbench?.macro?.as_of]);
+  }, [candidateTrackLimit, selectedTrackId, workbench?.latest_run?.as_of, workbench?.macro?.as_of]);
 
   useEffect(() => {
     if (!defaultTrackId || params.get("track")) return;
@@ -267,9 +278,10 @@ export function ValueResearchWorkspace() {
   }, [reloadOperations, selectedSymbols, selectedTrackId, workbench?.latest_run?.id]);
 
   const context: ValueWorkspaceContext = {
-    profiles, workbench, tracks, leaders, selectedTrack, selectedTrackId, selectedSymbols, batches, monitors, events, loading, refreshing,
+    profiles, workbench, tracks, leaders, selectedTrack, selectedTrackId, candidateTrackLimit, selectedSymbols, batches, monitors, events, loading, refreshing,
     selectProfile: (id) => patchParams({ profile: id, track: null }),
     selectTrack: (id) => patchParams({ track: id }),
+    setCandidateTrackLimit: (limit) => patchParams({ candidate_limit: String(limit), track: ALL_TRACK_ID }),
     toggleSymbol: (symbol) => setSelectedSymbols((current) => selectedTrackId === ALL_TRACK_ID ? current : current.includes(symbol) ? current.filter((item) => item !== symbol) : current.length >= 20 ? current : [...current, symbol]),
     clearSelection: () => setSelectedSymbols([]), refreshScores, reload, reloadOperations, startResearch,
   };
@@ -305,9 +317,13 @@ export function ValueOverview() {
   const [query, setQuery] = useState("");
   const [rankView, setRankView] = useState<"macro" | "overall">("overall");
   const [activeGroup, setActiveGroup] = useState("全部");
+  const candidateSectors = useMemo(
+    () => (context.workbench?.sector_scores || []).filter((item) => item.rank <= context.candidateTrackLimit),
+    [context.candidateTrackLimit, context.workbench?.sector_scores],
+  );
   const groups = useMemo(() => {
     const grouped = new Map<string, ValueSectorScore[]>();
-    for (const sector of context.workbench?.sector_scores || []) {
+    for (const sector of candidateSectors) {
       const key = sector.macro_group_name || "未映射";
       grouped.set(key, [...(grouped.get(key) || []), sector]);
     }
@@ -316,24 +332,27 @@ export function ValueOverview() {
       const macroScore = valid.length ? valid.reduce((sum, item) => sum + Number(item.macro_fit), 0) / valid.length : null;
       return { name, sectors, macroScore, candidateRank: Math.min(...sectors.map((item) => item.rank)) };
     }).sort((left, right) => left.candidateRank - right.candidateRank);
-  }, [context.workbench?.sector_scores]);
+  }, [candidateSectors]);
+  useEffect(() => {
+    if (activeGroup !== "全部" && !groups.some((group) => group.name === activeGroup)) setActiveGroup("全部");
+  }, [activeGroup, groups]);
   const filteredSectors = useMemo(() => {
     const needle = query.toLowerCase();
-    const items = (context.workbench?.sector_scores || []).filter((item) => {
+    const items = candidateSectors.filter((item) => {
       const inGroup = activeGroup === "全部" || item.macro_group_name === activeGroup;
       return inGroup && (!query || `${item.sector_name} ${item.sector_code} ${item.macro_group_name || ""}`.toLowerCase().includes(needle));
     });
     return [...items].sort((left, right) => rankView === "macro"
       ? (left.macro_rank || 999) - (right.macro_rank || 999)
       : left.rank - right.rank);
-  }, [activeGroup, context.workbench?.sector_scores, query, rankView]);
+  }, [activeGroup, candidateSectors, query, rankView]);
   const jobs = context.batches.flatMap((batch) => batch.jobs);
 
   const chooseFirst = useCallback((nextGroup: string, nextRank: "macro" | "overall") => {
-    const candidates = (context.workbench?.sector_scores || []).filter((item) => nextGroup === "全部" || item.macro_group_name === nextGroup);
+    const candidates = candidateSectors.filter((item) => nextGroup === "全部" || item.macro_group_name === nextGroup);
     candidates.sort((left, right) => nextRank === "macro" ? (left.macro_rank || 999) - (right.macro_rank || 999) : left.rank - right.rank);
     if (candidates[0]) context.selectTrack(candidates[0].sector_code);
-  }, [context]);
+  }, [candidateSectors, context]);
 
   const changeGroup = (group: string) => {
     setActiveGroup(group);
@@ -355,6 +374,7 @@ export function ValueOverview() {
   if (context.loading) return <Loading label="正在准备宏观、赛道和龙头快照" />;
   return <div className="space-y-4">
     <MacroStatusBar />
+    <CandidateTrackLimitControl />
     <section className="grid overflow-hidden rounded-xl border bg-card shadow-sm xl:h-[calc(100vh-260px)] xl:min-h-[600px] xl:max-h-[860px] xl:grid-cols-[220px_360px_minmax(0,1fr)]">
       <IndustryGroupPane groups={groups} activeGroup={activeGroup} onSelect={changeGroup} />
       <TrackPane sectors={filteredSectors} query={query} setQuery={setQuery} rankView={rankView} setRankView={changeRank} />
@@ -363,6 +383,14 @@ export function ValueOverview() {
     <ResearchSelectionBar />
     <PipelineSummary jobs={jobs} />
   </div>;
+}
+
+function CandidateTrackLimitControl() {
+  const { candidateTrackLimit, setCandidateTrackLimit } = useValueWorkspace();
+  return <section className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
+    <div className="mr-auto"><div className="text-sm font-semibold">候选赛道范围</div><div className="text-xs text-muted-foreground">只在前 {candidateTrackLimit} 个候选赛道中筛选；每个赛道只取前 5 家龙头。</div></div>
+    <div className="grid grid-cols-4 rounded-lg bg-muted p-1 text-sm">{CANDIDATE_TRACK_LIMIT_OPTIONS.map((limit) => <button key={limit} onClick={() => setCandidateTrackLimit(limit)} className={cn("rounded-md px-3 py-2 transition", candidateTrackLimit === limit && "bg-background font-medium shadow-sm")}>前 {limit}</button>)}</div>
+  </section>;
 }
 
 function MacroStatusBar() {
