@@ -115,7 +115,79 @@ class MacroDataService:
                     })
             except Exception as exc:
                 records.append({"error": str(exc), "series_id": series_id, "axis": axis, "source": source})
+        records.extend(MacroDataService._fetch_pboc_social_financing())
+        records.extend(MacroDataService._fetch_cfets_usd_cny())
         return records
+
+    @staticmethod
+    def _fetch_pboc_social_financing() -> list[dict[str, Any]]:
+        """Read the PBOC social-financing series through its licensed mirror."""
+        import os
+
+        token = os.getenv("TUSHARE_TOKEN", "").strip()
+        if not token or token == "your-tushare-token":
+            return [{"error": "TUSHARE_TOKEN is required for the PBOC social-financing mirror", "series_id": "social_financing_increment", "axis": "credit", "source": "PBOC"}]
+        try:
+            import tushare as ts
+
+            frame = ts.pro_api(token).sf_month(start_m="201901", end_m=date.today().strftime("%Y%m"))
+            fetched_at = now()
+            records = []
+            for raw in frame.to_dict("records"):
+                month, value = str(raw.get("month") or ""), _finite(raw.get("inc_month"))
+                if not re.fullmatch(r"20\d{2}(0[1-9]|1[0-2])", month) or value is None:
+                    continue
+                observation = f"{month[:4]}-{month[4:]}-01"
+                records.append({
+                    "series_id": "social_financing_increment", "axis": "credit", "higher_good": True,
+                    "observation_date": observation, "release_date": fetched_at[:10],
+                    "vintage_id": hashlib.sha256(f"sf:{month}:{value}:{fetched_at[:10]}".encode()).hexdigest()[:16],
+                    "value": value, "unit": "CNY 100m", "source": "PBOC",
+                    "source_url": PBOC_URL, "release_status": "first_observed_only", "fetched_at": fetched_at,
+                    "metadata": {"adapter": "Tushare sf_month", "source_of_record": "PBOC"},
+                })
+            return records or [{"error": "PBOC social-financing mirror returned no rows", "series_id": "social_financing_increment", "axis": "credit", "source": "PBOC"}]
+        except Exception as exc:
+            return [{"error": str(exc), "series_id": "social_financing_increment", "axis": "credit", "source": "PBOC"}]
+
+    @staticmethod
+    def _fetch_cfets_usd_cny() -> list[dict[str, Any]]:
+        """Read the official CFETS USD/CNY central-parity history."""
+        import httpx
+
+        source_url = "https://www.chinamoney.com.cn/dqs/rest/cm-u-pt/CcprHis"
+        end_date = date.today()
+        try:
+            with httpx.Client(timeout=20, follow_redirects=True, trust_env=False, headers={"User-Agent": "Mozilla/5.0 hzstock-value-research", "Referer": "https://www.chinamoney.com.cn/"}) as client:
+                response = client.get(source_url, params={"startDate": (end_date - timedelta(days=365 * 6)).isoformat(), "endDate": end_date.isoformat(), "currencyPair": "USD/CNY", "pageNum": 1, "pageSize": 5000})
+                response.raise_for_status()
+                payload = response.json()
+        except Exception as exc:
+            return [{"error": str(exc), "series_id": "usd_cny", "axis": "financial_conditions", "source": "CFETS"}]
+        candidates = payload.get("records") or payload.get("data") or payload.get("result") or []
+        if isinstance(candidates, dict):
+            candidates = candidates.get("records") or candidates.get("data") or []
+        fetched_at, records = now(), []
+        for raw in candidates if isinstance(candidates, list) else []:
+            if not isinstance(raw, dict):
+                continue
+            raw_date = str(raw.get("date") or raw.get("tradeDate") or raw.get("publishDate") or "")[:10]
+            value = _finite(raw.get("price") or raw.get("rate") or raw.get("middlePrice") or raw.get("parity"))
+            try:
+                observation = date.fromisoformat(raw_date).isoformat()
+            except ValueError:
+                continue
+            if value is None or value <= 0:
+                continue
+            records.append({
+                "series_id": "usd_cny", "axis": "financial_conditions", "higher_good": False,
+                "observation_date": observation, "release_date": observation,
+                "vintage_id": hashlib.sha256(f"usd_cny:{observation}:{value}".encode()).hexdigest()[:16],
+                "value": value, "unit": "CNY/USD", "source": "CFETS",
+                "source_url": source_url, "release_status": "official_daily", "fetched_at": fetched_at,
+                "metadata": {"adapter": "CFETS ChinaMoney central parity", "currency_pair": "USD/CNY"},
+            })
+        return records or [{"error": "CFETS central-parity endpoint returned no USD/CNY rows", "series_id": "usd_cny", "axis": "financial_conditions", "source": "CFETS"}]
 
     def refresh(self, as_of: str) -> dict[str, Any]:
         date.fromisoformat(as_of)
@@ -162,6 +234,49 @@ class MacroDataService:
                 "source_url": "", "release_status": "cached_market_close", "fetched_at": fetched_at,
                 "metadata": {"window": "20D", "point_in_time": True},
             })
+        return records
+
+    @staticmethod
+    def _cached_market_features(as_of: str) -> list[dict[str, Any]]:
+        """Build a PIT 20-day risk-appetite history from the TDX close cache."""
+        from .value_market_history import BENCHMARK, ValueMarketHistoryService
+
+        frame = ValueMarketHistoryService().read(as_of)
+        if frame.empty:
+            return []
+        frame = frame.copy()
+        frame["trade_date"] = frame["trade_date"].dt.date
+        frame["close"] = frame["close"].map(_finite)
+        closes = frame.dropna(subset=["close"]).pivot_table(
+            index="trade_date", columns="symbol", values="close", aggfunc="last",
+        ).sort_index()
+        if len(closes.index) < 21:
+            return []
+        fetched_at = now()
+        records = []
+        for index in range(20, len(closes.index)):
+            observation = closes.index[index].isoformat()
+            if observation > as_of:
+                continue
+            returns = ((closes.iloc[index] / closes.iloc[index - 20] - 1) * 100).replace(
+                [math.inf, -math.inf], float("nan"),
+            ).dropna()
+            market_returns = returns.drop(labels=[BENCHMARK], errors="ignore")
+            values = {
+                "csi_all_share_risk_appetite": _finite(returns.get(BENCHMARK)),
+                "a_share_breadth_20d": float((market_returns > 0).mean() * 100) if not market_returns.empty else None,
+            }
+            for series_id, value in values.items():
+                if value is None:
+                    continue
+                records.append({
+                    "series_id": series_id, "axis": "financial_conditions", "higher_good": True,
+                    "observation_date": observation, "release_date": observation,
+                    "vintage_id": hashlib.sha256(f"{series_id}:{observation}:{value}".encode()).hexdigest()[:16],
+                    "value": value, "unit": "%", "source": "TongDaXin market-history cache",
+                    "source_url": "", "release_status": "cached_market_close", "fetched_at": fetched_at,
+                    "metadata": {"window": "20D", "point_in_time": True, "benchmark": BENCHMARK},
+                })
         return records
 
     def build_snapshot(self, as_of: str) -> dict[str, Any]:

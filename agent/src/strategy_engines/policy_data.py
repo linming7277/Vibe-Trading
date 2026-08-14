@@ -23,6 +23,13 @@ POLICY_SOURCES = (
     ("国家发展和改革委员会", "https://zfxxgk.ndrc.gov.cn/web/dirlist.jsp"),
     ("工业和信息化部", "https://www.miit.gov.cn/zwgk/"),
 )
+# The unified library includes public State Council and ministry documents and
+# is more stable than scraping each ministry's changing navigation page.
+POLICY_SOURCES = (
+    ("State Council policy library", "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?t=zhengcelibrary"),
+    ("NDRC", "https://zfxxgk.ndrc.gov.cn/web/dirlist.jsp"),
+    ("MIIT", "https://www.miit.gov.cn/zwgk/"),
+)
 ALLOWED_HOSTS = ("www.gov.cn", "sousuo.www.gov.cn", "zfxxgk.ndrc.gov.cn", "www.ndrc.gov.cn", "www.miit.gov.cn")
 CLASSIFIER_VERSION = "value-policy-classifier-v1.0.0"
 
@@ -80,7 +87,7 @@ class PolicyDataService:
     ) -> None:
         self.store = store or ValueDataStore()
         self.fetcher = fetcher or self._fetch
-        self.model_classifier = model_classifier or self._model_classify
+        self.model_classifier = model_classifier
 
     @staticmethod
     def _fetch(url: str, headers: dict[str, str]) -> tuple[str, dict[str, str]]:
@@ -264,6 +271,27 @@ class PolicyDataService:
                 "confidence": confidence,
             })
         return result
+
+    def _classify(self, event: dict[str, Any], candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Classify policy direction without turning an LLM into a score source."""
+        if not candidates:
+            return []
+        if self.model_classifier is not None:
+            try:
+                return self.model_classifier(event, candidates)
+            except Exception:
+                return [{**row, "direction": 1, "strength": 1, "horizon_days": 90, "confidence": 0.0} for row in candidates]
+        text = f"{event.get('title') or ''} {event.get('content_text') or ''}"
+        positive = sum(token in text for token in ("支持", "促进", "鼓励", "加快", "培育", "建设", "试点", "补贴"))
+        negative = sum(token in text for token in ("限制", "整治", "淘汰", "禁止", "严控", "压减", "下调"))
+        if positive == negative:
+            return []
+        direction = 1 if positive > negative else -1
+        strength = 3 if any(token in text for token in ("重大", "专项", "行动方案", "规划")) else 2 if max(positive, negative) >= 2 else 1
+        return [{
+            **row, "direction": direction, "strength": strength, "horizon_days": 365 if strength == 3 else 90,
+            "confidence": .75 if float(row.get("sensitivity") or 0) >= 1 else .68,
+        } for row in candidates]
 
     def policy_fit(self, sector_code: str, as_of: str) -> dict[str, Any]:
         events = self.store.policies(status="ready", limit=500)
