@@ -223,6 +223,16 @@ def register_value_workspace_routes(app: FastAPI, require_auth: AuthDep) -> None
         finally:
             store.close()
 
+    @app.get("/strategy/value/research-universes/{universe_id}/analysis", dependencies=[Depends(require_auth)])
+    async def get_research_universe_analysis(universe_id: str):
+        service = ValueWorkspaceService()
+        try:
+            return service.universe_analysis(universe_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        finally:
+            service.close()
+
     @app.post("/strategy/value/research-universes/{universe_id}/bootstrap", dependencies=[Depends(require_auth)])
     async def bootstrap_research_universe(
         universe_id: str, background_tasks: BackgroundTasks, payload: OperationPayload | None = None,
@@ -254,16 +264,16 @@ def register_value_workspace_routes(app: FastAPI, require_auth: AuthDep) -> None
         finally:
             store.close()
 
-    @app.get("/strategy/value/companies/{symbol}/archive", dependencies=[Depends(require_auth)])
+    @app.get("/strategy/value/company-archives/{symbol}", dependencies=[Depends(require_auth)])
     async def company_research_archive(symbol: str):
-        store = ValueWorkspaceStore()
+        service = ValueWorkspaceService()
         try:
-            archive = store.company_archive(symbol.upper())
+            archive = service.company_archive(symbol.upper())
             if not archive["memberships"] and not archive["snapshots"]:
                 raise HTTPException(404, "company research archive not found")
             return archive
         finally:
-            store.close()
+            service.close()
 
     @app.post("/strategy/value/incremental-runs", dependencies=[Depends(require_auth)])
     async def create_incremental_run(payload: OperationPayload, background_tasks: BackgroundTasks):

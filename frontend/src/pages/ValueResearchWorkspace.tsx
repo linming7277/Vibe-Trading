@@ -10,7 +10,7 @@ import { PageHeader, WorkspacePage } from "@/components/workspace/WorkspaceUI";
 import {
   api, type CalculationProfile, type CompanyResearchBatch, type CompanyResearchJob, type ValueCompanyArchive, type ValueUniverseCompany,
   type ResearchReport, type ValueEntryMonitor, type ValueLeaderScore, type ValueMonitorEvent, type ValueSectorScore, type ValueTrack,
-  type ValueResearchAutomation, type ValueResearchUniverse, type ValueSignalEvaluation, type ValueWorkbench,
+  type ValueCompanyAnalysis, type ValueResearchAutomation, type ValueResearchUniverse, type ValueSignalEvaluation, type ValueUniverseAnalysis, type ValueWorkbench,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +28,7 @@ type ValueWorkspaceContext = {
   events: ValueMonitorEvent[];
   universes: ValueResearchUniverse[];
   activeUniverse?: ValueResearchUniverse;
+  universeAnalysis: ValueUniverseAnalysis | null;
   automation: ValueResearchAutomation | null;
   signals: ValueSignalEvaluation[];
   loading: boolean;
@@ -173,6 +174,7 @@ export function ValueResearchWorkspace() {
   const [monitors, setMonitors] = useState<ValueEntryMonitor[]>([]);
   const [events, setEvents] = useState<ValueMonitorEvent[]>([]);
   const [universes, setUniverses] = useState<ValueResearchUniverse[]>([]);
+  const [universeAnalysis, setUniverseAnalysis] = useState<ValueUniverseAnalysis | null>(null);
   const [automation, setAutomation] = useState<ValueResearchAutomation | null>(null);
   const [signals, setSignals] = useState<ValueSignalEvaluation[]>([]);
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
@@ -211,6 +213,13 @@ export function ValueResearchWorkspace() {
     setMonitors(monitorResult.items);
     setEvents(eventResult.items);
     setUniverses(universeResult.items);
+    const analysisUniverse = universeResult.items.find((item) => item.status === "active")
+      || universeResult.items.find((item) => ["ready", "partial", "bootstrapping"].includes(item.status));
+    if (analysisUniverse) {
+      setUniverseAnalysis(await api.getValueUniverseAnalysis(analysisUniverse.id));
+    } else {
+      setUniverseAnalysis(null);
+    }
     setAutomation(automationResult);
     setSignals(signalResult.items);
   }, []);
@@ -362,7 +371,7 @@ export function ValueResearchWorkspace() {
   }, []);
 
   const context: ValueWorkspaceContext = {
-    profiles, workbench, tracks, leaders, selectedTrack, selectedTrackId, candidateTrackLimit, selectedSymbols, batches, monitors, events, universes, activeUniverse, automation, signals, loading, refreshing,
+    profiles, workbench, tracks, leaders, selectedTrack, selectedTrackId, candidateTrackLimit, selectedSymbols, batches, monitors, events, universes, activeUniverse, universeAnalysis, automation, signals, loading, refreshing,
     selectProfile: (id) => patchParams({ profile: id, track: null }),
     selectTrack: (id) => patchParams({ track: id }),
     setCandidateTrackLimit: (limit) => patchParams({ candidate_limit: String(limit), track: ALL_TRACK_ID }),
@@ -490,6 +499,7 @@ function ResearchUniverseControl() {
     {operation ? <div className="mt-3 grid gap-2 border-t pt-3 text-xs text-muted-foreground sm:grid-cols-4"><span>最近任务：{operation.run_kind === "bootstrap" ? "首次建档" : "日增量"}</span><span>进度：{operation.completed}/{operation.total}</span><span>失败：{operation.failed}</span><span>状态：{labelStatus(operation.status)}</span>{operation.message ? <span className="sm:col-span-4 text-amber-700 dark:text-amber-400">{operation.message}</span> : null}</div> : null}
     {context.automation?.enabled ? <div className="mt-2 text-xs text-muted-foreground">下次运行：{context.automation.next_run_at || "等待调度"}{context.automation.last_error ? ` · 最近问题：${context.automation.last_error}` : ""}</div> : null}
     {operation ? <div className="mt-2 rounded-lg border border-dashed p-2 text-xs text-muted-foreground"><div className="flex flex-wrap justify-between gap-2"><span>实时处理：{processed}/{operation.total}</span><span>运行中 {jobCounts.running || 0}</span><span>排队 {jobCounts.queued || 0}</span><span>部分可用 {jobCounts.partial || 0}</span><span>完整 {jobCounts.completed || 0}</span>{jobCounts.failed ? <span className="text-destructive">失败 {jobCounts.failed}</span> : null}</div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progressPercent}%` }} /></div></div> : null}
+    {context.universeAnalysis ? <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-xs"><span className="font-medium">当前研究状态</span>{Object.entries(context.universeAnalysis.state_counts).sort((left, right) => right[1] - left[1]).map(([state, count]) => <span key={state} className="rounded-full bg-muted px-2.5 py-1 text-muted-foreground">{analysisStateLabel(state)} {count}</span>)}<Link to="/value/research" className="ml-auto text-primary hover:underline">查看分析结果</Link></div> : null}
   </section>;
 }
 
@@ -593,7 +603,7 @@ function ProfileEditor({ name, setName, mode, setMode, weights, setWeights, onCa
 }
 
 export function ValueResearchQueue() {
-  const { batches, reloadOperations, activeUniverse } = useValueWorkspace();
+  const { batches, reloadOperations, activeUniverse, universeAnalysis } = useValueWorkspace();
   const [params, setParams] = useSearchParams();
   const [expanded, setExpanded] = useState<string | null>(batches[0]?.id || null);
   const [archive, setArchive] = useState<ValueCompanyArchive | null>(null);
@@ -605,6 +615,7 @@ export function ValueResearchQueue() {
   const openJob = (jobId: string) => setParams((current) => { const next = new URLSearchParams(current); next.set("job", jobId); return next; });
   useEffect(() => { if (!selectedSymbol) { setArchive(null); return; } let cancelled = false; api.getValueCompanyArchive(selectedSymbol).then((value) => { if (!cancelled) setArchive(value); }).catch(() => { if (!cancelled) setArchive(null); }); return () => { cancelled = true; }; }, [selectedSymbol]);
   return <div className="space-y-5"><PageHeader eyebrow="COMPANY RESEARCH ARCHIVE" title="公司研究档案" description="保留候选来源链、通达信事实、PIT 财务、资料新鲜度和历次增量差异。大模型研究层尚未启用，不生成模拟结论。" />
+    {universeAnalysis ? <UniverseAnalysisPanel analysis={universeAnalysis} /> : null}
     {archive ? <UniverseArchiveDetail archive={archive} onClose={() => setParams((current) => { const next = new URLSearchParams(current); next.delete("symbol"); return next; })} /> : null}
     {selected ? <ResearchArchiveDetail batch={selected.batch} job={selected.job} onClose={() => setParams((current) => { const next = new URLSearchParams(current); next.delete("job"); return next; })} /> : null}
     {activeUniverse ? <section className="rounded-xl border bg-card shadow-sm"><div className="flex items-center justify-between border-b p-4"><div><div className="font-semibold">活动研究宇宙</div><div className="mt-1 text-xs text-muted-foreground">{activeUniverse.track_count} 个赛道 · {activeUniverse.company_count} 家去重公司</div></div><StatusBadge status={activeUniverse.status} /></div><div className="grid gap-2 p-4 md:grid-cols-2 xl:grid-cols-3">{activeUniverse.companies.map((company) => <button key={company.symbol} onClick={() => setParams((current) => { const next = new URLSearchParams(current); next.set("symbol", company.symbol); return next; })} className="rounded-lg border p-3 text-left hover:border-primary/50 hover:bg-muted/30"><div className="font-medium">{company.name}</div><div className="font-mono text-xs text-muted-foreground">{company.symbol}</div><div className="mt-2 text-xs text-muted-foreground">{company.memberships.map((item) => `${item.track_name} #${item.leader_rank}`).join(" · ")}</div></button>)}</div></section> : null}
@@ -612,8 +623,34 @@ export function ValueResearchQueue() {
 }
 
 function UniverseArchiveDetail({ archive, onClose }: { archive: ValueCompanyArchive; onClose: () => void }) {
+  return <div className="space-y-3">{archive.analysis ? <CompanyAnalysisDetail analysis={archive.analysis} /> : null}<UniverseArchiveSourceDetail archive={archive} onClose={onClose} /></div>;
+}
+
+function UniverseArchiveSourceDetail({ archive, onClose }: { archive: ValueCompanyArchive; onClose: () => void }) {
   const latest = archive.snapshots[0];
   return <section className="rounded-xl border border-primary/30 bg-card p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-xs font-semibold tracking-wide text-primary">CONTINUOUS RESEARCH ARCHIVE</div><h2 className="mt-1 text-xl font-semibold">{archive.memberships[0]?.name || archive.symbol} · {archive.symbol}</h2><p className="mt-1 text-sm text-muted-foreground">{archive.memberships.map((item) => `${item.track_name}（赛道#${item.track_rank} / 龙头#${item.leader_rank}）`).join(" · ")}</p></div><button onClick={onClose} className="rounded-lg border px-3 py-2 text-sm">收起</button></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><MetricCard label="档案版本" value={latest ? `v${latest.version}` : "待生成"} /><MetricCard label="完整度" value={latest ? percent(latest.completeness) : "—"} /><MetricCard label="数据截至" value={latest?.data_as_of || "—"} /><MetricCard label="资料状态" value={latest ? labelStatus(latest.status) : "待生成"} /></div><div className="mt-4 grid gap-3 lg:grid-cols-2"><article className="rounded-lg border p-4"><div className="font-semibold">来源与缺失</div><div className="mt-3 flex flex-wrap gap-2">{latest?.sources.map((source) => <span key={source} className="rounded-full bg-muted px-2.5 py-1 text-xs">{source}</span>)}</div><p className="mt-3 text-sm text-muted-foreground">缺失：{latest?.missing_fields.join("、") || "无"}</p><p className="mt-2 text-xs text-muted-foreground">大模型研究层尚未启用；本页只展示可验证数据和规则结果。</p></article><article className="rounded-lg border p-4"><div className="font-semibold">最近变化</div>{latest && Object.keys(latest.diff).length ? <div className="mt-3 space-y-1 text-sm text-muted-foreground">{Object.keys(latest.diff).slice(0, 8).map((key) => <div key={key}>• {key}</div>)}</div> : <p className="mt-3 text-sm text-muted-foreground">首次档案或本次输入没有变化。</p>}<div className="mt-3 text-xs text-muted-foreground">证据 {archive.evidence.length} 条 · 监控事件 {archive.events.length} 条</div></article></div></section>;
+}
+
+function UniverseAnalysisPanel({ analysis }: { analysis: ValueUniverseAnalysis }) {
+  const visibleStates = Object.entries(analysis.state_counts).sort((left, right) => right[1] - left[1]);
+  return <section className="rounded-xl border bg-card p-4 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-sm font-semibold">龙头池研究状态</div><div className="mt-1 text-xs text-muted-foreground">数据截至 {analysis.data_as_of} · 自动研究覆盖 {analysis.total} 家</div></div><div className="flex flex-wrap gap-2"><span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-700 dark:text-emerald-400">资料快照 {analysis.total}</span><span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs text-blue-700 dark:text-blue-400">规则监控 {analysis.monitored}</span><span className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">大模型待配置</span></div></div><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{visibleStates.map(([state, count]) => <div key={state} className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">{analysisStateLabel(state)}</div><div className="mt-1 text-xl font-semibold">{count}</div></div>)}</div><p className="mt-3 text-xs text-muted-foreground">点击下方任一公司可查看当前结论、关键指标、支持事实、风险事实、最近变化和下一步动作。</p></section>;
+}
+
+function CompanyAnalysisDetail({ analysis }: { analysis: ValueCompanyAnalysis }) {
+  const metrics = [
+    ["最新价", analysis.metrics.price], ["PE(TTM)", analysis.metrics.pe_ttm], ["PB(MRQ)", analysis.metrics.pb_mrq],
+    ["股息率", analysis.metrics.dividend_yield], ["营收同比", analysis.metrics.revenue_yoy], ["净利润同比", analysis.metrics.net_profit_yoy], ["ROE", analysis.metrics.roe],
+  ].filter((item) => item[1] !== null && item[1] !== undefined);
+  return <section className="rounded-xl border border-primary/30 bg-card p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-xs font-semibold tracking-wide text-primary">CURRENT ANALYSIS</div><h2 className="mt-1 text-xl font-semibold">{analysis.name} · {analysis.symbol}</h2><p className="mt-2 max-w-4xl text-sm text-muted-foreground">{analysis.conclusion}</p></div><span className="rounded-full bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary">{analysisStateLabel(analysis.current_state)}</span></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><MetricCard label="研究状态" value={analysisStateLabel(analysis.research_state)} /><MetricCard label="规则状态" value={analysisStateLabel(analysis.signal_state)} /><MetricCard label="大模型状态" value={analysis.model_state === "not_configured" ? "待配置，未生成结论" : analysisStateLabel(analysis.model_state)} /><MetricCard label="档案完整度" value={percent(analysis.completeness)} /></div>{metrics.length ? <div className="mt-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-7">{metrics.map(([label, value]) => <div key={String(label)} className="rounded-lg bg-muted/50 p-3"><div className="text-[11px] text-muted-foreground">{String(label)}</div><div className="mt-1 font-mono text-sm font-semibold">{Number(value).toFixed(2)}</div></div>)}</div> : null}<div className="mt-4 grid gap-3 lg:grid-cols-3"><AnalysisList title="可验证事实" items={analysis.supporting_facts} empty="暂未取得可展示事实" tone="positive" /><AnalysisList title="风险与数据缺口" items={analysis.risk_facts} empty="暂未发现规则风险" tone="risk" /><AnalysisList title="最近变化" items={analysis.changes} empty="首次建档或本期无变化" tone="neutral" /></div><div className="mt-4 rounded-lg border border-dashed p-3 text-sm"><span className="font-medium">下一步：</span><span className="text-muted-foreground">{analysis.next_action}</span></div></section>;
+}
+
+function AnalysisList({ title, items, empty, tone }: { title: string; items: string[]; empty: string; tone: "positive" | "risk" | "neutral" }) {
+  const toneClass = tone === "risk" ? "text-amber-700 dark:text-amber-300" : tone === "positive" ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground";
+  return <article className="rounded-lg border p-4"><div className="font-semibold">{title}</div><div className={cn("mt-3 space-y-2 text-sm", toneClass)}>{items.length ? items.map((item) => <div key={item}>• {item}</div>) : <div>{empty}</div>}</div></article>;
+}
+
+function analysisStateLabel(value: string) {
+  return ({ not_archived: "待建档", missing: "缺少档案", ready_for_monitoring: "待设置监控", not_monitored: "未配置监控", not_configured: "待配置", pending: "待分析", data_insufficient: "数据不足", stale: "数据过期", watching: "持续观察", entry_candidate: "入场候选", holding_review: "风险复核", exit_candidate: "退出/减仓候选", thesis_invalidated: "逻辑失效", ready: "资料完整", partial: "部分可用", completed: "已完成", failed: "失败" } as Record<string, string>)[value] || value;
 }
 
 function MetricCard({ label, value }: { label: string; value: string }) { return <div className="rounded-lg bg-muted/50 p-3"><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 font-medium">{value}</div></div>; }

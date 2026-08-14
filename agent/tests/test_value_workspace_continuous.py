@@ -96,6 +96,15 @@ def test_snapshot_evidence_and_signal_events_are_idempotent(workspace):
     evaluations = value.list_signal_evaluations(symbol="000001.SZ")
     assert len(evaluations) == 1
     assert evaluations[0]["signal_state"] == "entry_candidate"  # watching ignores risk and exit rules
+    analysis = service.universe_analysis(universe["id"])
+    company_analysis = next(item for item in analysis["items"] if item["symbol"] == "000001.SZ")
+    assert analysis["total"] == 21
+    assert analysis["state_counts"]["entry_candidate"] == 1
+    assert analysis["state_counts"]["not_archived"] == 20
+    assert company_analysis["model_state"] == "not_configured"
+    assert company_analysis["metrics"]["pe_ttm"] == 8
+    assert company_analysis["risk_facts"] == ["营收同比 -30.0% ≤ -20%", "公司盈利但经营现金流为负"]
+    assert service.company_archive("000001.SZ")["analysis"]["current_state"] == "entry_candidate"
     assert len(value.list_events()) == 1
     value.acknowledge_event(value.list_events()[0]["id"], status="closed")
     value.save_snapshot({

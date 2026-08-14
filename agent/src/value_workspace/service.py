@@ -501,10 +501,15 @@ class ValueWorkspaceService:
         return result
 
     def _run_operation_job(self, job: dict[str, Any], operation: dict[str, Any]) -> None:
-        self.store.update_incremental_job(
-            job["id"], status="running", stage="facts", attempts=int(job.get("attempts") or 0) + 1,
-        )
+        # A store owns one SQLite connection. Sharing that connection across
+        # executor threads can leave the queue waiting behind one vendor read.
+        # Give every company job an independent, short-lived connection.
+        job_store = ValueWorkspaceStore(self.store.db_path)
         try:
+            job_store.update_incremental_job(
+                job["id"], status="running", stage="facts", attempts=int(job.get("attempts") or 0) + 1,
+            )
+
             def collect_in_isolated_store() -> dict[str, Any]:
                 # A timed-out vendor/cache read must never hold the operation
                 # store lock.  Its own short-lived connection can finish or
@@ -524,13 +529,16 @@ class ValueWorkspaceService:
                 f"company snapshot {job['symbol']}",
             )
             status = "completed" if snapshot["status"] == "ready" else "partial"
-            self.store.update_incremental_job(
+            job_store.update_incremental_job(
                 job["id"], status=status, stage="review", snapshot_id=snapshot["id"],
                 message="资料快照已更新" if status == "completed" else "部分资料不可用，已保留可验证结果",
             )
         finally:
             # The frontend polls this stored aggregate every five seconds.
-            self.store.refresh_incremental_progress(operation["id"])
+            try:
+                job_store.refresh_incremental_progress(operation["id"])
+            finally:
+                job_store.close()
 
     def _collect_company_snapshot(
         self, universe_id: str, symbol: str, as_of: str, *, bootstrap: bool,
@@ -769,6 +777,117 @@ class ValueWorkspaceService:
         if any(bool(fundamental.get(key)) for key in ("is_st", "st", "is_delisted", "delisted")):
             reasons.append("通达信证券属性显示ST或退市风险")
         return reasons
+
+    @staticmethod
+    def _analysis_metric(payload: dict[str, Any], section: str, key: str) -> float | None:
+        return _number(dict(payload.get(section) or {}).get(key))
+
+    def universe_analysis(self, universe_id: str) -> dict[str, Any]:
+        """Build an honest, visible state for every company in a research universe.
+
+        This is deliberately deterministic.  It exposes what the stored facts
+        and rules can currently support, while the optional model layer remains
+        explicit and empty until a real provider is configured.
+        """
+        universe = self.store.get_universe(universe_id)
+        if not universe:
+            raise KeyError("research universe not found")
+        monitors = {item["symbol"]: item for item in self.store.list_monitors() if item.get("universe_id") == universe_id}
+        items: list[dict[str, Any]] = []
+        for company in universe.get("companies", []):
+            symbol = company["symbol"]
+            snapshot = self.store.latest_snapshot(universe_id, symbol)
+            monitor = monitors.get(symbol)
+            if not snapshot:
+                items.append({
+                    "symbol": symbol, "name": company["name"], "memberships": company.get("memberships", []),
+                    "current_state": "not_archived", "research_state": "missing", "signal_state": "not_monitored",
+                    "model_state": "not_configured", "conclusion": "尚未生成公司资料快照。",
+                    "next_action": "等待首次建档或重试失败任务。", "data_as_of": None, "snapshot_version": None,
+                    "completeness": 0.0, "missing_fields": ["snapshot"], "metrics": {},
+                    "supporting_facts": [], "risk_facts": ["缺少公司资料快照"], "changes": [],
+                })
+                continue
+            payload = dict(snapshot.get("payload") or {})
+            missing = list(snapshot.get("missing_fields") or [])
+            stale = bool(dict(payload.get("cache") or {}).get("stale"))
+            risk_facts = self._risk_reasons(payload)
+            if missing:
+                risk_facts.append(f"缺少关键资料：{'、'.join(missing)}")
+            if stale:
+                risk_facts.append("通达信行情或财务缓存已过期")
+            supporting_facts: list[str] = []
+            price = self._analysis_metric(payload, "quote", "price")
+            pe = self._analysis_metric(payload, "fundamental", "pe_ttm")
+            pb = self._analysis_metric(payload, "fundamental", "pb_mrq")
+            dividend = self._analysis_metric(payload, "fundamental", "dividend_yield")
+            revenue_yoy = self._analysis_metric(payload, "financial_latest", "revenue_yoy")
+            profit_yoy = self._analysis_metric(payload, "financial_latest", "net_profit_yoy")
+            roe = self._analysis_metric(payload, "financial_latest", "roe")
+            if price is not None:
+                supporting_facts.append(f"已取得最新价格 {price:g}")
+            if pe is not None or pb is not None:
+                supporting_facts.append("已取得可复核的 PE/PB 估值快照")
+            if revenue_yoy is not None and revenue_yoy > 0:
+                supporting_facts.append(f"最近披露营收同比增长 {revenue_yoy:.1f}%")
+            if profit_yoy is not None and profit_yoy > 0:
+                supporting_facts.append(f"最近披露净利润同比增长 {profit_yoy:.1f}%")
+            if dividend is not None and dividend > 0:
+                supporting_facts.append(f"当前股息率数据为 {dividend:.2f}%")
+            signal_state = str(monitor.get("signal_state") or "not_monitored") if monitor else "not_monitored"
+            if stale:
+                current_state = "stale"
+                conclusion = "资料已过期，当前分析仅供复核，不能确认入场或退出。"
+                next_action = "先更新行情与财务数据。"
+            elif missing:
+                current_state = "data_insufficient"
+                conclusion = "基础档案已生成，但关键资料不完整，当前不能确认入场或退出。"
+                next_action = "补齐缺失资料；已有行情和估值仍可查看。"
+            elif signal_state not in {"not_monitored", "watching"}:
+                current_state = signal_state
+                conclusion = "确定性监控规则已触发，需要人工复核。"
+                next_action = "打开监控事件，核对规则输入、证据和失效条件。"
+            elif monitor:
+                current_state = "watching"
+                conclusion = "资料完整且监控规则未触发，继续观察。"
+                next_action = "等待下一交易日增量更新。"
+            else:
+                current_state = "ready_for_monitoring"
+                conclusion = "基础资料可用于人工设置入场、风险与退出条件。"
+                next_action = "人工确认后加入监控池。"
+            raw_diff = dict(snapshot.get("diff") or {})
+            changes = [] if raw_diff.get("initial") else list(raw_diff)[:12]
+            items.append({
+                "symbol": symbol, "name": company["name"], "memberships": company.get("memberships", []),
+                "current_state": current_state, "research_state": snapshot["status"],
+                "signal_state": signal_state, "model_state": "not_configured",
+                "conclusion": conclusion, "next_action": next_action,
+                "data_as_of": snapshot["data_as_of"], "snapshot_version": snapshot["version"],
+                "completeness": float(snapshot.get("completeness") or 0), "missing_fields": missing,
+                "metrics": {"price": price, "pe_ttm": pe, "pb_mrq": pb, "dividend_yield": dividend,
+                            "revenue_yoy": revenue_yoy, "net_profit_yoy": profit_yoy, "roe": roe},
+                "supporting_facts": supporting_facts, "risk_facts": list(dict.fromkeys(risk_facts)),
+                "changes": changes, "monitor_id": monitor.get("id") if monitor else None,
+                "position_state": monitor.get("position_state") if monitor else None,
+            })
+        state_counts: dict[str, int] = {}
+        for item in items:
+            state_counts[item["current_state"]] = state_counts.get(item["current_state"], 0) + 1
+        return {
+            "universe_id": universe_id, "universe_status": universe["status"], "data_as_of": universe["data_as_of"],
+            "total": len(items), "state_counts": state_counts,
+            "monitored": sum(bool(item.get("monitor_id")) for item in items),
+            "model_state": "not_configured", "items": items,
+        }
+
+    def company_archive(self, symbol: str) -> dict[str, Any]:
+        archive = self.store.company_archive(symbol)
+        archive["analysis"] = None
+        if archive.get("memberships"):
+            universe_id = archive["memberships"][0]["universe_id"]
+            result = self.universe_analysis(universe_id)
+            archive["analysis"] = next((item for item in result["items"] if item["symbol"] == symbol), None)
+        return archive
 
     @staticmethod
     def _entry_checks(conditions: dict[str, Any], payload: dict[str, Any]) -> list[tuple[str, bool]]:
