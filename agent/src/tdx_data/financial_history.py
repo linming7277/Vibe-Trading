@@ -243,6 +243,57 @@ class FinancialHistoryService:
             "invalid_rows": invalid_rows, "batch_errors": batch_errors[:50],
         }
 
+    def collect_incremental(
+        self, symbols: list[str], *, start_time: str = "20190101", end_time: str = "",
+        batch_size: int = 20, progress: Callable[[int, int, str], None] | None = None,
+    ) -> dict[str, Any]:
+        """Refresh a bounded research universe without replacing the market cache.
+
+        The full-market collector intentionally performs an atomic replacement.
+        A daily research run only owns its selected symbols, so it must upsert
+        those PIT records and leave every unrelated cached company untouched.
+        """
+        package = self.package_status()
+        if package["status"] != "ready":
+            raise RuntimeError("needs_professional_finance")
+        universe = sorted(set(symbol.upper() for symbol in symbols if symbol))
+        records: list[dict[str, Any]] = []
+        covered: set[str] = set()
+        errors: list[str] = []
+        invalid_rows = 0
+        for offset in range(0, len(universe), batch_size):
+            batch = universe[offset:offset + batch_size]
+            try:
+                result = self.client.call(
+                    "get_financial_data", stock_list=batch, field_list=list(DEFAULT_FIELDS),
+                    start_time=start_time, end_time=end_time, report_type="announce_time",
+                ) or {}
+            except Exception as exc:
+                result = {}
+                errors.append(f"{batch[0]}-{batch[-1]}:{exc}")
+            for symbol in batch:
+                rows, invalid = _financial_rows(result.get(symbol) if isinstance(result, dict) else None)
+                invalid_rows += invalid
+                for raw in rows:
+                    normalized = normalize_financial_row(symbol, raw, str(package["raw_version"]))
+                    if not normalized:
+                        continue
+                    records.append({
+                        "key": f"{symbol}:{normalized['report_date']}:{normalized['announcement_date']}",
+                        "category": symbol, "name": symbol, "payload": normalized,
+                    })
+                    covered.add(symbol)
+            if progress:
+                progress(min(offset + len(batch), len(universe)), len(universe), "更新研究池专业财务")
+        self.store.upsert_records(FINANCIAL_HISTORY_DATASET, records)
+        coverage = len(covered) / len(universe) if universe else 0.0
+        return {
+            "status": "ready" if coverage == 1 and not errors else "partial",
+            "item_count": len(records), "symbols": len(covered), "total_symbols": len(universe),
+            "coverage": coverage, "raw_version": package["raw_version"],
+            "invalid_rows": invalid_rows, "batch_errors": errors[:50],
+        }
+
     def query(self, symbol: str, *, as_of: str | None = None, period_type: str | None = None) -> dict[str, Any]:
         cutoff = date.fromisoformat(as_of).isoformat() if as_of else None
         rows = self.store.list_records(FINANCIAL_HISTORY_DATASET, category=symbol.upper(), limit=1000)["items"]

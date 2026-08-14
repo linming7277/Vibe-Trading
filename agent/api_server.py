@@ -136,6 +136,9 @@ async def _run_startup_preflight() -> None:
         logging.getLogger(__name__).warning("Legacy state migration failed", exc_info=True)
     run_preflight(console)
     _start_scheduled_research_executor()
+    from src.value_workspace.automation import start_value_research_scheduler
+
+    start_value_research_scheduler()
     from src.config.accessor import get_env_config
 
     if get_env_config().agent_tuning.vibe_trading_channels_auto_start:
@@ -147,7 +150,12 @@ async def _stop_scheduled_research_on_shutdown() -> None:
     try:
         await _stop_channel_runtime()
     finally:
-        await _stop_scheduled_research_executor()
+        try:
+            await _stop_scheduled_research_executor()
+        finally:
+            from src.value_workspace.automation import stop_value_research_scheduler
+
+            stop_value_research_scheduler()
 
 
 @asynccontextmanager

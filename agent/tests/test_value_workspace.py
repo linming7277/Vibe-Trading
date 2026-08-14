@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,7 @@ class FakeTdx:
         }
         return {"members": members.get(code, []), "as_of": "2026-08-12"}
 
-    def security_overview(self, symbol: str):
+    def security_overview(self, symbol: str, **_kwargs):
         return {
             "code": symbol, "name": "甲公司", "quote": {"price": 10},
             "fundamental": {"pe_ttm": 18, "pb_mrq": 2}, "cache": {"stale": False},
@@ -194,3 +195,61 @@ def test_failed_research_jobs_can_be_retried_without_reopening_completed_jobs(st
     assert retried["status"] == "queued"
     assert retried["failed"] == 0
     assert statuses == {"000001.SZ": "partial", "000002.SZ": "queued"}
+
+
+def _test_incremental_universe(value: ValueWorkspaceStore, engine: StrategyEngineStore) -> tuple[dict, dict]:
+    profile = value.get_profile("profile_value_line_v2")
+    assert profile
+    run, _ = engine.create_or_get_run(
+        idempotency_key="incremental-progress-test", strategy_line="value", market="CN", as_of="2026-08-14",
+        symbols=[], formula_version="test", profile_id=profile["id"], profile_version=profile["version"],
+    )
+    universe, _ = value.create_universe(
+        idempotency_key="incremental-progress-test", run_id=run["id"], profile_id="profile_value_line_v2",
+        candidate_limit=5, leader_limit=5, data_as_of="2026-08-14", formula_version="test", members=[
+            {"track_id": "T001", "track_name": "Track", "track_rank": 1, "symbol": "000001.SZ", "name": "First", "leader_rank": 1, "leader_type": "leader", "leader_score": 80, "leader_coverage": 1, "inclusion_reason": "test"},
+            {"track_id": "T001", "track_name": "Track", "track_rank": 1, "symbol": "000002.SZ", "name": "Second", "leader_rank": 2, "leader_type": "leader", "leader_score": 70, "leader_coverage": 1, "inclusion_reason": "test"},
+        ],
+    )
+    operation, _ = value.create_incremental_run(
+        universe_id=universe["id"], run_kind="bootstrap", trigger_kind="test", as_of="2026-08-14",
+        companies=[{"symbol": "000001.SZ", "name": "First", "primary_track_id": "T001"}, {"symbol": "000002.SZ", "name": "Second", "primary_track_id": "T001"}],
+    )
+    return universe, operation
+
+
+def test_incremental_progress_is_persisted_while_other_jobs_are_queued(stores):
+    value, engine = stores
+    _, operation = _test_incremental_universe(value, engine)
+    value.update_incremental_job(operation["jobs"][0]["id"], status="partial", stage="review")
+    live = value.refresh_incremental_progress(operation["id"])
+    assert live["completed"] == 1
+    assert live["failed"] == 0
+    assert live["coverage"] == .5
+    assert [job["status"] for job in live["jobs"]] == ["partial", "queued"]
+
+
+def test_company_snapshot_timeout_fails_only_that_job_and_finishes_operation(stores, monkeypatch):
+    value, engine = stores
+    _, operation = _test_incremental_universe(value, engine)
+
+    class _Closable:
+        def close(self):
+            pass
+
+    class FakeFinance:
+        def __init__(self):
+            self.client, self.store = _Closable(), _Closable()
+
+        def collect_incremental(self, *_args, **_kwargs):
+            return {"status": "ready"}
+
+    service = ValueWorkspaceService(value)
+    monkeypatch.setattr("src.value_workspace.service.FinancialHistoryService", FakeFinance)
+    monkeypatch.setattr("src.value_workspace.service.COMPANY_SNAPSHOT_TIMEOUT_SECONDS", 0)
+    monkeypatch.setattr(ValueWorkspaceService, "_collect_company_snapshot", lambda *_args, **_kwargs: time.sleep(.05))
+    result = service.run_operation(operation["id"])
+    assert result["status"] == "failed"
+    assert result["completed"] == 0
+    assert result["failed"] == 2
+    assert {job["status"] for job in result["jobs"]} == {"failed"}

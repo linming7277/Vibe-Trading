@@ -8,9 +8,9 @@ import { toast } from "sonner";
 
 import { PageHeader, WorkspacePage } from "@/components/workspace/WorkspaceUI";
 import {
-  api, type CalculationProfile, type CompanyResearchBatch, type CompanyResearchJob,
+  api, type CalculationProfile, type CompanyResearchBatch, type CompanyResearchJob, type ValueCompanyArchive, type ValueUniverseCompany,
   type ResearchReport, type ValueEntryMonitor, type ValueLeaderScore, type ValueMonitorEvent, type ValueSectorScore, type ValueTrack,
-  type ValueWorkbench,
+  type ValueResearchAutomation, type ValueResearchUniverse, type ValueSignalEvaluation, type ValueWorkbench,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +26,10 @@ type ValueWorkspaceContext = {
   batches: CompanyResearchBatch[];
   monitors: ValueEntryMonitor[];
   events: ValueMonitorEvent[];
+  universes: ValueResearchUniverse[];
+  activeUniverse?: ValueResearchUniverse;
+  automation: ValueResearchAutomation | null;
+  signals: ValueSignalEvaluation[];
   loading: boolean;
   refreshing: boolean;
   selectProfile: (id: string) => void;
@@ -37,6 +41,11 @@ type ValueWorkspaceContext = {
   reload: () => Promise<void>;
   reloadOperations: () => Promise<void>;
   startResearch: () => Promise<void>;
+  freezeUniverse: () => Promise<void>;
+  bootstrapUniverse: (id: string) => Promise<void>;
+  activateUniverse: (id: string) => Promise<void>;
+  runDailyIncrement: () => Promise<void>;
+  setAutomationEnabled: (enabled: boolean) => Promise<void>;
 };
 
 const ALL_TRACK_ID = "__all_candidate_tracks__";
@@ -98,6 +107,15 @@ const statusStyles: Record<string, string> = {
   failed: "bg-destructive/10 text-destructive",
   cancelled: "bg-muted text-muted-foreground",
   paused: "bg-muted text-muted-foreground",
+  draft: "bg-muted text-muted-foreground",
+  bootstrapping: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+  archived: "bg-muted text-muted-foreground",
+  entry_candidate: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  holding_review: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  exit_candidate: "bg-orange-500/10 text-orange-700 dark:text-orange-400",
+  thesis_invalidated: "bg-destructive/10 text-destructive",
+  data_insufficient: "bg-muted text-muted-foreground",
+  stale: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
 };
 
 function score(value?: number | null) { return value == null ? "—" : value.toFixed(1); }
@@ -143,7 +161,7 @@ function leaderMetrics(leader: ValueLeaderScore) {
   return candidates.filter((item): item is [string, string] => Boolean(item[1])).slice(0, 3);
 }
 function labelStatus(value: string) {
-  return ({ ready: "可用", queued: "排队", running: "进行中", partial: "部分可用", completed: "已完成", failed: "失败", cancelled: "已取消", active: "监控中", paused: "已暂停", closed: "已关闭", insufficient_data: "数据不足", macro_pending: "宏观待更新" } as Record<string, string>)[value] || value;
+  return ({ ready: "待激活", draft: "待建档", bootstrapping: "建档中", archived: "已归档", queued: "排队", running: "进行中", partial: "部分可用", completed: "已完成", failed: "失败", cancelled: "已取消", active: "活动中", paused: "已暂停", closed: "已关闭", watching: "持续观察", entry_candidate: "入场候选", holding_review: "风险复核", exit_candidate: "退出/减仓候选", thesis_invalidated: "逻辑失效", data_insufficient: "数据不足", stale: "数据过期", insufficient_data: "数据不足", macro_pending: "宏观待更新" } as Record<string, string>)[value] || value;
 }
 
 export function ValueResearchWorkspace() {
@@ -154,6 +172,9 @@ export function ValueResearchWorkspace() {
   const [batches, setBatches] = useState<CompanyResearchBatch[]>([]);
   const [monitors, setMonitors] = useState<ValueEntryMonitor[]>([]);
   const [events, setEvents] = useState<ValueMonitorEvent[]>([]);
+  const [universes, setUniverses] = useState<ValueResearchUniverse[]>([]);
+  const [automation, setAutomation] = useState<ValueResearchAutomation | null>(null);
+  const [signals, setSignals] = useState<ValueSignalEvaluation[]>([]);
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -171,6 +192,7 @@ export function ValueResearchWorkspace() {
   const selectedTrackId = params.get("track") || defaultTrackId;
   const tracks = workbench?.tracks || [];
   const selectedTrack = tracks.find((item) => item.track_id === selectedTrackId);
+  const activeUniverse = universes.find((item) => item.status === "active" && item.profile_id === workbench?.profile.id);
 
   const patchParams = useCallback((nextValues: Record<string, string | null>) => {
     setParams((current) => {
@@ -181,12 +203,16 @@ export function ValueResearchWorkspace() {
   }, [setParams]);
 
   const reloadOperations = useCallback(async () => {
-    const [batchResult, monitorResult, eventResult] = await Promise.all([
+    const [batchResult, monitorResult, eventResult, universeResult, automationResult, signalResult] = await Promise.all([
       api.getValueResearchBatches(), api.getValueMonitors(), api.getValueMonitorEvents(),
+      api.getValueResearchUniverses(), api.getValueAutomation(), api.getValueMonitoringSignals({ limit: 200 }),
     ]);
     setBatches(batchResult.items);
     setMonitors(monitorResult.items);
     setEvents(eventResult.items);
+    setUniverses(universeResult.items);
+    setAutomation(automationResult);
+    setSignals(signalResult.items);
   }, []);
 
   const reload = useCallback(async () => {
@@ -230,10 +256,11 @@ export function ValueResearchWorkspace() {
   useEffect(() => setSelectedSymbols((current) => current.filter((symbol) => leaders.some((item) => item.symbol === symbol))), [leaders]);
 
   useEffect(() => {
-    if (!batches.some((batch) => ["queued", "running"].includes(batch.status))) return;
+    const universeRunning = universes.some((item) => ["bootstrapping"].includes(item.status) || ["queued", "running"].includes(item.latest_operation?.status || ""));
+    if (!batches.some((batch) => ["queued", "running"].includes(batch.status)) && !universeRunning) return;
     const timer = window.setInterval(() => void reloadOperations(), 5000);
     return () => window.clearInterval(timer);
-  }, [batches, reloadOperations]);
+  }, [batches, reloadOperations, universes]);
 
   const refreshScores = useCallback(async () => {
     setRefreshing(true);
@@ -278,13 +305,70 @@ export function ValueResearchWorkspace() {
     }
   }, [reloadOperations, selectedSymbols, selectedTrackId, workbench?.latest_run?.id]);
 
+  const freezeUniverse = useCallback(async () => {
+    if (!workbench?.latest_run?.id) return;
+    try {
+      const universe = await api.createValueResearchUniverse({
+        run_id: workbench.latest_run.id,
+        candidate_limit: candidateTrackLimit as 5 | 10 | 20 | 50,
+        leader_limit: 5,
+      });
+      toast.success(universe.created ? `已冻结 ${universe.track_count} 个赛道、${universe.company_count} 家公司` : "已打开相同条件的研究宇宙");
+      await reloadOperations();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "冻结研究宇宙失败");
+    }
+  }, [candidateTrackLimit, reloadOperations, workbench?.latest_run?.id]);
+
+  const bootstrapUniverse = useCallback(async (id: string) => {
+    try {
+      const operation = await api.bootstrapValueResearchUniverse(id);
+      toast.success(operation.created ? `已启动 ${operation.total} 家公司的首次建档` : "已打开相同条件的建档任务");
+      await reloadOperations();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "首次建档启动失败");
+    }
+  }, [reloadOperations]);
+
+  const activateUniverse = useCallback(async (id: string) => {
+    try {
+      await api.activateValueResearchUniverse(id);
+      toast.success("研究宇宙已激活，后续增量只更新该版本");
+      await reloadOperations();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "研究宇宙激活失败");
+    }
+  }, [reloadOperations]);
+
+  const runDailyIncrement = useCallback(async () => {
+    if (!activeUniverse) { toast.error("请先完成建档并激活一个研究宇宙"); return; }
+    try {
+      const operation = await api.startValueIncrementalRun(activeUniverse.id);
+      toast.success(operation.created ? `已启动 ${operation.total} 家公司的今日增量` : "今日增量任务已经存在");
+      await reloadOperations();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "今日增量启动失败");
+    }
+  }, [activeUniverse, reloadOperations]);
+
+  const setAutomationEnabled = useCallback(async (enabled: boolean) => {
+    try {
+      const value = await api.updateValueAutomation(enabled);
+      setAutomation(value);
+      toast.success(enabled ? "已开启交易日 16:45 自动研究" : "已关闭自动研究");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "自动运行设置失败");
+    }
+  }, []);
+
   const context: ValueWorkspaceContext = {
-    profiles, workbench, tracks, leaders, selectedTrack, selectedTrackId, candidateTrackLimit, selectedSymbols, batches, monitors, events, loading, refreshing,
+    profiles, workbench, tracks, leaders, selectedTrack, selectedTrackId, candidateTrackLimit, selectedSymbols, batches, monitors, events, universes, activeUniverse, automation, signals, loading, refreshing,
     selectProfile: (id) => patchParams({ profile: id, track: null }),
     selectTrack: (id) => patchParams({ track: id }),
     setCandidateTrackLimit: (limit) => patchParams({ candidate_limit: String(limit), track: ALL_TRACK_ID }),
     toggleSymbol: (symbol) => setSelectedSymbols((current) => selectedTrackId === ALL_TRACK_ID ? current : current.includes(symbol) ? current.filter((item) => item !== symbol) : current.length >= 20 ? current : [...current, symbol]),
     clearSelection: () => setSelectedSymbols([]), refreshScores, reload, reloadOperations, startResearch,
+    freezeUniverse, bootstrapUniverse, activateUniverse, runDailyIncrement, setAutomationEnabled,
   };
 
   return <WorkspacePage className="space-y-5">
@@ -347,8 +431,6 @@ export function ValueOverview() {
       ? (left.macro_rank || 999) - (right.macro_rank || 999)
       : left.rank - right.rank);
   }, [activeGroup, candidateSectors, query, rankView]);
-  const jobs = context.batches.flatMap((batch) => batch.jobs);
-
   const chooseFirst = useCallback((nextGroup: string, nextRank: "macro" | "overall") => {
     const candidates = candidateSectors.filter((item) => nextGroup === "全部" || item.macro_group_name === nextGroup);
     candidates.sort((left, right) => nextRank === "macro" ? (left.macro_rank || 999) - (right.macro_rank || 999) : left.rank - right.rank);
@@ -376,14 +458,39 @@ export function ValueOverview() {
   return <div className="space-y-4">
     <MacroStatusBar />
     <CandidateTrackLimitControl />
+    <ResearchUniverseControl />
     <section className="grid overflow-hidden rounded-xl border bg-card shadow-sm xl:h-[calc(100vh-260px)] xl:min-h-[600px] xl:max-h-[860px] xl:grid-cols-[220px_360px_minmax(0,1fr)]">
       <IndustryGroupPane groups={groups} activeGroup={activeGroup} onSelect={changeGroup} />
       <TrackPane sectors={filteredSectors} query={query} setQuery={setQuery} rankView={rankView} setRankView={changeRank} />
       <DecisionPane />
     </section>
     <ResearchSelectionBar />
-    <PipelineSummary jobs={jobs} />
+    <PipelineSummary />
   </div>;
+}
+
+function ResearchUniverseControl() {
+  const context = useValueWorkspace();
+  const latest = context.universes.find((item) => item.profile_id === context.workbench?.profile.id);
+  const operation = latest?.latest_operation;
+  const jobCounts = (operation?.jobs || []).reduce((counts, job) => ({ ...counts, [job.status]: (counts[job.status] || 0) + 1 }), {} as Record<string, number>);
+  const processed = (operation?.completed || 0) + (operation?.failed || 0);
+  const progressPercent = operation?.total ? Math.round(processed / operation.total * 100) : 0;
+  const busy = ["queued", "running"].includes(operation?.status || "") || latest?.status === "bootstrapping";
+  const canFreeze = !latest || latest.status === "archived" || latest.engine_run_id !== context.workbench?.latest_run?.id || latest.candidate_limit !== context.candidateTrackLimit;
+  return <section className="rounded-xl border bg-card px-4 py-3 shadow-sm">
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="mr-auto min-w-[260px]"><div className="flex items-center gap-2"><span className="text-sm font-semibold">持续研究宇宙</span>{latest ? <StatusBadge status={latest.status} /> : null}</div><div className="mt-1 text-xs text-muted-foreground">{latest ? `${latest.track_count} 个赛道 · ${latest.company_count} 家去重公司 · 数据 ${latest.data_as_of}` : "冻结候选池后，排名变化不会覆盖历史研究对象。"}</div></div>
+      {canFreeze ? <button onClick={() => void context.freezeUniverse()} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">冻结当前候选池</button> : null}
+      {latest?.status === "draft" ? <button onClick={() => void context.bootstrapUniverse(latest.id)} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">一键首次建档</button> : null}
+      {latest?.status === "ready" ? <button onClick={() => void context.activateUniverse(latest.id)} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">激活长期研究</button> : null}
+      {latest?.status === "active" ? <button onClick={() => void context.runDailyIncrement()} disabled={busy} className="rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">运行今日增量</button> : null}
+      {context.activeUniverse ? <label className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"><input type="checkbox" checked={Boolean(context.automation?.enabled)} onChange={(event) => void context.setAutomationEnabled(event.target.checked)} />交易日 16:45 自动运行</label> : null}
+    </div>
+    {operation ? <div className="mt-3 grid gap-2 border-t pt-3 text-xs text-muted-foreground sm:grid-cols-4"><span>最近任务：{operation.run_kind === "bootstrap" ? "首次建档" : "日增量"}</span><span>进度：{operation.completed}/{operation.total}</span><span>失败：{operation.failed}</span><span>状态：{labelStatus(operation.status)}</span>{operation.message ? <span className="sm:col-span-4 text-amber-700 dark:text-amber-400">{operation.message}</span> : null}</div> : null}
+    {context.automation?.enabled ? <div className="mt-2 text-xs text-muted-foreground">下次运行：{context.automation.next_run_at || "等待调度"}{context.automation.last_error ? ` · 最近问题：${context.automation.last_error}` : ""}</div> : null}
+    {operation ? <div className="mt-2 rounded-lg border border-dashed p-2 text-xs text-muted-foreground"><div className="flex flex-wrap justify-between gap-2"><span>实时处理：{processed}/{operation.total}</span><span>运行中 {jobCounts.running || 0}</span><span>排队 {jobCounts.queued || 0}</span><span>部分可用 {jobCounts.partial || 0}</span><span>完整 {jobCounts.completed || 0}</span>{jobCounts.failed ? <span className="text-destructive">失败 {jobCounts.failed}</span> : null}</div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progressPercent}%` }} /></div></div> : null}
+  </section>;
 }
 
 function CandidateTrackLimitControl() {
@@ -399,12 +506,12 @@ function MacroStatusBar() {
   const macro = workbench?.macro;
   const missing = macro?.missing_series || [];
   return <details id="value-macro" className="group overflow-hidden rounded-xl border bg-card shadow-sm">
-    <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 px-4 py-3">
+    <summary className="grid cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 xl:flex xl:flex-wrap">
       <div className="mr-2"><div className="text-xs font-semibold tracking-wide text-primary">当前宏观环境</div><div className="text-xl font-semibold">{macro?.regime || "宏观待更新"}</div></div>
-      <StatusBadge status={macro?.status || "failed"} />
-      <div className="flex min-w-0 flex-1 flex-wrap gap-2">{Object.entries(MACRO_LABELS).map(([key, label]) => <span key={key} className={cn("rounded-full px-3 py-1.5 text-sm", Number(macro?.axes?.[key] || 50) >= 60 ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>{label} {macro?.states?.[key] || "—"} <b className="ml-1 font-mono text-foreground">{score(macro?.axes?.[key])}</b></span>)}</div>
-      <div className="text-right text-sm text-muted-foreground"><div>{macro?.as_of || "—"} · 置信度 {macro?.confidence || "LOW"}</div><div>指标 {macro?.series_count ?? "—"}/{macro?.series_total ?? "—"}</div></div>
-      <ChevronRight className="h-4 w-4 text-muted-foreground transition group-open:rotate-90" />
+      <div className="justify-self-start"><StatusBadge status={macro?.status || "failed"} /></div>
+      <div className="col-span-3 row-start-2 flex min-w-0 flex-wrap gap-2 xl:col-auto xl:row-auto xl:flex-1">{Object.entries(MACRO_LABELS).map(([key, label]) => <span key={key} className={cn("rounded-full px-3 py-1.5 text-sm", Number(macro?.axes?.[key] || 50) >= 60 ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>{label} {macro?.states?.[key] || "—"} <b className="ml-1 font-mono text-foreground">{score(macro?.axes?.[key])}</b></span>)}</div>
+      <div className="col-span-3 row-start-3 text-left text-sm text-muted-foreground xl:col-auto xl:row-auto xl:text-right"><div>{macro?.as_of || "—"} · 置信度 {macro?.confidence || "LOW"}</div><div>指标 {macro?.series_count ?? "—"}/{macro?.series_total ?? "—"}</div></div>
+      <ChevronRight className="col-start-3 row-start-1 h-4 w-4 text-muted-foreground transition group-open:rotate-90 xl:col-auto xl:row-auto" />
     </summary>
     <div className="grid gap-4 border-t bg-muted/20 p-4 text-sm md:grid-cols-[1fr_300px]">
       <div className="space-y-2 text-muted-foreground"><div className="font-medium text-foreground">数据质量</div>{missing.length ? <div className="flex gap-2"><AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" /><span>缺少：{missing.map((item) => MACRO_FIELD_LABELS[item] || item).join("、")}</span></div> : <div>关键宏观指标无缺失。</div>}{macro?.first_observed_count ? <div>{macro.first_observed_count} 项历史发布时间只能从首次抓取日确认。</div> : null}<Link to="/models/data" className="inline-block text-primary hover:underline">查看数据质量</Link></div>
@@ -438,8 +545,8 @@ function DecisionPane() {
   const isTotalPool = selectedTrackId === ALL_TRACK_ID;
   const [visibleCount, setVisibleCount] = useState(12);
   useEffect(() => setVisibleCount(12), [selectedTrackId]);
-  const visibleLeaders = leaders.slice(0, visibleCount);
-  return <section className="min-w-0 xl:flex xl:min-h-0 xl:flex-col"><div id="value-leaders" className="xl:flex xl:min-h-0 xl:flex-1 xl:flex-col"><div className="flex shrink-0 items-center justify-between border-b bg-muted/20 px-4 py-3"><div><span className="text-base font-semibold">{isTotalPool ? "全部候选赛道龙头池" : "行业内优先研究公司"}</span><span className="ml-2 text-sm text-muted-foreground" title={isTotalPool ? "每个赛道只保留可评分的前五名，再按赛道优先级排序" : "评分只用于同一行业内部比较"}>{isTotalPool ? "赛道优先级 → 行业内前 5" : "行业内比较"}</span></div><span className="text-sm text-muted-foreground">{isTotalPool ? `共 ${leaders.length} 家` : `前 ${Math.min(leaders.length, 12)} 家`}</span></div>{isTotalPool ? <div className="border-b bg-amber-500/5 px-4 py-2 text-xs text-amber-800 dark:text-amber-300">每个候选赛道仅纳入可评分的前 5 家龙头；总池用于横向浏览与选择赛道，批量研究请进入具体赛道后发起。</div> : null}<div className="max-h-[560px] divide-y overflow-y-auto xl:min-h-0 xl:max-h-none xl:flex-1">{visibleLeaders.map((leader) => <div key={`${leader.sector_code}:${leader.symbol}`}>{isTotalPool ? <div className="border-b bg-muted/20 px-4 pt-2 text-xs text-muted-foreground">候选赛道 #{leader.candidate_sector_rank} · {leader.sector_name} · 行业内第 {leader.rank}</div> : null}<LeaderRow leader={leader} selected={selectedSymbols.includes(leader.symbol)} onToggle={() => toggleSymbol(leader.symbol)} /></div>)}{!leaders.length ? <Empty label={selectedTrackId ? "该赛道暂无可用龙头" : "请先选择赛道"} /> : null}{visibleCount < leaders.length ? <button onClick={() => setVisibleCount((current) => Math.min(current + 24, leaders.length))} className="w-full border-t px-4 py-3 text-sm text-primary hover:bg-muted/50">显示更多龙头（已显示 {visibleCount}/{leaders.length}）</button> : null}</div></div></section>;
+  const visibleLeaders = leaders.slice(0, isTotalPool ? visibleCount : 5);
+  return <section className="min-w-0 xl:flex xl:min-h-0 xl:flex-col"><div id="value-leaders" className="xl:flex xl:min-h-0 xl:flex-1 xl:flex-col"><div className="flex shrink-0 items-center justify-between border-b bg-muted/20 px-4 py-3"><div><span className="text-base font-semibold">{isTotalPool ? "全部候选赛道龙头池" : "行业内优先研究公司"}</span><span className="ml-2 text-sm text-muted-foreground" title={isTotalPool ? "每个赛道只保留可评分的前五名，再按赛道优先级排序" : "评分只用于同一行业内部比较"}>{isTotalPool ? "赛道优先级 → 行业内前 5" : "行业内比较"}</span></div><span className="text-sm text-muted-foreground">{isTotalPool ? `共 ${leaders.length} 家` : `前 ${Math.min(leaders.length, 5)} 家`}</span></div>{isTotalPool ? <div className="border-b bg-amber-500/5 px-4 py-2 text-xs text-amber-800 dark:text-amber-300">每个候选赛道仅纳入可评分的前 5 家龙头；冻结后公司会去重并保留全部赛道归属。</div> : null}<div className="max-h-[560px] divide-y overflow-y-auto xl:min-h-0 xl:max-h-none xl:flex-1">{visibleLeaders.map((leader) => <div key={`${leader.sector_code}:${leader.symbol}`}>{isTotalPool ? <div className="border-b bg-muted/20 px-4 pt-2 text-xs text-muted-foreground">候选赛道 #{leader.candidate_sector_rank} · {leader.sector_name} · 行业内第 {leader.rank}</div> : null}<LeaderRow leader={leader} selected={selectedSymbols.includes(leader.symbol)} onToggle={() => toggleSymbol(leader.symbol)} /></div>)}{!leaders.length ? <Empty label={selectedTrackId ? "该赛道暂无可用龙头" : "请先选择赛道"} /> : null}{isTotalPool && visibleCount < leaders.length ? <button onClick={() => setVisibleCount((current) => Math.min(current + 24, leaders.length))} className="w-full border-t px-4 py-3 text-sm text-primary hover:bg-muted/50">显示更多龙头（已显示 {visibleCount}/{leaders.length}）</button> : null}</div></div></section>;
 }
 
 function LeaderRow({ leader, selected, onToggle }: { leader: ValueLeaderScore; selected: boolean; onToggle: () => void }) {
@@ -458,13 +565,13 @@ function ResearchSelectionBar() {
   return <aside className="sticky bottom-3 z-10 rounded-xl border border-primary/30 bg-card/95 p-3.5 shadow-lg backdrop-blur"><div className="flex flex-wrap items-center gap-3"><div className="min-w-[150px]"><div className="text-sm font-semibold text-primary">下一步 · 深度研究</div><div className="mt-0.5 text-base font-semibold">已选 {selectedSymbols.length} 家公司</div></div><div className="flex min-w-0 flex-1 flex-wrap gap-1.5">{selected.slice(0, 6).map((leader) => <span key={leader.symbol} className="rounded-full bg-muted px-2.5 py-1 text-sm">{leader.name}</span>)}{selected.length > 6 ? <span className="rounded-full bg-muted px-2.5 py-1 text-sm">+{selected.length - 6}</span> : null}</div><button onClick={clearSelection} className="text-sm text-muted-foreground hover:text-foreground">清空</button><button onClick={() => void startResearch()} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"><ClipboardCheck className="h-4 w-4" />研究所选公司</button>{newest ? <Link to="/value/research" className="text-sm text-primary hover:underline">最近批次 {newest.completed}/{newest.total}</Link> : null}</div></aside>;
 }
 
-function PipelineSummary({ jobs }: { jobs: CompanyResearchJob[] }) {
-  const { monitors, events } = useValueWorkspace();
+function PipelineSummary() {
+  const { monitors, events, activeUniverse, signals } = useValueWorkspace();
   const summaries = [
-    ["研究队列", jobs.filter((job) => ["queued", "running"].includes(job.status)).length, "正在进行的公司研究", "/value/research"],
-    ["估值待复核", jobs.filter((job) => job.status === "partial" || job.status === "completed").length, "进入估值与买点人工复核", "/value/valuation"],
-    ["投委与计划", jobs.filter((job) => ["partial", "completed"].includes(job.status)).length, "形成可执行或等待结论", "/value/plans"],
-    ["持续监控", monitors.filter((monitor) => monitor.status === "active").length + events.filter((event) => !event.acknowledged_at).length, "重点公司与触发提醒", "/value/monitor"],
+    ["活动研究宇宙", activeUniverse?.company_count || 0, activeUniverse ? `${activeUniverse.track_count} 个赛道已冻结` : "尚未冻结候选池", "/value/research"],
+    ["首次建档", activeUniverse?.latest_operation?.completed || 0, activeUniverse?.latest_operation ? `共 ${activeUniverse.latest_operation.total} 家` : "等待启动", "/value/research"],
+    ["人工监控", monitors.filter((monitor) => monitor.status === "active").length, `${signals.length} 条最近规则结论`, "/value/plans"],
+    ["待复核事件", events.filter((event) => event.status === "open").length, "入场、风险、退出与数据问题", "/value/monitor"],
   ];
   return <section className="grid gap-3 md:grid-cols-4">{summaries.map(([title, value, help, to]) => <Link to={String(to)} key={String(title)} className="rounded-xl border bg-card p-4 shadow-sm transition hover:border-primary/40 hover:bg-muted/20"><div className="flex items-center justify-between text-sm text-muted-foreground"><span>{title}</span><ChevronRight className="h-4 w-4" /></div><div className="mt-1 font-mono text-3xl font-semibold">{value}</div><div className="mt-1 text-sm text-muted-foreground">{help}</div></Link>)}</section>;
 }
@@ -486,18 +593,30 @@ function ProfileEditor({ name, setName, mode, setMode, weights, setWeights, onCa
 }
 
 export function ValueResearchQueue() {
-  const { batches, reloadOperations } = useValueWorkspace();
+  const { batches, reloadOperations, activeUniverse } = useValueWorkspace();
   const [params, setParams] = useSearchParams();
   const [expanded, setExpanded] = useState<string | null>(batches[0]?.id || null);
+  const [archive, setArchive] = useState<ValueCompanyArchive | null>(null);
   const selectedJobId = params.get("job");
+  const selectedSymbol = params.get("symbol");
   const selected = batches.flatMap((batch) => batch.jobs.map((job) => ({ batch, job }))).find((item) => item.job.id === selectedJobId);
   const cancel = async (id: string) => { try { await api.cancelValueResearchBatch(id); await reloadOperations(); toast.success("研究批次已请求取消"); } catch (error) { toast.error(error instanceof Error ? error.message : "取消失败"); } };
   const retry = async (id: string) => { try { await api.retryValueResearchBatch(id); await reloadOperations(); toast.success("失败任务已重新进入研究队列"); } catch (error) { toast.error(error instanceof Error ? error.message : "重试失败"); } };
   const openJob = (jobId: string) => setParams((current) => { const next = new URLSearchParams(current); next.set("job", jobId); return next; });
-  return <div className="space-y-5"><PageHeader eyebrow="COMPANY RESEARCH ARCHIVE" title="公司研究档案" description="每家公司保留其策略运行、赛道、事实底稿、报告与估值结果。当前自动化产出为事实与可比估值；DCF 输入不足会明确保持待补，不能伪装为完成。" />
+  useEffect(() => { if (!selectedSymbol) { setArchive(null); return; } let cancelled = false; api.getValueCompanyArchive(selectedSymbol).then((value) => { if (!cancelled) setArchive(value); }).catch(() => { if (!cancelled) setArchive(null); }); return () => { cancelled = true; }; }, [selectedSymbol]);
+  return <div className="space-y-5"><PageHeader eyebrow="COMPANY RESEARCH ARCHIVE" title="公司研究档案" description="保留候选来源链、通达信事实、PIT 财务、资料新鲜度和历次增量差异。大模型研究层尚未启用，不生成模拟结论。" />
+    {archive ? <UniverseArchiveDetail archive={archive} onClose={() => setParams((current) => { const next = new URLSearchParams(current); next.delete("symbol"); return next; })} /> : null}
     {selected ? <ResearchArchiveDetail batch={selected.batch} job={selected.job} onClose={() => setParams((current) => { const next = new URLSearchParams(current); next.delete("job"); return next; })} /> : null}
+    {activeUniverse ? <section className="rounded-xl border bg-card shadow-sm"><div className="flex items-center justify-between border-b p-4"><div><div className="font-semibold">活动研究宇宙</div><div className="mt-1 text-xs text-muted-foreground">{activeUniverse.track_count} 个赛道 · {activeUniverse.company_count} 家去重公司</div></div><StatusBadge status={activeUniverse.status} /></div><div className="grid gap-2 p-4 md:grid-cols-2 xl:grid-cols-3">{activeUniverse.companies.map((company) => <button key={company.symbol} onClick={() => setParams((current) => { const next = new URLSearchParams(current); next.set("symbol", company.symbol); return next; })} className="rounded-lg border p-3 text-left hover:border-primary/50 hover:bg-muted/30"><div className="font-medium">{company.name}</div><div className="font-mono text-xs text-muted-foreground">{company.symbol}</div><div className="mt-2 text-xs text-muted-foreground">{company.memberships.map((item) => `${item.track_name} #${item.leader_rank}`).join(" · ")}</div></button>)}</div></section> : null}
     <div className="space-y-3">{batches.map((batch) => <section key={batch.id} className="rounded-xl border bg-card shadow-sm"><button onClick={() => setExpanded(expanded === batch.id ? null : batch.id)} className="flex w-full flex-wrap items-center gap-3 p-4 text-left"><div><div className="font-semibold">{batch.track_id} · {batch.total} 家公司</div><div className="mt-1 font-mono text-xs text-muted-foreground">{batch.id}</div></div><StatusBadge status={batch.status} /><span className="text-xs text-muted-foreground">完成 {batch.completed}/{batch.total} · 失败 {batch.failed}</span><ChevronRight className={cn("ml-auto h-4 w-4 transition", expanded === batch.id && "rotate-90")} /></button>{expanded === batch.id ? <div className="border-t p-4"><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{batch.jobs.map((job) => <JobCard key={job.id} job={job} onOpen={() => openJob(job.id)} />)}</div><div className="mt-4 flex gap-2">{["queued", "running"].includes(batch.status) ? <button onClick={() => void cancel(batch.id)} className="rounded-lg border px-3 py-2 text-sm hover:bg-muted">取消批次</button> : null}{batch.failed > 0 ? <button onClick={() => void retry(batch.id)} className="rounded-lg border px-3 py-2 text-sm hover:bg-muted">重试失败任务</button> : null}</div></div> : null}</section>)}{!batches.length ? <Empty label="尚无公司研究批次；从总览的龙头池勾选公司开始。" /> : null}</div></div>;
 }
+
+function UniverseArchiveDetail({ archive, onClose }: { archive: ValueCompanyArchive; onClose: () => void }) {
+  const latest = archive.snapshots[0];
+  return <section className="rounded-xl border border-primary/30 bg-card p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-xs font-semibold tracking-wide text-primary">CONTINUOUS RESEARCH ARCHIVE</div><h2 className="mt-1 text-xl font-semibold">{archive.memberships[0]?.name || archive.symbol} · {archive.symbol}</h2><p className="mt-1 text-sm text-muted-foreground">{archive.memberships.map((item) => `${item.track_name}（赛道#${item.track_rank} / 龙头#${item.leader_rank}）`).join(" · ")}</p></div><button onClick={onClose} className="rounded-lg border px-3 py-2 text-sm">收起</button></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><MetricCard label="档案版本" value={latest ? `v${latest.version}` : "待生成"} /><MetricCard label="完整度" value={latest ? percent(latest.completeness) : "—"} /><MetricCard label="数据截至" value={latest?.data_as_of || "—"} /><MetricCard label="资料状态" value={latest ? labelStatus(latest.status) : "待生成"} /></div><div className="mt-4 grid gap-3 lg:grid-cols-2"><article className="rounded-lg border p-4"><div className="font-semibold">来源与缺失</div><div className="mt-3 flex flex-wrap gap-2">{latest?.sources.map((source) => <span key={source} className="rounded-full bg-muted px-2.5 py-1 text-xs">{source}</span>)}</div><p className="mt-3 text-sm text-muted-foreground">缺失：{latest?.missing_fields.join("、") || "无"}</p><p className="mt-2 text-xs text-muted-foreground">大模型研究层尚未启用；本页只展示可验证数据和规则结果。</p></article><article className="rounded-lg border p-4"><div className="font-semibold">最近变化</div>{latest && Object.keys(latest.diff).length ? <div className="mt-3 space-y-1 text-sm text-muted-foreground">{Object.keys(latest.diff).slice(0, 8).map((key) => <div key={key}>• {key}</div>)}</div> : <p className="mt-3 text-sm text-muted-foreground">首次档案或本次输入没有变化。</p>}<div className="mt-3 text-xs text-muted-foreground">证据 {archive.evidence.length} 条 · 监控事件 {archive.events.length} 条</div></article></div></section>;
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) { return <div className="rounded-lg bg-muted/50 p-3"><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 font-medium">{value}</div></div>; }
 
 function JobCard({ job, onOpen }: { job: CompanyResearchJob; onOpen: () => void }) { return <article className="rounded-lg border p-4"><div className="flex justify-between gap-2"><div><button onClick={onOpen} className="font-semibold hover:text-primary hover:underline">{job.name}</button><div className="font-mono text-xs text-muted-foreground">{job.symbol}</div></div><StatusBadge status={job.status} /></div><div className="mt-4 grid grid-cols-2 gap-2 text-xs"><div className="rounded bg-muted/60 p-2"><div className="text-muted-foreground">当前阶段</div><div className="mt-1 font-medium">{job.stage}</div></div><div className="rounded bg-muted/60 p-2"><div className="text-muted-foreground">估值</div><div className="mt-1 font-medium">{labelStatus(job.valuation_status)}</div></div></div><p className="mt-3 text-xs text-muted-foreground">{job.message || "等待研究任务启动"}</p><button onClick={onOpen} className="mt-3 text-sm text-primary hover:underline">打开研究档案</button></article>; }
 
@@ -519,32 +638,62 @@ export function ValueValuationCenter() {
 function ValuationCard({ job }: { job: CompanyResearchJob }) { const valuation = job.valuation || {}; const comparable = valuation.comparable as Record<string, unknown> | undefined; const dcf = valuation.dcf as Record<string, unknown> | undefined; return <article className="rounded-xl border bg-card p-5 shadow-sm"><div className="flex justify-between"><div><Link to={`/company/CN/${job.symbol}`} className="font-semibold hover:text-primary hover:underline">{job.name}</Link><div className="font-mono text-xs text-muted-foreground">{job.symbol}</div></div><StatusBadge status={job.valuation_status} /></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><div className="rounded-lg border p-3"><div className="flex items-center gap-2 text-xs font-semibold"><BarChart3 className="h-3.5 w-3.5" />可比估值</div><dl className="mt-3 space-y-1 text-xs text-muted-foreground"><div className="flex justify-between"><dt>PE TTM</dt><dd className="font-mono text-foreground">{String(comparable?.pe_ttm ?? "—")}</dd></div><div className="flex justify-between"><dt>同业 PE 中位数</dt><dd className="font-mono text-foreground">{String(comparable?.peer_median_pe ?? "—")}</dd></div><div className="flex justify-between"><dt>PB MRQ</dt><dd className="font-mono text-foreground">{String(comparable?.pb_mrq ?? "—")}</dd></div></dl></div><div className="rounded-lg border p-3"><div className="flex items-center gap-2 text-xs font-semibold"><CircleDollarSign className="h-3.5 w-3.5" />DCF</div><div className="mt-3 text-sm font-medium">{String(dcf?.status === "unavailable" ? "不可运行" : dcf?.status || "等待计算")}</div><p className="mt-1 text-xs text-muted-foreground">{String(dcf?.reason || "需要经过验证的 PIT 输入")}</p></div></div></article>; }
 
 export function ValueMonitorCenter() {
-  const { monitors, events, reloadOperations } = useValueWorkspace();
-  const evaluate = async () => { try { await api.evaluateValueMonitors(); await reloadOperations(); toast.success("已完成一次入场监控检查"); } catch (error) { toast.error(error instanceof Error ? error.message : "监控检查失败"); } };
+  const { monitors, events, signals, reloadOperations } = useValueWorkspace();
+  const [filter, setFilter] = useState<"all" | "entry" | "risk" | "exit" | "data">("all");
+  const evaluate = async () => { try { await api.evaluateValueMonitors(); await reloadOperations(); toast.success("已完成一次确定性规则检查"); } catch (error) { toast.error(error instanceof Error ? error.message : "监控检查失败"); } };
   const toggle = async (monitor: ValueEntryMonitor) => { try { await api.updateValueMonitor(monitor.id, { status: monitor.status === "active" ? "paused" : "active" }); await reloadOperations(); } catch (error) { toast.error(error instanceof Error ? error.message : "更新监控失败"); } };
-  return <div className="space-y-5"><PageHeader eyebrow="ENTRY MONITORS" title="入场监控" description="人工确认的重点公司才会进入监控池。监控只产生站内、飞书和微信提醒与复核任务，不会连接实盘下单。" actions={<button onClick={() => void evaluate()} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"><Activity className="h-4 w-4" />立即检查</button>} />
-    <section className="overflow-hidden rounded-xl border bg-card shadow-sm"><div className="border-b p-4 font-semibold">已确认监控</div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-muted/50 text-xs text-muted-foreground"><tr><th className="p-3">公司</th><th>状态</th><th>条件</th><th>渠道</th><th>最近检查</th><th></th></tr></thead><tbody className="divide-y">{monitors.map((monitor) => <tr key={monitor.id}><td className="p-3"><div className="font-medium">{monitor.name}</div><div className="font-mono text-xs text-muted-foreground">{monitor.symbol}</div></td><td><StatusBadge status={monitor.status} /></td><td className="max-w-[250px] truncate text-xs text-muted-foreground">{Object.keys(monitor.conditions).length ? Object.keys(monitor.conditions).join(" · ") : "仅数据过期与逻辑失效复核"}</td><td className="text-xs">{monitor.channels.join(" · ")}</td><td className="text-xs text-muted-foreground">{monitor.last_checked_at || "尚未检查"}</td><td><button onClick={() => void toggle(monitor)} className="rounded-md border p-2 hover:bg-muted" aria-label={monitor.status === "active" ? "暂停监控" : "恢复监控"}>{monitor.status === "active" ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}</button></td></tr>)}{!monitors.length ? <tr><td colSpan={6}><Empty label="暂无监控；在公司研究页完成人工确认后加入。" /></td></tr> : null}</tbody></table></div></section>
-    <section className="rounded-xl border bg-card shadow-sm"><div className="border-b p-4 font-semibold">监控事件与投递记录</div><div className="divide-y">{events.map((event) => <article key={event.id} className="p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="font-medium">{event.title}</div><p className="mt-1 text-sm text-muted-foreground">{event.message}</p></div><span className="rounded-full bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">{event.severity}</span></div><div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">{event.deliveries.map((delivery) => <span key={delivery.id} className="rounded border px-2 py-1">{delivery.channel}: {delivery.status}{delivery.error ? ` · ${delivery.error}` : ""}</span>)}</div></article>)}{!events.length ? <Empty label="暂无触发事件。交易日收盘后会自动运行监控。" /> : null}</div></section></div>;
+  const setPosition = async (monitor: ValueEntryMonitor) => { try { await api.updateValueMonitor(monitor.id, { position_state: monitor.position_state === "holding" ? "watching" : "holding" }); await reloadOperations(); } catch (error) { toast.error(error instanceof Error ? error.message : "更新人工状态失败"); } };
+  const handleEvent = async (event: ValueMonitorEvent, status: "acknowledged" | "closed") => { try { await api.acknowledgeValueMonitorEvent(event.id, status); await reloadOperations(); } catch (error) { toast.error(error instanceof Error ? error.message : "更新事件失败"); } };
+  const category = (state: string) => state === "entry_candidate" ? "entry" : state === "holding_review" ? "risk" : ["exit_candidate", "thesis_invalidated"].includes(state) ? "exit" : ["data_insufficient", "stale"].includes(state) ? "data" : "all";
+  const cards = [
+    ["entry", "入场候选", signals.filter((item) => item.signal_state === "entry_candidate").length],
+    ["risk", "风险复核", signals.filter((item) => item.signal_state === "holding_review").length],
+    ["exit", "退出与逻辑失效", signals.filter((item) => ["exit_candidate", "thesis_invalidated"].includes(item.signal_state)).length],
+    ["data", "数据问题", signals.filter((item) => ["data_insufficient", "stale"].includes(item.signal_state)).length],
+  ] as const;
+  const visibleSignals = signals.filter((item) => filter === "all" || category(item.signal_state) === filter);
+  return <div className="space-y-5"><PageHeader eyebrow="CONTINUOUS RESEARCH" title="持续研究与进出场监控" description="系统按活动研究宇宙持续更新证据并执行确定性规则；观察中只判断入场，只有你明确标记为已持有后才判断减仓和退出。所有结果仅用于人工复核。" actions={<button onClick={() => void evaluate()} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"><Activity className="h-4 w-4" />运行规则检查</button>} />
+    <section className="grid gap-3 md:grid-cols-4">{cards.map(([key, title, count]) => <button key={key} onClick={() => setFilter(filter === key ? "all" : key)} className={cn("rounded-xl border bg-card p-4 text-left shadow-sm", filter === key && "border-primary ring-1 ring-primary")}><div className="text-sm text-muted-foreground">{title}</div><div className="mt-1 font-mono text-3xl font-semibold">{count}</div></button>)}</section>
+    <section className="overflow-hidden rounded-xl border bg-card shadow-sm"><div className="border-b p-4 font-semibold">人工监控状态</div><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="bg-muted/50 text-xs text-muted-foreground"><tr><th className="p-3">公司</th><th>人工状态</th><th>当前信号</th><th>可验证条件</th><th>渠道</th><th>最近检查</th><th></th></tr></thead><tbody className="divide-y">{monitors.map((monitor) => <tr key={monitor.id}><td className="p-3"><Link to={`/value/research?symbol=${encodeURIComponent(monitor.symbol)}`} className="font-medium hover:text-primary">{monitor.name}</Link><div className="font-mono text-xs text-muted-foreground">{monitor.symbol}</div></td><td><button onClick={() => void setPosition(monitor)} className="rounded-full border px-2.5 py-1 text-xs hover:bg-muted">{monitor.position_state === "holding" ? "已持有" : "观察中"}</button></td><td><StatusBadge status={monitor.signal_state || "watching"} /></td><td className="max-w-[260px] text-xs text-muted-foreground">{conditionSummary(monitor.conditions)}</td><td className="text-xs">{monitor.channels.map(channelLabel).join(" · ")}</td><td className="text-xs text-muted-foreground">{monitor.last_checked_at || "尚未检查"}</td><td><button onClick={() => void toggle(monitor)} className="rounded-md border p-2 hover:bg-muted" aria-label={monitor.status === "active" ? "暂停监控" : "恢复监控"}>{monitor.status === "active" ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}</button></td></tr>)}{!monitors.length ? <tr><td colSpan={7}><Empty label="暂无监控；请从活动研究宇宙中人工加入公司。" /></td></tr> : null}</tbody></table></div></section>
+    <section className="rounded-xl border bg-card shadow-sm"><div className="flex items-center justify-between border-b p-4"><div className="font-semibold">今日规则结论</div><div className="text-xs text-muted-foreground">{visibleSignals.length} 条 · {signals[0]?.rule_version || "等待首次运行"}</div></div><div className="divide-y">{visibleSignals.map((signal) => <article key={signal.id} className="grid gap-3 p-4 lg:grid-cols-[180px_160px_1fr]"><div><div className="font-medium">{signal.name}</div><div className="font-mono text-xs text-muted-foreground">{signal.symbol}</div><div className="mt-1 text-xs text-muted-foreground">{signal.as_of}</div></div><StatusBadge status={signal.signal_state} /><div><div className="text-sm">{signal.reasons.join("；") || "没有触发需要复核的条件"}</div><details className="mt-2 text-xs text-muted-foreground"><summary className="cursor-pointer">查看规则输入与缺失项</summary><pre className="mt-2 max-h-48 overflow-auto rounded bg-muted/50 p-3 whitespace-pre-wrap">{JSON.stringify({ inputs: signal.inputs, missing_fields: signal.missing_fields, rule_version: signal.rule_version }, null, 2)}</pre></details></div></article>)}{!visibleSignals.length ? <Empty label="当前分类暂无规则结论。" /> : null}</div></section>
+    <section className="rounded-xl border bg-card shadow-sm"><div className="border-b p-4 font-semibold">待复核事件与投递</div><div className="divide-y">{events.map((event) => <article key={event.id} className="p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="font-medium">{event.title}</div><p className="mt-1 text-sm text-muted-foreground">{event.message}</p><div className="mt-2 text-xs text-muted-foreground">数据日期 {String(event.payload.data_as_of || "—")} · 规则 {String(event.payload.rule_version || "—")} · 人工状态 {String(event.payload.position_state || "—")}</div></div><div className="flex items-center gap-2"><StatusBadge status={event.status} />{event.status === "open" ? <><button onClick={() => void handleEvent(event, "acknowledged")} className="rounded border px-2.5 py-1 text-xs">已知悉</button><button onClick={() => void handleEvent(event, "closed")} className="rounded border px-2.5 py-1 text-xs">关闭</button></> : null}</div></div><div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">{event.deliveries.map((delivery) => <span key={delivery.id} className="rounded border px-2 py-1">{channelLabel(delivery.channel)}：{delivery.status}{delivery.error ? ` · ${delivery.error}` : ""}</span>)}</div></article>)}{!events.length ? <Empty label="暂无事件。自动任务默认关闭，开启后仅在交易日收盘数据就绪时运行。" /> : null}</div></section></div>;
 }
 
 export function ValuePlans() {
   const navigate = useNavigate();
-  const { batches, monitors, reloadOperations } = useValueWorkspace();
-  const [monitorJob, setMonitorJob] = useState<CompanyResearchJob | null>(null);
+  const { batches, monitors, activeUniverse, reloadOperations } = useValueWorkspace();
+  const [monitorTarget, setMonitorTarget] = useState<MonitorTarget | null>(null);
   const reviewed = batches.flatMap((batch) => batch.jobs).filter((job) => ["partial", "completed"].includes(job.status));
   const monitoredJobIds = new Set(monitors.map((monitor) => monitor.research_job_id));
+  const monitoredSymbols = new Set(monitors.map((monitor) => monitor.symbol));
   const startCommittee = async (job: CompanyResearchJob) => { try { const committee = await api.createCommittee({ market: "CN", symbol: job.symbol, company_name: job.name }); navigate(`/ai/committees/${committee.id}`); } catch (error) { toast.error(error instanceof Error ? error.message : "无法启动投委会"); } };
-  return <div className="space-y-5"><PageHeader eyebrow="VALUE PLAN" title="人工投委会与价值计划" description="自动研究只生成证据和反证。只有研究完成后，由你手动发起价值投委会；确认重点公司并填写监控条件后才允许进入入场监控。" />
-    {monitorJob ? <MonitorConfigForm job={monitorJob} onCancel={() => setMonitorJob(null)} onSaved={async () => { setMonitorJob(null); await reloadOperations(); }} /> : null}
-    <div className="grid gap-4 lg:grid-cols-2">{reviewed.map((job) => <article key={job.id} className="rounded-xl border bg-card p-5 shadow-sm"><div className="flex items-start justify-between"><div><div className="font-semibold">{job.name}</div><div className="font-mono text-xs text-muted-foreground">{job.symbol}</div></div><StatusBadge status={job.status} /></div><p className="mt-3 text-sm text-muted-foreground">{job.message || "研究已完成，等待人工确认。"}</p><div className="mt-4 flex flex-wrap gap-2"><button onClick={() => void startCommittee(job)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"><ClipboardCheck className="h-4 w-4" />人工发起投委会</button><button disabled={monitoredJobIds.has(job.id)} onClick={() => setMonitorJob(job)} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"><Target className="h-4 w-4" />{monitoredJobIds.has(job.id) ? "已加入监控" : "设置后加入监控"}</button></div></article>)}{!reviewed.length ? <Empty label="暂无可进入投委会的公司；请先完成批量研究。" /> : null}</div></div>;
+  return <div className="space-y-5"><PageHeader eyebrow="RESEARCH REVIEW" title="人工复核与监控设置" description="冻结宇宙中的公司建档后可加入持续监控。加入监控不代表买入；观察中只计算入场条件，已持有才计算风险与退出条件。" />
+    {monitorTarget ? <MonitorConfigForm target={monitorTarget} onCancel={() => setMonitorTarget(null)} onSaved={async () => { setMonitorTarget(null); await reloadOperations(); }} /> : null}
+    {activeUniverse ? <section className="rounded-xl border bg-card shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b p-4"><div><div className="font-semibold">活动研究宇宙 · 全部候选龙头</div><div className="mt-1 text-xs text-muted-foreground">公司已去重，完整保留全部赛道归属；请逐家公司人工决定是否监控。</div></div><StatusBadge status={activeUniverse.status} /></div><div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">{activeUniverse.companies.map((company) => <article key={company.symbol} className="rounded-lg border p-4"><div className="flex items-start justify-between gap-2"><div><Link to={`/value/research?symbol=${encodeURIComponent(company.symbol)}`} className="font-medium hover:text-primary">{company.name}</Link><div className="font-mono text-xs text-muted-foreground">{company.symbol}</div></div>{monitoredSymbols.has(company.symbol) ? <StatusBadge status={monitors.find((item) => item.symbol === company.symbol)?.signal_state || "watching"} /> : null}</div><div className="mt-3 text-xs leading-5 text-muted-foreground">{company.memberships.map((item) => `${item.track_name}（赛道 #${item.track_rank} / 龙头 #${item.leader_rank}）`).join("；")}</div><button disabled={monitoredSymbols.has(company.symbol)} onClick={() => setMonitorTarget({ universeId: activeUniverse.id, company })} className="mt-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"><Target className="h-4 w-4" />{monitoredSymbols.has(company.symbol) ? "已加入监控" : "人工加入监控"}</button></article>)}</div></section> : <Empty label="请先在决策工作台冻结、建档并激活一个研究宇宙。" />}
+    {reviewed.length ? <details className="rounded-xl border bg-card shadow-sm"><summary className="cursor-pointer p-4 font-semibold">Legacy：旧研究批次（{reviewed.length}）</summary><div className="grid gap-4 border-t p-4 lg:grid-cols-2">{reviewed.map((job) => <article key={job.id} className="rounded-lg border p-4"><div className="font-semibold">{job.name}</div><div className="font-mono text-xs text-muted-foreground">{job.symbol}</div><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => void startCommittee(job)} className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">人工发起投委会</button><button disabled={monitoredJobIds.has(job.id)} onClick={() => setMonitorTarget({ job })} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50">{monitoredJobIds.has(job.id) ? "已监控" : "加入监控"}</button></div></article>)}</div></details> : null}</div>;
 }
 
-function MonitorConfigForm({ job, onCancel, onSaved }: { job: CompanyResearchJob; onCancel: () => void; onSaved: () => Promise<void> }) {
-  const [entryLow, setEntryLow] = useState(""); const [entryHigh, setEntryHigh] = useState(""); const [maxPe, setMaxPe] = useState(""); const [channels, setChannels] = useState<Array<"in_app" | "feishu" | "weixin">>(["in_app"]);
-  const save = async () => { const low = Number(entryLow); const high = Number(entryHigh); const pe = Number(maxPe); if ((entryLow && !entryHigh) || (!entryLow && entryHigh)) { toast.error("价格区间需要同时填写下限和上限"); return; } if (!entryLow && !maxPe) { toast.error("至少设置价格区间或 PE 阈值之一"); return; } if (entryLow && (!Number.isFinite(low) || !Number.isFinite(high) || low > high)) { toast.error("价格区间无效"); return; } if (maxPe && (!Number.isFinite(pe) || pe <= 0)) { toast.error("PE 阈值无效"); return; } try { await api.createValueMonitor({ research_job_id: job.id, conditions: { ...(entryLow ? { entry_low: low, entry_high: high } : {}), ...(maxPe ? { max_pe: pe } : {}) }, channels }); toast.success(`${job.name} 已加入入场监控`); await onSaved(); } catch (error) { toast.error(error instanceof Error ? error.message : "加入监控失败"); } };
+type MonitorTarget = { job: CompanyResearchJob; universeId?: never; company?: never } | { universeId: string; company: ValueUniverseCompany; job?: never };
+
+function MonitorConfigForm({ target, onCancel, onSaved }: { target: MonitorTarget; onCancel: () => void; onSaved: () => Promise<void> }) {
+  const name = target.job?.name || target.company?.name || ""; const symbol = target.job?.symbol || target.company?.symbol || "";
+  const [positionState, setPositionState] = useState<"watching" | "holding">("watching");
+  const [entryLow, setEntryLow] = useState(""); const [entryHigh, setEntryHigh] = useState(""); const [maxPe, setMaxPe] = useState(""); const [maxPb, setMaxPb] = useState(""); const [minDividend, setMinDividend] = useState("");
+  const [exitPrice, setExitPrice] = useState(""); const [exitPe, setExitPe] = useState(""); const [exitPb, setExitPb] = useState(""); const [channels, setChannels] = useState<Array<"in_app" | "feishu" | "weixin">>(["in_app"]);
+  const positive = (raw: string) => raw === "" || (Number.isFinite(Number(raw)) && Number(raw) > 0);
+  const save = async () => { const low = Number(entryLow); const high = Number(entryHigh); if ((entryLow && !entryHigh) || (!entryLow && entryHigh)) { toast.error("价格区间需要同时填写下限和上限"); return; } if (entryLow && (!Number.isFinite(low) || !Number.isFinite(high) || low > high)) { toast.error("价格区间无效"); return; } if (![maxPe, maxPb, minDividend, exitPrice, exitPe, exitPb].every(positive)) { toast.error("阈值必须为正数"); return; }
+    const conditions = { ...(entryLow ? { entry_low: low, entry_high: high } : {}), ...(maxPe ? { max_pe: Number(maxPe) } : {}), ...(maxPb ? { max_pb: Number(maxPb) } : {}), ...(minDividend ? { min_dividend_yield: Number(minDividend) } : {}), ...(exitPrice ? { exit_price: Number(exitPrice) } : {}), ...(exitPe ? { exit_pe: Number(exitPe) } : {}), ...(exitPb ? { exit_pb: Number(exitPb) } : {}) };
+    try { await api.createValueMonitor({ ...(target.job ? { research_job_id: target.job.id } : { universe_id: target.universeId, symbol }), position_state: positionState, risk_preset: "balanced", conditions, channels }); toast.success(`${name} 已加入持续监控`); await onSaved(); } catch (error) { toast.error(error instanceof Error ? error.message : "加入监控失败"); } };
   const toggle = (channel: "in_app" | "feishu" | "weixin") => setChannels((current) => current.includes(channel) ? current.filter((item) => item !== channel) : [...current, channel]);
-  return <section className="rounded-xl border border-primary/30 bg-card p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="text-xs font-semibold tracking-wide text-primary">ENTRY MONITOR</div><h2 className="mt-1 text-lg font-semibold">设置 {job.name} 的入场监控</h2><p className="mt-1 text-sm text-muted-foreground">至少填写一个可验证条件；监控只提醒与复核，不会下单。</p></div><button onClick={onCancel} className="rounded-lg border px-3 py-2 text-sm">取消</button></div><div className="mt-4 grid gap-3 md:grid-cols-3"><label className="text-sm">价格下限<input value={entryLow} onChange={(event) => setEntryLow(event.target.value)} inputMode="decimal" className="mt-1 block h-9 w-full rounded-lg border bg-background px-3" /></label><label className="text-sm">价格上限<input value={entryHigh} onChange={(event) => setEntryHigh(event.target.value)} inputMode="decimal" className="mt-1 block h-9 w-full rounded-lg border bg-background px-3" /></label><label className="text-sm">PE(TTM) 上限<input value={maxPe} onChange={(event) => setMaxPe(event.target.value)} inputMode="decimal" className="mt-1 block h-9 w-full rounded-lg border bg-background px-3" /></label></div><div className="mt-4 flex flex-wrap items-center gap-4 text-sm">{(["in_app", "feishu", "weixin"] as const).map((channel) => <label key={channel} className="flex items-center gap-2"><input type="checkbox" checked={channels.includes(channel)} onChange={() => toggle(channel)} />{channel === "in_app" ? "站内" : channel === "feishu" ? "飞书" : "微信"}</label>)}</div><div className="mt-4 flex justify-end"><button onClick={() => void save()} disabled={!channels.length} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">确认加入监控</button></div></section>;
+  return <section className="rounded-xl border border-primary/30 bg-card p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="text-xs font-semibold tracking-wide text-primary">DETERMINISTIC MONITOR</div><h2 className="mt-1 text-lg font-semibold">设置 {name} · {symbol}</h2><p className="mt-1 text-sm text-muted-foreground">可不填入场/退出阈值，仅启用默认均衡风险复核。系统不会从组合或交易记录推断持仓。</p></div><button onClick={onCancel} className="rounded-lg border px-3 py-2 text-sm">取消</button></div>
+    <div className="mt-4 flex gap-2">{(["watching", "holding"] as const).map((item) => <button key={item} onClick={() => setPositionState(item)} className={cn("rounded-lg border px-3 py-2 text-sm", positionState === item && "border-primary bg-primary/5 text-primary")}>{item === "watching" ? "观察中：只判断入场" : "已持有：判断风险与退出"}</button>)}</div>
+    <div className="mt-4 grid gap-4 xl:grid-cols-2"><fieldset className="rounded-lg border p-4"><legend className="px-2 text-sm font-semibold">全部满足才提示入场</legend><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><NumberField label="价格下限" value={entryLow} setValue={setEntryLow} /><NumberField label="价格上限" value={entryHigh} setValue={setEntryHigh} /><NumberField label="PE(TTM) 上限" value={maxPe} setValue={setMaxPe} /><NumberField label="PB(MRQ) 上限" value={maxPb} setValue={setMaxPb} /><NumberField label="股息率下限 %" value={minDividend} setValue={setMinDividend} /></div></fieldset><fieldset className="rounded-lg border p-4"><legend className="px-2 text-sm font-semibold">任一满足即提示退出（仅已持有）</legend><div className="grid gap-3 sm:grid-cols-3"><NumberField label="目标价格" value={exitPrice} setValue={setExitPrice} /><NumberField label="PE(TTM) 下限" value={exitPe} setValue={setExitPe} /><NumberField label="PB(MRQ) 下限" value={exitPb} setValue={setExitPb} /></div></fieldset></div>
+    <div className="mt-4 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">默认均衡风险复核：营收/利润同比 ≤ -20%、ROE 同比下降 ≥ 3 个百分点、盈利但经营现金流为负、负债率同比上升 ≥ 5 个百分点、ST 或退市。专业财务不足时显示数据不足，不补 0。</div><div className="mt-4 flex flex-wrap items-center gap-4 text-sm">{(["in_app", "feishu", "weixin"] as const).map((channel) => <label key={channel} className="flex items-center gap-2"><input type="checkbox" checked={channels.includes(channel)} onChange={() => toggle(channel)} />{channelLabel(channel)}</label>)}</div><div className="mt-4 flex justify-end"><button onClick={() => void save()} disabled={!channels.length} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">确认加入监控</button></div></section>;
 }
+
+function NumberField({ label, value, setValue }: { label: string; value: string; setValue: (value: string) => void }) { return <label className="text-sm">{label}<input value={value} onChange={(event) => setValue(event.target.value)} inputMode="decimal" className="mt-1 block h-9 w-full rounded-lg border bg-background px-3" /></label>; }
+function channelLabel(channel: string) { return channel === "in_app" ? "站内" : channel === "feishu" ? "飞书" : channel === "weixin" ? "微信" : channel; }
+function conditionSummary(conditions: Record<string, unknown>) { const labels: Record<string, string> = { entry_low: "价格下限", entry_high: "价格上限", max_pe: "PE 上限", max_pb: "PB 上限", min_dividend_yield: "股息率下限", exit_price: "目标价", exit_pe: "退出 PE", exit_pb: "退出 PB" }; const items = Object.entries(conditions).map(([key, value]) => `${labels[key] || key} ${String(value)}`); return items.length ? items.join(" · ") : "默认均衡风险复核"; }
 
 function StatusBadge({ status }: { status: string }) { return <span className={cn("inline-flex rounded-full px-3 py-1.5 text-sm", statusStyles[status] || "bg-muted text-muted-foreground")}>{labelStatus(status)}</span>; }
 function Loading({ label }: { label: string }) { return <div className="flex min-h-[420px] items-center justify-center gap-2 rounded-xl border border-dashed text-base text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{label}</div>; }

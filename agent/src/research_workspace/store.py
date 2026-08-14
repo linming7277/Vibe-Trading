@@ -60,8 +60,8 @@ def normalize_symbol(market: str, value: str) -> str:
     if market == "CN":
         if symbol.isdigit() and len(symbol) == 6:
             symbol += ".SH" if symbol.startswith(("5", "6", "9")) else ".SZ"
-        if not (symbol.endswith(".SH") or symbol.endswith(".SZ")):
-            raise ValueError("CN symbols must use 600519.SH / 000001.SZ format")
+        if not (symbol.endswith(".SH") or symbol.endswith(".SZ") or symbol.endswith(".BJ")):
+            raise ValueError("CN symbols must use 600519.SH / 000001.SZ / 920729.BJ format")
     elif market == "HK":
         raw = symbol[:-3] if symbol.endswith(".HK") else symbol
         if not raw.isdigit():
@@ -81,7 +81,7 @@ class ResearchWorkspaceStore:
     only contains queryable product state and references to those artifacts.
     """
 
-    SCHEMA_VERSION = 8
+    SCHEMA_VERSION = 9
 
     def __init__(self, db_path: Path | None = None, *, seed: bool = False) -> None:
         self.db_path = Path(db_path or (get_runtime_root() / "research.db"))
@@ -417,6 +417,100 @@ class ResearchWorkspaceStore:
                     progress INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL DEFAULT 0,
                     results_json TEXT NOT NULL DEFAULT '{}', errors_json TEXT NOT NULL DEFAULT '[]',
                     created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS value_research_universes (
+                    id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE,
+                    engine_run_id TEXT NOT NULL, profile_id TEXT NOT NULL,
+                    candidate_limit INTEGER NOT NULL, leader_limit INTEGER NOT NULL DEFAULT 5,
+                    status TEXT NOT NULL, data_as_of TEXT NOT NULL,
+                    formula_version TEXT NOT NULL, track_count INTEGER NOT NULL,
+                    membership_count INTEGER NOT NULL, company_count INTEGER NOT NULL,
+                    created_at TEXT NOT NULL, activated_at TEXT, archived_at TEXT,
+                    FOREIGN KEY(engine_run_id) REFERENCES engine_runs(id) ON DELETE RESTRICT
+                );
+                CREATE INDEX IF NOT EXISTS idx_value_universes_profile
+                    ON value_research_universes(profile_id,status,created_at DESC);
+                CREATE TABLE IF NOT EXISTS value_research_universe_members (
+                    id TEXT PRIMARY KEY, universe_id TEXT NOT NULL,
+                    track_id TEXT NOT NULL, track_name TEXT NOT NULL,
+                    track_rank INTEGER NOT NULL, symbol TEXT NOT NULL, name TEXT NOT NULL,
+                    leader_rank INTEGER NOT NULL, leader_type TEXT NOT NULL,
+                    leader_score REAL, leader_coverage REAL NOT NULL,
+                    inclusion_reason TEXT NOT NULL, created_at TEXT NOT NULL,
+                    UNIQUE(universe_id,track_id,symbol),
+                    FOREIGN KEY(universe_id) REFERENCES value_research_universes(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_value_universe_members_symbol
+                    ON value_research_universe_members(universe_id,symbol,track_rank,leader_rank);
+                CREATE TABLE IF NOT EXISTS company_research_evidence (
+                    id TEXT PRIMARY KEY, symbol TEXT NOT NULL, evidence_type TEXT NOT NULL,
+                    source TEXT NOT NULL, source_id TEXT NOT NULL, data_as_of TEXT NOT NULL,
+                    published_at TEXT, fetched_at TEXT NOT NULL, content_hash TEXT NOT NULL,
+                    payload_json TEXT NOT NULL, status TEXT NOT NULL,
+                    UNIQUE(source,source_id,content_hash)
+                );
+                CREATE INDEX IF NOT EXISTS idx_company_evidence_symbol
+                    ON company_research_evidence(symbol,data_as_of DESC,evidence_type);
+                CREATE TABLE IF NOT EXISTS company_research_snapshots (
+                    id TEXT PRIMARY KEY, universe_id TEXT NOT NULL, symbol TEXT NOT NULL,
+                    version INTEGER NOT NULL, data_as_of TEXT NOT NULL,
+                    status TEXT NOT NULL, completeness REAL NOT NULL,
+                    source_hash TEXT NOT NULL, payload_json TEXT NOT NULL,
+                    diff_json TEXT NOT NULL, missing_fields_json TEXT NOT NULL,
+                    sources_json TEXT NOT NULL, evidence_ids_json TEXT NOT NULL,
+                    dossier_id TEXT, report_id TEXT, previous_snapshot_id TEXT,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(universe_id,symbol,source_hash),
+                    FOREIGN KEY(universe_id) REFERENCES value_research_universes(id) ON DELETE CASCADE,
+                    FOREIGN KEY(previous_snapshot_id) REFERENCES company_research_snapshots(id) ON DELETE SET NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_company_snapshots_latest
+                    ON company_research_snapshots(universe_id,symbol,version DESC);
+                CREATE TABLE IF NOT EXISTS company_incremental_runs (
+                    id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE,
+                    universe_id TEXT NOT NULL, run_kind TEXT NOT NULL,
+                    trigger_kind TEXT NOT NULL, as_of TEXT NOT NULL,
+                    status TEXT NOT NULL, total INTEGER NOT NULL,
+                    completed INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0,
+                    coverage REAL NOT NULL DEFAULT 0, cancel_requested INTEGER NOT NULL DEFAULT 0,
+                    message TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
+                    started_at TEXT, completed_at TEXT,
+                    FOREIGN KEY(universe_id) REFERENCES value_research_universes(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_incremental_runs_universe
+                    ON company_incremental_runs(universe_id,as_of DESC,created_at DESC);
+                CREATE TABLE IF NOT EXISTS company_incremental_jobs (
+                    id TEXT PRIMARY KEY, run_id TEXT NOT NULL, symbol TEXT NOT NULL,
+                    name TEXT NOT NULL, primary_track_id TEXT NOT NULL,
+                    status TEXT NOT NULL, stage TEXT NOT NULL,
+                    attempts INTEGER NOT NULL DEFAULT 0, message TEXT NOT NULL DEFAULT '',
+                    snapshot_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    UNIQUE(run_id,symbol),
+                    FOREIGN KEY(run_id) REFERENCES company_incremental_runs(id) ON DELETE CASCADE,
+                    FOREIGN KEY(snapshot_id) REFERENCES company_research_snapshots(id) ON DELETE SET NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_incremental_jobs_run
+                    ON company_incremental_jobs(run_id,status,symbol);
+                CREATE TABLE IF NOT EXISTS value_signal_evaluations (
+                    id TEXT PRIMARY KEY, monitor_id TEXT NOT NULL,
+                    snapshot_id TEXT, as_of TEXT NOT NULL, signal_state TEXT NOT NULL,
+                    rule_version TEXT NOT NULL, input_hash TEXT NOT NULL,
+                    rules_json TEXT NOT NULL, inputs_json TEXT NOT NULL,
+                    reasons_json TEXT NOT NULL, missing_fields_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(monitor_id,input_hash,rule_version),
+                    FOREIGN KEY(monitor_id) REFERENCES value_entry_monitors(id) ON DELETE CASCADE,
+                    FOREIGN KEY(snapshot_id) REFERENCES company_research_snapshots(id) ON DELETE SET NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_signal_evaluations_monitor
+                    ON value_signal_evaluations(monitor_id,created_at DESC);
+                CREATE TABLE IF NOT EXISTS value_research_automation (
+                    id TEXT PRIMARY KEY CHECK(id='default'), enabled INTEGER NOT NULL DEFAULT 0,
+                    timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
+                    run_time TEXT NOT NULL DEFAULT '16:45', max_retries INTEGER NOT NULL DEFAULT 3,
+                    retry_minutes INTEGER NOT NULL DEFAULT 20, next_run_at TEXT,
+                    last_run_id TEXT, last_status TEXT, last_error TEXT NOT NULL DEFAULT '',
+                    lock_owner TEXT, lock_until TEXT, updated_at TEXT NOT NULL
                 );
                 """
             )

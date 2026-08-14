@@ -223,7 +223,19 @@ def register_strategy_routes(app: FastAPI, require_auth: AuthDep | None = None) 
         return {"market": normalized, "items": store.list_scores("value", normalized, engine="value_leader", limit=500), "run": dashboard["latest_run"]}
 
     @app.get("/strategy/value/signals", dependencies=[Depends(require_auth)])
-    async def value_signals(market: str = Query("CN")):
+    async def value_signals(
+        market: str = Query("CN"), scope: str = Query("strategy"),
+        status: str | None = Query(default=None), symbol: str | None = Query(default=None),
+        limit: int = Query(default=200, ge=1, le=1000),
+    ):
+        if scope == "monitoring":
+            store = ValueWorkspaceStore()
+            try:
+                return {"items": store.list_signal_evaluations(
+                    signal_state=status, symbol=symbol.upper() if symbol else None, limit=limit,
+                )}
+            finally:
+                store.close()
         return get_engine_store().list_signals(strategy_line="value", market=normalize_market(market))
 
     @app.get("/strategy/value/companies/{market}/{symbol}", dependencies=[Depends(require_auth)])

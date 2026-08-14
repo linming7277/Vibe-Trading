@@ -33,13 +33,13 @@ def test_sqlite_bootstrap_is_idempotent_and_market_taxonomies_stay_native(tmp_pa
             "HK": "恒生",
             "US": "GICS",
         }
-        assert second._conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0] == "8"
+        assert second._conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0] == "9"
         tables = {
             row[0]
             for row in second._conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert {"engine_runs", "strategy_signals", "decision_chain_runs", "structured_committee_decisions"} <= tables
-        assert [row[0] for row in second._conn.execute("SELECT version FROM schema_migrations ORDER BY version")] == [1, 2, 3, 4, 5, 6, 7, 8]
+        assert [row[0] for row in second._conn.execute("SELECT version FROM schema_migrations ORDER BY version")] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
     finally:
         second.close()
 
@@ -49,6 +49,7 @@ def test_sqlite_bootstrap_is_idempotent_and_market_taxonomies_stay_native(tmp_pa
     [
         ("CN", "600519", "600519.SH"),
         ("CN", "000001", "000001.SZ"),
+        ("CN", "920729.BJ", "920729.BJ"),
         ("HK", "700", "00700.HK"),
         ("US", "aapl", "AAPL.US"),
     ],
@@ -153,12 +154,12 @@ def test_agent_macro_refresh_publishes_structured_result_and_evidence(store: Res
     run = store.create_research_run("macro", "CN", status="queued", linked_run_id="session-1")
     result = store.publish_research_results(run["id"], [{
         "market": "CN",
-        "data_as_of": "2026-08-12",
+        "data_as_of": "2099-08-12",
         "source_status": "live",
         "evidence": [{
             "source": "中国人民银行",
             "url": "https://example.test/pbc",
-            "data_as_of": "2026-08-12",
+            "data_as_of": "2099-08-12",
             "metadata": {"document": "货币政策执行报告"},
         }],
         "macro": {
@@ -173,7 +174,7 @@ def test_agent_macro_refresh_publishes_structured_result_and_evidence(store: Res
     assert result["run"]["status"] == "completed"
     assert result["published"] == {"CN": ["macro"]}
     assert store.latest_macro("CN")["headline"] == "流动性保持合理充裕"
-    evidence = store.list_research_evidence("CN", "macro", "2026-08-12")
+    evidence = store.list_research_evidence("CN", "macro", "2099-08-12")
     assert evidence[0]["source"] == "中国人民银行"
     assert evidence[0]["metadata"]["document"] == "货币政策执行报告"
 

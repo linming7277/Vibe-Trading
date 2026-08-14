@@ -723,7 +723,10 @@ class TdxDataService:
                     break
         return result
 
-    def security_overview(self, symbol: str) -> dict[str, Any] | None:
+    def security_overview(
+        self, symbol: str, *, include_related: bool = True, include_history: bool = True,
+    ) -> dict[str, Any] | None:
+        """Read a company from cache, optionally omitting expensive related scans."""
         code = symbol.strip().upper()
         security = self.store.get_record("securities", code)
         if not security:
@@ -731,8 +734,8 @@ class TdxDataService:
         quote = self.store.get_record("quotes", code)
         fundamental = self.store.get_record("fundamentals", code)
         detail = self.security_detail(code)
-        sectors = [item["payload"] for item in self._records("sector_members") if item["payload"].get("code") == code]
-        klines = [item["payload"] for item in self._records("klines", 10_000) if item["key"].startswith(f"{code}:")]
+        sectors = [item["payload"] for item in self._records("sector_members") if item["payload"].get("code") == code] if include_related else []
+        klines = [item["payload"] for item in self._records("klines", 10_000) if item["key"].startswith(f"{code}:")] if include_history else []
         cw_files = list((Path(self.client.home) / "vipdoc" / "cw").glob("gpcw*.dat")) if (Path(self.client.home) / "vipdoc" / "cw").exists() else []
         return {
             "code": code, "name": security["name"], "quote": quote["payload"] if quote else None,
