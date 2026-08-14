@@ -651,12 +651,30 @@ class ValueLineService:
         if not target:
             return {"as_of": as_of, "sector_code": sector_code, "items": [], "total": 0}
         category = f"{target}:{sector_code}" if sector_code else None
-        cached = self.cache.list_records(LEADER_DATASET, category=category, limit=10_000)["items"]
+        # Keep the current snapshot intact when this table contains multiple
+        # daily runs.  Filtering a 10k page after reading it can otherwise
+        # silently omit older rows from today's complete leader pool.
+        cached = self.cache.list_records(LEADER_DATASET, category=category, limit=100_000)["items"]
         items = [
             row["payload"] for row in cached
             if str(row["payload"].get("as_of") or row["payload"].get("data_as_of") or "") == target
         ]
-        items.sort(key=lambda row: (row.get("score") is None, -(row.get("score") or 0), row.get("symbol") or ""))
+        if sector_code:
+            items.sort(key=lambda row: (row.get("score") is None, -(row.get("score") or 0), row.get("symbol") or ""))
+        else:
+            sector_ranks = {
+                str(row["payload"].get("sector_code") or ""): int(row["payload"].get("rank") or 10_000)
+                for row in self.cache.list_records(SECTOR_DATASET, category=target, limit=500)["items"]
+            }
+            items = [{**row, "candidate_sector_rank": sector_ranks.get(str(row.get("sector_code") or ""), 10_000)} for row in items]
+            # Leader scores are percentile ranks inside a track.  A total pool
+            # must preserve the chosen track's priority before comparing its
+            # leaders, rather than pretending cross-track percentiles are one
+            # global valuation score.
+            items.sort(key=lambda row: (
+                row["candidate_sector_rank"], row.get("rank") or 10_000,
+                row.get("score") is None, -(row.get("score") or 0), row.get("symbol") or "",
+            ))
         return {"as_of": target, "sector_code": sector_code, "items": items, "total": len(items), "formula_version": LEADER_VERSION}
 
 

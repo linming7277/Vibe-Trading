@@ -37,6 +37,8 @@ type ValueWorkspaceContext = {
   startResearch: () => Promise<void>;
 };
 
+const ALL_TRACK_ID = "__all_candidate_tracks__";
+
 const MODEL_LABELS: Record<string, string> = {
   policy_cycle: "政策与产业周期",
   economic_cycle: "经济周期",
@@ -202,8 +204,8 @@ export function ValueResearchWorkspace() {
   useEffect(() => {
     if (!selectedTrackId) { setLeaders([]); return; }
     let cancelled = false;
-    api.getValueLeaderScores(selectedTrackId, workbench?.latest_run?.as_of || workbench?.macro?.as_of || undefined)
-      .then((result) => { if (!cancelled) setLeaders(result.items.slice(0, 20)); })
+    api.getValueLeaderScores(selectedTrackId === ALL_TRACK_ID ? undefined : selectedTrackId, workbench?.latest_run?.as_of || workbench?.macro?.as_of || undefined)
+      .then((result) => { if (!cancelled) setLeaders(result.items); })
       .catch((error) => { if (!cancelled) { setLeaders([]); toast.error(error instanceof Error ? error.message : "龙头池加载失败"); } });
     return () => { cancelled = true; };
   }, [selectedTrackId, workbench?.latest_run?.as_of, workbench?.macro?.as_of]);
@@ -268,7 +270,7 @@ export function ValueResearchWorkspace() {
     profiles, workbench, tracks, leaders, selectedTrack, selectedTrackId, selectedSymbols, batches, monitors, events, loading, refreshing,
     selectProfile: (id) => patchParams({ profile: id, track: null }),
     selectTrack: (id) => patchParams({ track: id }),
-    toggleSymbol: (symbol) => setSelectedSymbols((current) => current.includes(symbol) ? current.filter((item) => item !== symbol) : current.length >= 20 ? current : [...current, symbol]),
+    toggleSymbol: (symbol) => setSelectedSymbols((current) => selectedTrackId === ALL_TRACK_ID ? current : current.includes(symbol) ? current.filter((item) => item !== symbol) : current.length >= 20 ? current : [...current, symbol]),
     clearSelection: () => setSelectedSymbols([]), refreshScores, reload, reloadOperations, startResearch,
   };
 
@@ -336,7 +338,8 @@ export function ValueOverview() {
   const changeGroup = (group: string) => {
     setActiveGroup(group);
     setQuery("");
-    chooseFirst(group, rankView);
+    if (group === "全部") context.selectTrack(ALL_TRACK_ID);
+    else chooseFirst(group, rankView);
   };
   const changeRank = (view: "macro" | "overall") => {
     setRankView(view);
@@ -389,7 +392,7 @@ function IndustryGroupPane({ groups, activeGroup, onSelect }: { groups: Array<{ 
 function TrackPane({ sectors, query, setQuery, rankView, setRankView }: { sectors: ValueSectorScore[]; query: string; setQuery: (value: string) => void; rankView: "macro" | "overall"; setRankView: (value: "macro" | "overall") => void }) {
   const { selectedTrackId, selectTrack, workbench } = useValueWorkspace();
   const detail = workbench?.sector_scores?.find((item) => item.sector_code === selectedTrackId);
-  return <section id="value-tracks" className="min-w-0 border-b xl:flex xl:min-h-0 xl:flex-col xl:border-b-0 xl:border-r"><header className="shrink-0 border-b p-4"><div className="flex items-baseline justify-between"><div><div className="text-xs font-semibold tracking-wide text-primary">第二步</div><div className="mt-1 text-base font-semibold">候选赛道池</div></div><span className="text-sm text-muted-foreground">{sectors.length} 个</span></div><div className="mt-2 text-xs text-muted-foreground">排序用于展开龙头研究；宏观仅作背景观察。</div><div className="mt-3 grid grid-cols-2 rounded-lg bg-muted p-1 text-sm"><button onClick={() => setRankView("overall")} className={cn("rounded-md px-2 py-2", rankView === "overall" && "bg-background font-medium shadow-sm")}>候选池排序</button><button onClick={() => setRankView("macro")} className={cn("rounded-md px-2 py-2", rankView === "macro" && "bg-background font-medium shadow-sm")}>宏观观察</button></div><label className="relative mt-2 block"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索细分赛道" className="h-10 w-full rounded-md border bg-background pl-9 pr-2 text-sm" /></label></header><div className="min-h-0 flex-1 divide-y overflow-y-auto">{sectors.map((sector) => { const activeScore = rankView === "macro" ? sector.macro_fit : sector.score; return <button key={sector.sector_code} onClick={() => selectTrack(sector.sector_code)} className={cn("grid w-full grid-cols-[32px_1fr_86px] items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/60", sector.sector_code === selectedTrackId && "bg-primary/10")}><span className="font-mono text-sm text-muted-foreground">{rankView === "macro" ? sector.macro_rank : sector.rank}</span><span className="min-w-0"><span className="block truncate text-[15px] font-medium">{sector.sector_name}</span><span className="block truncate text-xs text-muted-foreground">候选 {sector.rank} · 宏观观察 {sector.macro_rank}</span></span><span className="text-right"><span className="block text-xs font-medium">{scoreLevel(activeScore)}</span><span className="block font-mono text-xs text-muted-foreground">指数 {score(activeScore)}</span></span></button>; })}{!sectors.length ? <Empty label="没有符合条件的赛道" /> : null}</div><SectorJudgement detail={detail} /></section>;
+  return <section id="value-tracks" className="min-w-0 border-b xl:flex xl:min-h-0 xl:flex-col xl:border-b-0 xl:border-r"><header className="shrink-0 border-b p-4"><div className="flex items-baseline justify-between"><div><div className="text-xs font-semibold tracking-wide text-primary">第二步</div><div className="mt-1 text-base font-semibold">候选赛道池</div></div><span className="text-sm text-muted-foreground">{sectors.length} 个</span></div><div className="mt-2 text-xs text-muted-foreground">排序用于展开龙头研究；宏观仅作背景观察。</div><button onClick={() => selectTrack(ALL_TRACK_ID)} className={cn("mt-3 w-full rounded-lg border px-3 py-2.5 text-left text-sm transition hover:bg-muted", selectedTrackId === ALL_TRACK_ID ? "border-primary bg-primary/10 text-primary" : "bg-background")}><b>全部候选赛道</b><span className="ml-2 text-xs text-muted-foreground">查看全量龙头研究优先队列</span></button><div className="mt-3 grid grid-cols-2 rounded-lg bg-muted p-1 text-sm"><button onClick={() => setRankView("overall")} className={cn("rounded-md px-2 py-2", rankView === "overall" && "bg-background font-medium shadow-sm")}>候选池排序</button><button onClick={() => setRankView("macro")} className={cn("rounded-md px-2 py-2", rankView === "macro" && "bg-background font-medium shadow-sm")}>宏观观察</button></div><label className="relative mt-2 block"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索细分赛道" className="h-10 w-full rounded-md border bg-background pl-9 pr-2 text-sm" /></label></header><div className="min-h-0 flex-1 divide-y overflow-y-auto">{sectors.map((sector) => { const activeScore = rankView === "macro" ? sector.macro_fit : sector.score; return <button key={sector.sector_code} onClick={() => selectTrack(sector.sector_code)} className={cn("grid w-full grid-cols-[32px_1fr_86px] items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/60", sector.sector_code === selectedTrackId && "bg-primary/10")}><span className="font-mono text-sm text-muted-foreground">{rankView === "macro" ? sector.macro_rank : sector.rank}</span><span className="min-w-0"><span className="block truncate text-[15px] font-medium">{sector.sector_name}</span><span className="block truncate text-xs text-muted-foreground">候选 {sector.rank} · 宏观观察 {sector.macro_rank}</span></span><span className="text-right"><span className="block text-xs font-medium">{scoreLevel(activeScore)}</span><span className="block font-mono text-xs text-muted-foreground">指数 {score(activeScore)}</span></span></button>; })}{!sectors.length ? <Empty label="没有符合条件的赛道" /> : null}</div><SectorJudgement detail={detail} /></section>;
 }
 
 function SectorJudgement({ detail }: { detail?: ValueSectorScore }) {
@@ -403,7 +406,11 @@ function SectorJudgement({ detail }: { detail?: ValueSectorScore }) {
 
 function DecisionPane() {
   const { selectedTrackId, leaders, selectedSymbols, toggleSymbol } = useValueWorkspace();
-  return <section className="min-w-0 xl:flex xl:min-h-0 xl:flex-col"><div id="value-leaders" className="xl:flex xl:min-h-0 xl:flex-1 xl:flex-col"><div className="flex shrink-0 items-center justify-between border-b bg-muted/20 px-4 py-3"><div><span className="text-base font-semibold">行业内优先研究公司</span><span className="ml-2 text-sm text-muted-foreground" title="评分只用于同一行业内部比较">行业内比较</span></div><span className="text-sm text-muted-foreground">前 {Math.min(leaders.length, 12)} 家</span></div><div className="max-h-[560px] divide-y overflow-y-auto xl:min-h-0 xl:max-h-none xl:flex-1">{leaders.slice(0, 12).map((leader) => <LeaderRow key={leader.symbol} leader={leader} selected={selectedSymbols.includes(leader.symbol)} onToggle={() => toggleSymbol(leader.symbol)} />)}{!leaders.length ? <Empty label={selectedTrackId ? "该赛道暂无可用龙头" : "请先选择赛道"} /> : null}</div></div></section>;
+  const isTotalPool = selectedTrackId === ALL_TRACK_ID;
+  const [visibleCount, setVisibleCount] = useState(12);
+  useEffect(() => setVisibleCount(12), [selectedTrackId]);
+  const visibleLeaders = leaders.slice(0, visibleCount);
+  return <section className="min-w-0 xl:flex xl:min-h-0 xl:flex-col"><div id="value-leaders" className="xl:flex xl:min-h-0 xl:flex-1 xl:flex-col"><div className="flex shrink-0 items-center justify-between border-b bg-muted/20 px-4 py-3"><div><span className="text-base font-semibold">{isTotalPool ? "全部候选赛道龙头池" : "行业内优先研究公司"}</span><span className="ml-2 text-sm text-muted-foreground" title={isTotalPool ? "先按赛道候选排名，再按行业内龙头排名" : "评分只用于同一行业内部比较"}>{isTotalPool ? "赛道优先级 → 行业内排名" : "行业内比较"}</span></div><span className="text-sm text-muted-foreground">{isTotalPool ? `共 ${leaders.length} 家` : `前 ${Math.min(leaders.length, 12)} 家`}</span></div>{isTotalPool ? <div className="border-b bg-amber-500/5 px-4 py-2 text-xs text-amber-800 dark:text-amber-300">总池用于横向浏览与选择赛道；批量研究请进入具体赛道后发起。</div> : null}<div className="max-h-[560px] divide-y overflow-y-auto xl:min-h-0 xl:max-h-none xl:flex-1">{visibleLeaders.map((leader) => <div key={`${leader.sector_code}:${leader.symbol}`}>{isTotalPool ? <div className="border-b bg-muted/20 px-4 pt-2 text-xs text-muted-foreground">候选赛道 #{leader.candidate_sector_rank} · {leader.sector_name} · 行业内第 {leader.rank}</div> : null}<LeaderRow leader={leader} selected={selectedSymbols.includes(leader.symbol)} onToggle={() => toggleSymbol(leader.symbol)} /></div>)}{!leaders.length ? <Empty label={selectedTrackId ? "该赛道暂无可用龙头" : "请先选择赛道"} /> : null}{visibleCount < leaders.length ? <button onClick={() => setVisibleCount((current) => Math.min(current + 24, leaders.length))} className="w-full border-t px-4 py-3 text-sm text-primary hover:bg-muted/50">显示更多龙头（已显示 {visibleCount}/{leaders.length}）</button> : null}</div></div></section>;
 }
 
 function LeaderRow({ leader, selected, onToggle }: { leader: ValueLeaderScore; selected: boolean; onToggle: () => void }) {

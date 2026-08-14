@@ -144,6 +144,26 @@ def test_value_service_lists_all_v2_leaders_when_sector_is_omitted(tmp_path: Pat
         service.close()
 
 
+def test_total_leader_pool_prioritizes_candidate_track_before_in_track_rank(tmp_path: Path) -> None:
+    cache = TdxDataStore(tmp_path / "tdx.db")
+    data_store = ValueDataStore(tmp_path / "research.db")
+    cache.upsert_records("value_sector_scores_v2", [
+        {"key": "2026-08-13:881001.SH", "category": "2026-08-13", "payload": {"sector_code": "881001.SH", "rank": 2}},
+        {"key": "2026-08-13:881002.SH", "category": "2026-08-13", "payload": {"sector_code": "881002.SH", "rank": 1}},
+    ])
+    cache.upsert_records("value_leader_scores_v2", [
+        {"key": "2026-08-13:881001.SH:000001.SZ", "category": "2026-08-13:881001.SH", "payload": {"data_as_of": "2026-08-13", "sector_code": "881001.SH", "symbol": "000001.SZ", "rank": 1, "score": 99.0}},
+        {"key": "2026-08-13:881002.SH:600000.SH", "category": "2026-08-13:881002.SH", "payload": {"data_as_of": "2026-08-13", "sector_code": "881002.SH", "symbol": "600000.SH", "rank": 2, "score": 70.0}},
+    ])
+    service = ValueLineService(cache=cache, data_store=data_store)
+    try:
+        result = service.leaders(as_of="2026-08-13")
+        assert [item["symbol"] for item in result["items"]] == ["600000.SH", "000001.SZ"]
+        assert result["items"][0]["candidate_sector_rank"] == 1
+    finally:
+        service.close()
+
+
 def test_sector_v2_uses_company_research_candidate_dimensions_not_context() -> None:
     components = {
         "momentum": 60.0, "earnings_momentum": 60.0, "valuation": 60.0,
