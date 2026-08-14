@@ -10,6 +10,23 @@ $ErrorActionPreference = "Stop"
 $repo = [System.IO.Path]::GetFullPath($RepoRoot)
 Set-Location -LiteralPath $repo
 
+# Keep mainland official data direct even when this desktop session uses an
+# HTTP(S) proxy for Codex/OpenAI.  This covers SDKs (Tushare/AKShare) that own
+# their HTTP transports; a transparent TUN proxy still needs the Clash/V2Ray
+# rules shipped beside this launcher.
+$domesticNoProxyHosts = @(
+    "gov.cn", "ndrc.gov.cn", "miit.gov.cn", "pbc.gov.cn", "safe.gov.cn",
+    "chinamoney.com.cn", "shibor.org", "tushare.pro"
+)
+$existingNoProxy = @($env:NO_PROXY, $env:no_proxy) |
+    Where-Object { $_ } |
+    ForEach-Object { $_ -split "," } |
+    ForEach-Object { $_.Trim() } |
+    Where-Object { $_ }
+$mergedNoProxy = @($existingNoProxy + $domesticNoProxyHosts | Select-Object -Unique) -join ","
+$env:NO_PROXY = $mergedNoProxy
+$env:no_proxy = $mergedNoProxy
+
 if ($Service -eq "backend") {
     $backendExe = Join-Path $repo ".venv\Scripts\vibe-trading.exe"
     if (-not (Test-Path -LiteralPath $backendExe)) {

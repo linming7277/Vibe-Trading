@@ -12,9 +12,9 @@ from datetime import date
 from typing import Any, Callable
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
-import httpx
 from bs4 import BeautifulSoup
 
+from .domestic_network import direct_domestic_http_client
 from .value_data_store import ValueDataStore, now
 
 
@@ -94,7 +94,7 @@ class PolicyDataService:
         error: Exception | None = None
         for attempt in range(3):
             try:
-                with httpx.Client(timeout=15, follow_redirects=True, headers={"User-Agent": "hzstock-value-research/1.0", **headers}) as client:
+                with direct_domestic_http_client(timeout=15, headers={"User-Agent": "hzstock-value-research/1.0", **headers}) as client:
                     response = client.get(url)
                     response.raise_for_status()
                     return response.text, {**dict(response.headers), "x-hz-status": str(response.status_code)}

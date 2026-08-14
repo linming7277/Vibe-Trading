@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from .common.normalization import percentile
 from .common.provenance import stable_fingerprint
+from .domestic_network import direct_domestic_http_client
 from .value.macro_regime_v2 import AXES, FORMULA_VERSION, calculate
 from .value_data_store import ValueDataStore, now
 
@@ -153,12 +154,10 @@ class MacroDataService:
     @staticmethod
     def _fetch_cfets_usd_cny() -> list[dict[str, Any]]:
         """Read the official CFETS USD/CNY central-parity history."""
-        import httpx
-
         source_url = "https://www.chinamoney.com.cn/dqs/rest/cm-u-pt/CcprHis"
         end_date = date.today()
         try:
-            with httpx.Client(timeout=20, follow_redirects=True, trust_env=False, headers={"User-Agent": "Mozilla/5.0 hzstock-value-research", "Referer": "https://www.chinamoney.com.cn/"}) as client:
+            with direct_domestic_http_client(timeout=20, headers={"User-Agent": "Mozilla/5.0 hzstock-value-research", "Referer": "https://www.chinamoney.com.cn/"}) as client:
                 response = client.get(source_url, params={"startDate": (end_date - timedelta(days=365 * 6)).isoformat(), "endDate": end_date.isoformat(), "currencyPair": "USD/CNY", "pageNum": 1, "pageSize": 5000})
                 response.raise_for_status()
                 payload = response.json()

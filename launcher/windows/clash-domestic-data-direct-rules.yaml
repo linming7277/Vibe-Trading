@@ -1,0 +1,15 @@
+# Put these rules before any MATCH / PROXY catch-all rule in Clash Meta.
+# They keep domestic Value Research data direct while Codex/OpenAI stays proxied.
+#
+# A TUN/system-wide proxy is routed by Clash itself.  Python's trust_env=False
+# cannot override a TUN rule, so this file is required when TUN mode is enabled.
+
+rules:
+  - DOMAIN-SUFFIX,gov.cn,DIRECT
+  - DOMAIN-SUFFIX,ndrc.gov.cn,DIRECT
+  - DOMAIN-SUFFIX,miit.gov.cn,DIRECT
+  - DOMAIN-SUFFIX,pbc.gov.cn,DIRECT
+  - DOMAIN-SUFFIX,safe.gov.cn,DIRECT
+  - DOMAIN-SUFFIX,chinamoney.com.cn,DIRECT
+  - DOMAIN-SUFFIX,shibor.org,DIRECT
+  - DOMAIN-SUFFIX,tushare.pro,DIRECT

@@ -203,6 +203,24 @@ def test_macro_catalog_includes_exports_social_financing_and_market_risk() -> No
     assert {"csi_all_share_risk_appetite", "a_share_breadth_20d"} <= set(MARKET_SERIES_SPECS)
 
 
+def test_domestic_official_http_client_ignores_proxy_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    import src.strategy_engines.domestic_network as domestic_network
+
+    captured: dict[str, object] = {}
+
+    class Client:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(domestic_network.httpx, "Client", Client)
+    direct = domestic_network.direct_domestic_http_client(headers={"X-Test": "1"})
+
+    assert isinstance(direct, Client)
+    assert captured["trust_env"] is False
+    assert captured["follow_redirects"] is True
+    assert captured["headers"] == {"X-Test": "1"}
+
+
 def test_macro_sector_matrix_explicitly_covers_all_tdx_second_level_industries() -> None:
     assert len(INDUSTRY_TO_GROUP) == 128
     assert set(INDUSTRY_TO_GROUP.values()) == {
