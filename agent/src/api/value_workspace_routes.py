@@ -196,6 +196,20 @@ def register_value_workspace_routes(app: FastAPI, require_auth: AuthDep) -> None
         finally:
             store.close()
 
+    @app.post("/strategy/value/research-batches/{batch_id}/retry", dependencies=[Depends(require_auth)])
+    async def retry_batch(batch_id: str, background_tasks: BackgroundTasks):
+        service = ValueWorkspaceService()
+        try:
+            batch = service.retry_failed_jobs(batch_id)
+            background_tasks.add_task(_run_batch, batch_id)
+            return batch
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        finally:
+            service.close()
+
     @app.get("/strategy/value/monitors", dependencies=[Depends(require_auth)])
     async def list_monitors():
         store = ValueWorkspaceStore()

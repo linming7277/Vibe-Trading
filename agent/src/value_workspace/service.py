@@ -314,7 +314,17 @@ class ValueWorkspaceService:
         if not batch:
             raise KeyError("research batch not found")
         self.store.update_batch(batch_id, status="running", started_at=now())
-        jobs = batch["jobs"]
+        if batch.get("cancel_requested"):
+            for job in batch["jobs"]:
+                if job["status"] == "queued":
+                    self.store.update_job(job["id"], status="failed", stage="cancelled", message="research batch cancelled")
+            final = self.store.get_batch(batch_id) or {}
+            failed = sum(job["status"] == "failed" for job in final.get("jobs", []))
+            self.store.update_batch(batch_id, status="cancelled", completed=0, failed=failed, completed_at=now())
+            return self.store.get_batch(batch_id) or {}
+        jobs = [job for job in batch["jobs"] if job["status"] == "queued"]
+        if not jobs:
+            return batch
         with ThreadPoolExecutor(max_workers=batch["concurrency"], thread_name_prefix="value-research") as executor:
             futures = {executor.submit(self._run_job, job, batch): job for job in jobs}
             for future in as_completed(futures):
@@ -332,10 +342,30 @@ class ValueWorkspaceService:
         completed = sum(job["status"] == "completed" for job in final.get("jobs", []))
         failed = sum(job["status"] == "failed" for job in final.get("jobs", []))
         partial = sum(job["status"] == "partial" for job in final.get("jobs", []))
-        status = "failed" if failed == final.get("total") else "partial" if failed or partial else "completed"
         if final.get("cancel_requested"):
-            status = "failed"
+            for job in final.get("jobs", []):
+                if job["status"] == "queued":
+                    self.store.update_job(job["id"], status="failed", stage="cancelled", message="research batch cancelled")
+            final = self.store.get_batch(batch_id) or {}
+            failed = sum(job["status"] == "failed" for job in final.get("jobs", []))
+            completed = sum(job["status"] == "completed" for job in final.get("jobs", []))
+            partial = sum(job["status"] == "partial" for job in final.get("jobs", []))
+            status = "cancelled"
+        else:
+            status = "failed" if failed == final.get("total") else "partial" if failed or partial else "completed"
         self.store.update_batch(batch_id, status=status, completed=completed + partial, failed=failed, completed_at=now())
+        return self.store.get_batch(batch_id) or {}
+
+    def retry_failed_jobs(self, batch_id: str) -> dict[str, Any]:
+        batch = self.store.get_batch(batch_id)
+        if not batch:
+            raise KeyError("research batch not found")
+        failed_jobs = [job for job in batch["jobs"] if job["status"] == "failed"]
+        if not failed_jobs:
+            raise ValueError("no failed research jobs to retry")
+        for job in failed_jobs:
+            self.store.update_job(job["id"], status="queued", stage="facts", message="queued for retry", valuation_status="queued")
+        self.store.update_batch(batch_id, status="queued", failed=0, cancel_requested=0, completed_at=None)
         return self.store.get_batch(batch_id) or {}
 
     def _run_job(self, job: dict[str, Any], batch: dict[str, Any]) -> None:

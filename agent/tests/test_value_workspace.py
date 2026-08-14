@@ -165,3 +165,32 @@ def test_monitor_event_is_idempotent_and_has_independent_deliveries(stores, monk
     assert len(events) == 1
     assert {item["channel"] for item in events[0]["deliveries"]} == {"in_app", "feishu", "weixin"}
     assert next(item for item in events[0]["deliveries"] if item["channel"] == "in_app")["status"] == "sent"
+
+
+def test_failed_research_jobs_can_be_retried_without_reopening_completed_jobs(stores):
+    value, engine = stores
+    profile = value.get_profile("profile_balanced")
+    run, _ = engine.create_or_get_run(
+        idempotency_key="retry-test", strategy_line="value", market="CN", as_of="2026-08-12",
+        symbols=[], formula_version="test", profile_id=profile["id"], profile_version=profile["version"],
+    )
+    value.replace_tracks(run["id"], profile["id"], [{
+        "track_id": "T001", "track_name": "Track", "category": "Industry", "base_score": 80,
+        "coverage": 1, "rank": 1, "component_scores": {}, "source_status": "live", "data_as_of": "2026-08-12",
+        "leaders": [
+            {"symbol": "000001.SZ", "name": "First", "leader_type": "综合龙头", "base_score": 80, "coverage": 1, "rank": 1, "component_scores": {}},
+            {"symbol": "000002.SZ", "name": "Second", "leader_type": "综合龙头", "base_score": 70, "coverage": 1, "rank": 2, "component_scores": {}},
+        ],
+    }])
+    batch, _ = value.create_batch(run_id=run["id"], profile_id=profile["id"], track_id="T001", companies=[
+        {"symbol": "000001.SZ", "name": "First"}, {"symbol": "000002.SZ", "name": "Second"},
+    ], template_version="v1", concurrency=2)
+    first, second = batch["jobs"]
+    value.update_job(first["id"], status="partial", stage="review")
+    value.update_job(second["id"], status="failed", stage="failed", message="source unavailable")
+    value.update_batch(batch["id"], status="partial", completed=1, failed=1)
+    retried = ValueWorkspaceService(value).retry_failed_jobs(batch["id"])
+    statuses = {job["symbol"]: job["status"] for job in retried["jobs"]}
+    assert retried["status"] == "queued"
+    assert retried["failed"] == 0
+    assert statuses == {"000001.SZ": "partial", "000002.SZ": "queued"}

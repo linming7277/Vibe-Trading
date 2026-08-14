@@ -666,7 +666,11 @@ class ValueLineService:
             if str(row["payload"].get("as_of") or row["payload"].get("data_as_of") or "") == target
         ]
         if sector_code:
-            items.sort(key=lambda row: (row.get("score") is None, -(row.get("score") or 0), row.get("symbol") or ""))
+            items = [
+                row for row in items
+                if row.get("score") is not None and int(row.get("rank") or 1) <= TOTAL_LEADER_POOL_PER_TRACK
+            ]
+            items.sort(key=lambda row: (row.get("rank") or 10_000, -(row.get("score") or 0), row.get("symbol") or ""))
         else:
             sector_ranks = {
                 str(row["payload"].get("sector_code") or ""): int(row["payload"].get("rank") or 10_000)
@@ -705,7 +709,7 @@ class ValueLineService:
         return {
             "as_of": target, "sector_code": sector_code, "items": items, "total": len(items),
             "formula_version": LEADER_VERSION,
-            "pool_rule": None if sector_code else {
+            "pool_rule": {
                 "per_track_limit": TOTAL_LEADER_POOL_PER_TRACK,
                 "candidate_track_limit": candidate_track_limit,
                 "scored_only": True,

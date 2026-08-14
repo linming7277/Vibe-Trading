@@ -79,6 +79,7 @@ export const router = createBrowserRouter([{
     { path: "/ai/committees/:committeeId", element: wrap(Committee) },
     { path: "/ai/reports", element: wrap(ResearchReports) },
     { path: "/ai/reports/:reportId", element: wrap(ReportDetail) },
+    { path: "/reports/:reportId", element: wrap(ReportDetail) },
     { path: "/ai/scheduled", element: wrap(Scheduled) },
 
     { path: "/models/data", element: wrap(DataCenter) },
