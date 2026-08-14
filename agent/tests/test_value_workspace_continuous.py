@@ -107,8 +107,7 @@ def test_snapshot_evidence_and_signal_events_are_idempotent(workspace):
     assert company_analysis["analysis_version"] == "value-company-panorama-v1.0.0"
     dimensions = {item["key"]: item for item in company_analysis["dimensions"]}
     assert set(dimensions) == {"fundamental", "financial", "technical", "capital", "macro", "risk"}
-    assert dimensions["technical"]["status"] == "partial"
-    assert "日线历史" in dimensions["technical"]["missing_fields"]
+    assert dimensions["technical"]["status"] == "unavailable"
     assert dimensions["capital"]["status"] == "unavailable"
     assert "公司宏观敏感度映射" in dimensions["macro"]["missing_fields"]
     assert dimensions["risk"]["metrics"]["已识别风险数"] == 2

@@ -189,3 +189,31 @@ class ValueMarketHistoryService:
             frame["trade_date"] = frame["data_as_of"]
         frame["trade_date"] = pd.to_datetime(frame["trade_date"], errors="coerce")
         return frame.dropna(subset=["trade_date", "symbol", "close"])
+
+    def read_symbols(self, symbols: list[str], *, as_of: str, count: int = 260) -> dict[str, list[dict[str, Any]]]:
+        """Read a small symbol slice without materializing the full market warehouse."""
+        requested = sorted(set(symbols))
+        if not requested:
+            return {}
+        paths = sorted({
+            item["partition_path"] for item in self.store.catalog(market="CN", dataset=DATASET)
+            if str(item.get("data_as_of") or "") <= as_of
+        })
+        if not paths:
+            return {symbol: [] for symbol in requested}
+        placeholders = ",".join("?" for _ in requested)
+        connection = duckdb.connect()
+        try:
+            frame = connection.execute(
+                f"""SELECT * EXCLUDE(row_number) FROM (
+                        SELECT *,ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY data_as_of DESC) AS row_number
+                        FROM read_parquet(?) WHERE symbol IN ({placeholders})
+                    ) WHERE row_number<=? ORDER BY symbol,data_as_of""",  # noqa: S608
+                [paths, *requested, max(20, min(int(count), 500))],
+            ).fetch_df()
+        finally:
+            connection.close()
+        result = {symbol: [] for symbol in requested}
+        for raw in frame.to_dict("records"):
+            result.setdefault(str(raw.get("symbol") or ""), []).append(raw)
+        return result

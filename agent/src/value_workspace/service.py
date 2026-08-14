@@ -15,10 +15,12 @@ from src.strategy_engines.common.normalization import cross_sectional_percentile
 from src.strategy_engines.common.scoring import weighted_score
 from src.strategy_engines.store import StrategyEngineStore
 from src.strategy_engines.value_data_store import ValueDataStore
+from src.strategy_engines.value_market_history import BENCHMARK, ValueMarketHistoryService
 from src.tdx_data.financial_history import FinancialHistoryService
 from src.tdx_data.service import get_tdx_service
 
 from .store import ValueWorkspaceStore, now
+from .technical import calculate_technical
 
 
 PROFILE_FORMULA_VERSION = "value-profile-v1.0.0"
@@ -562,6 +564,15 @@ class ValueWorkspaceService:
             finance.store.close()
         latest_financial = financial_items[-1] if financial_items else None
         previous_financial = financial_items[-2] if len(financial_items) > 1 else None
+        try:
+            history = ValueMarketHistoryService().read_symbols([symbol, BENCHMARK], as_of=as_of, count=260)
+            technical = calculate_technical(history.get(symbol, []), history.get(BENCHMARK, []))
+        except Exception as exc:
+            technical = {
+                "status": "unavailable", "coverage": 0.0, "bar_count": 0, "data_as_of": None,
+                "metrics": {}, "facts": [], "risks": [],
+                "missing_fields": [f"市场历史缓存读取失败：{str(exc)[:160]}"], "sources": [],
+            }
         quote = dict(overview.get("quote") or {})
         fundamental = dict(overview.get("fundamental") or {})
         cache = dict(overview.get("cache") or {})
@@ -574,6 +585,7 @@ class ValueWorkspaceService:
         payload = {
             "quote": quote, "fundamental": fundamental,
             "financial_latest": latest_financial, "financial_previous": previous_financial,
+            "technical": technical,
             "memberships": frozen_memberships, "current_sectors": current_sectors,
             "cache": cache, "overview_as_of": overview.get("as_of"),
             "professional_finance_status": package.get("status"),
@@ -584,6 +596,7 @@ class ValueWorkspaceService:
             "professional_finance": bool(latest_financial) and package.get("status") == "ready",
             "membership": bool(memberships),
             "sector_membership": bool(current_sectors or memberships),
+            "technical_history": technical.get("status") in {"ready", "partial"},
         }
         missing = [key for key, valid in checks.items() if not valid]
         completeness = sum(checks.values()) / len(checks)
@@ -594,6 +607,7 @@ class ValueWorkspaceService:
             ("professional_finance", "TongDaXin professional finance / TQ", f"{symbol}:finance:{latest_financial.get('announcement_date') if latest_financial else as_of}", latest_financial or {}),
             ("sector_membership", "TongDaXin 881xxx", f"{symbol}:sectors:{str(overview.get('as_of') or as_of)[:10]}", current_sectors),
             ("universe_membership", "Value research universe", f"{universe_id}:{symbol}:membership", frozen_memberships),
+            ("technical_history", "TongDaXin market-history cache", f"{symbol}:technical:{technical.get('data_as_of') or as_of}", technical),
         )
         for evidence_type, source, source_id, data in evidence_payloads:
             evidence, _ = self.store.upsert_evidence({
@@ -821,6 +835,8 @@ class ValueWorkspaceService:
         quote = dict(payload.get("quote") or {})
         fundamental = dict(payload.get("fundamental") or {})
         latest = dict(payload.get("financial_latest") or {})
+        technical = dict(payload.get("technical") or {})
+        technical_values = dict(technical.get("metrics") or {})
 
         main_business = str(fundamental.get("main_business") or "").strip()
         market_cap = _number(fundamental.get("market_cap") or fundamental.get("total_market_cap"))
@@ -854,19 +870,35 @@ class ValueWorkspaceService:
         financial_status = "ready" if financial_count >= 6 else "partial" if financial_count else "unavailable"
 
         technical_metrics = {
-            "最新价": _number(quote.get("price")), "当日涨跌幅": _number(quote.get("change_pct")),
-            "换手率": _number(fundamental.get("turnover_rate")), "Beta": _number(fundamental.get("beta")),
+            "最新收盘": _number(technical_values.get("latest_close")),
+            "5日涨跌%": _number(technical_values.get("return_5d")),
+            "20日涨跌%": _number(technical_values.get("return_20d")),
+            "60日涨跌%": _number(technical_values.get("return_60d")),
+            "20日相对强弱": _number(technical_values.get("relative_strength_20d")),
+            "量比(20日)": _number(technical_values.get("volume_ratio_20d")),
+            "年化波动率%": _number(technical_values.get("volatility_20d")),
+            "120日最大回撤%": _number(technical_values.get("max_drawdown_120d")),
+            "ATR(14)%": _number(technical_values.get("atr_14_pct")),
+            "RSI(14)": _number(technical_values.get("rsi_14")),
+            "20日支撑": _number(technical_values.get("support_20d")),
+            "20日压力": _number(technical_values.get("resistance_20d")),
         }
         technical_count = sum(value is not None for value in technical_metrics.values())
-        technical_missing = ["日线历史", "均线趋势", "相对强弱", "量价结构", "波动与回撤", "支撑阻力"]
-        technical_summary = "已有当日行情快照，但历史技术指标尚未进入公司档案，不能据此判断趋势或入场点。" if technical_count else "尚未取得可用于公司技术分析的行情输入。"
+        technical_missing = list(technical.get("missing_fields") or [])
+        technical_summary = (
+            f"历史日线已计算，当前趋势为{technical.get('trend', '待确认')}；技术状态只用于入场时机和风险复核。"
+            if technical_count else "市场历史缓存不足，尚不能计算公司技术状态。"
+        )
 
         capital_metrics = {
             "成交额(万元)": _number(quote.get("amount_10k")), "成交量(手)": _number(quote.get("volume_lots")),
             "换手率": _number(fundamental.get("turnover_rate")),
+            "量比(20日)": _number(technical_values.get("volume_ratio_20d")),
+            "额比(20日)": _number(technical_values.get("amount_ratio_20d")),
+            "互联互通标的": ("是" if fundamental.get("is_connect") else "否") if "is_connect" in fundamental else None,
         }
         capital_count = sum(value is not None for value in capital_metrics.values())
-        capital_summary = "当前仅有成交活跃度，尚无个股主力、北向和机构持仓数据，不能判断资金方向。" if capital_count else "个股资金分析输入尚未接入。"
+        capital_summary = "已计算量能和成交额相对活跃度；尚无主力净流入与机构持仓变化，不能把活跃度解释为资金方向。" if capital_count else "个股资金分析输入尚未接入。"
 
         macro_axes = dict((macro or {}).get("axes") or {})
         macro_metrics = {
@@ -884,11 +916,23 @@ class ValueWorkspaceService:
 
         beta = _number(fundamental.get("beta"))
         debt_ratio = _number(latest.get("debt_ratio"))
-        risk_metrics = {"Beta": beta, "负债率": debt_ratio, "已识别风险数": len(risk_facts)}
-        risk_missing = ["历史波动与最大回撤", "组合集中度与相关性", "事件风险", "仓位与止损预算"]
+        technical_risks = list(technical.get("risks") or [])
+        risk_metrics = {
+            "Beta": beta, "负债率": debt_ratio,
+            "年化波动率%": _number(technical_values.get("volatility_20d")),
+            "120日最大回撤%": _number(technical_values.get("max_drawdown_120d")),
+            "ATR(14)%": _number(technical_values.get("atr_14_pct")),
+            "已识别风险数": len(risk_facts) + len(technical_risks),
+        }
+        risk_missing = ["组合集中度与相关性", "事件风险", "仓位与止损预算"]
+        if risk_metrics["年化波动率%"] is None or risk_metrics["120日最大回撤%"] is None:
+            risk_missing.insert(0, "历史波动与最大回撤")
         if monitor is None:
             risk_missing.append("人工进出场监控条件")
         risk_summary = "已执行财务硬风险与数据新鲜度检查；完整的市场、组合和事件风险模型尚未接入。"
+        risk_input_coverage = (
+            sum(value is not None for key, value in risk_metrics.items() if key != "已识别风险数") + bool(monitor)
+        ) / 10
         financial_risks = [
             item for item in risk_facts
             if not item.startswith("缺少关键资料") and "行情或财务缓存已过期" not in item
@@ -910,12 +954,12 @@ class ValueWorkspaceService:
                 sources=["TongDaXin professional finance / TQ"], data_as_of=str(latest.get("announcement_date") or snapshot_as_of)[:10],
             ),
             self._dimension(
-                "technical", "技术面", status=stale_status or ("partial" if technical_count else "unavailable"), coverage=technical_count / 10,
-                summary=technical_summary, metrics=technical_metrics, missing_fields=technical_missing,
-                sources=["TongDaXin quote snapshot"] if technical_count else [], data_as_of=snapshot_as_of,
+                "technical", "技术面", status=stale_status or str(technical.get("status") or "unavailable"), coverage=float(technical.get("coverage") or 0),
+                summary=technical_summary, metrics=technical_metrics, facts=list(technical.get("facts") or []), risks=technical_risks,
+                missing_fields=technical_missing, sources=list(technical.get("sources") or []), data_as_of=technical.get("data_as_of"),
             ),
             self._dimension(
-                "capital", "资金面", status=stale_status or ("partial" if capital_count else "unavailable"), coverage=capital_count / 6,
+                "capital", "资金面", status=stale_status or ("partial" if capital_count else "unavailable"), coverage=capital_count / 11,
                 summary=capital_summary, metrics=capital_metrics,
                 missing_fields=["个股主力净流入", "大单分布", "北向持仓变化", "机构持仓变化", "筹码结构"],
                 sources=["TongDaXin quote snapshot"] if capital_count else [], data_as_of=snapshot_as_of,
@@ -927,8 +971,8 @@ class ValueWorkspaceService:
                 missing_fields=macro_missing, sources=list((macro or {}).get("sources") or []), data_as_of=(macro or {}).get("as_of"),
             ),
             self._dimension(
-                "risk", "风控", status=stale_status or "partial", coverage=(2 + bool(monitor)) / 7,
-                summary=risk_summary, metrics=risk_metrics, risks=risk_facts,
+                "risk", "风控", status=stale_status or "partial", coverage=risk_input_coverage,
+                summary=risk_summary, metrics=risk_metrics, risks=[*risk_facts, *technical_risks],
                 facts=[f"当前人工状态：{monitor.get('position_state', 'watching')}" if monitor else "尚未加入人工监控池"],
                 missing_fields=risk_missing, sources=["Value deterministic risk rules"], data_as_of=snapshot_as_of,
             ),
