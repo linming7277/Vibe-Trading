@@ -5,11 +5,11 @@ import type { ToolCallEntry } from "@/types/agent";
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, string | number>) => {
-      if (key === "toolProgress.step") return `Step ${values?.step} · ${values?.tool}`;
-      if (key === "toolProgress.toolsRunning") return `${values?.count} tools running`;
-      if (key === "toolProgress.toolsCompleted") return `${values?.count} tools completed`;
-      if (key === "toolProgress.earlier") return `+${values?.count} earlier`;
-      if (key === "toolProgress.etaSeconds") return `~${values?.seconds}s left`;
+      if (key === "toolProgress.step") return `步骤 ${values?.step} · ${values?.tool}`;
+      if (key === "toolProgress.toolsRunning") return `同时在做 ${values?.count} 件事`;
+      if (key === "toolProgress.toolsCompleted") return `已完成 ${values?.count} 步`;
+      if (key === "toolProgress.earlier") return `+${values?.count} 个较早步骤`;
+      if (key === "toolProgress.etaSeconds") return `预计剩余 ${values?.seconds} 秒`;
       return key;
     },
   }),
@@ -30,7 +30,7 @@ describe("ToolProgressIndicator", () => {
   it("keeps completed tools visible for the remainder of the attempt", () => {
     const tcs = [makeTc({ status: "ok" }), makeTc({ id: "tc-2", status: "error" })];
     render(<ToolProgressIndicator toolCalls={tcs} />);
-    expect(screen.getAllByText(/Run the backtest/)).toHaveLength(2);
+    expect(screen.getAllByText(/运行回测/)).toHaveLength(2);
   });
 
   it("renders nothing for empty array", () => {
@@ -42,7 +42,7 @@ describe("ToolProgressIndicator", () => {
     const tcs = [makeTc({ elapsed_s: 5 })];
     render(<ToolProgressIndicator toolCalls={tcs} />);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.getByText(/Run the backtest/)).toBeInTheDocument();
+    expect(screen.getByText(/运行回测/)).toBeInTheDocument();
     expect(screen.getByText("5s")).toBeInTheDocument();
   });
 
@@ -60,9 +60,9 @@ describe("ToolProgressIndicator", () => {
       makeTc({ id: "tc-2", tool: "write_file" }),
     ];
     render(<ToolProgressIndicator toolCalls={tcs} />);
-    expect(screen.queryByText("2 tools running")).not.toBeInTheDocument();
-    expect(screen.getByText(/Run command/)).toBeInTheDocument();
-    expect(screen.getByText(/Generate code/)).toBeInTheDocument();
+    expect(screen.queryByText("同时在做 2 件事")).not.toBeInTheDocument();
+    expect(screen.getByText(/运行命令/)).toBeInTheDocument();
+    expect(screen.getByText(/生成代码/)).toBeInTheDocument();
   });
 
   it("renders repeated tool names as distinct rows keyed by unique ids", () => {
@@ -71,7 +71,7 @@ describe("ToolProgressIndicator", () => {
       makeTc({ id: "backtest#2", status: "running" }),
     ];
     render(<ToolProgressIndicator toolCalls={tcs} />);
-    expect(screen.getAllByText(/Run the backtest/)).toHaveLength(2);
+    expect(screen.getAllByText(/运行回测/)).toHaveLength(2);
   });
 
   it("shows every row when ActivityLine is expanded", () => {
@@ -83,10 +83,10 @@ describe("ToolProgressIndicator", () => {
     ];
     render(<ToolProgressIndicator toolCalls={tcs} />);
 
-    expect(screen.getByText(/Run command/)).toBeInTheDocument();
-    expect(screen.getByText(/Generate code/)).toBeInTheDocument();
-    expect(screen.getByText(/Run the backtest/)).toBeInTheDocument();
-    expect(screen.getByText(/Read file/)).toBeInTheDocument();
+    expect(screen.getByText(/运行命令/)).toBeInTheDocument();
+    expect(screen.getByText(/生成代码/)).toBeInTheDocument();
+    expect(screen.getByText(/运行回测/)).toBeInTheDocument();
+    expect(screen.getByText(/读取文件/)).toBeInTheDocument();
   });
 
   it("renders rows chronologically with the running call last", () => {
@@ -99,13 +99,13 @@ describe("ToolProgressIndicator", () => {
     render(<ToolProgressIndicator toolCalls={tcs} />);
 
     const labels = screen
-      .getAllByText(/Run command|Generate code|Run the backtest|Read file/)
+      .getAllByText(/运行命令|生成代码|运行回测|读取文件/)
       .map((node) => node.textContent);
     expect(labels).toEqual([
-      "Run command",
-      "Generate code",
-      "Run the backtest",
-      "Read file",
+      "运行命令",
+      "生成代码",
+      "运行回测",
+      "读取文件",
     ]);
   });
 
@@ -117,7 +117,7 @@ describe("ToolProgressIndicator", () => {
     ];
     render(<ToolProgressIndicator toolCalls={tcs} />);
 
-    expect(screen.getAllByText(/Run the backtest/)).toHaveLength(1);
+    expect(screen.getAllByText(/运行回测/)).toHaveLength(1);
     expect(screen.getByText("×2")).toBeInTheDocument();
     expect(screen.getByText("AAPL, MSFT")).toBeInTheDocument();
     expect(screen.getByText("0.7s")).toBeInTheDocument();

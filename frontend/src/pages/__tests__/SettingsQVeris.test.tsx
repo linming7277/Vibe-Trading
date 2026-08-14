@@ -143,7 +143,7 @@ function mockQVerisFetch(config = qverisConfig(), status = qverisStatus()) {
 
 describe("Settings QVeris card", () => {
   beforeEach(async () => {
-    await i18n.changeLanguage("en");
+    await i18n.changeLanguage("zh-CN");
     window.localStorage.clear();
     apiMock.getLLMSettings.mockResolvedValue(llmSettings());
     apiMock.getDataSourceSettings.mockResolvedValue(dataSourceSettings());
@@ -154,7 +154,6 @@ describe("Settings QVeris card", () => {
 
   afterEach(() => {
     cleanup();
-    delete window.vibeDesktop;
     vi.unstubAllGlobals();
   });
 
@@ -163,7 +162,7 @@ describe("Settings QVeris card", () => {
 
     render(<Settings />);
 
-    expect(await screen.findByText("QVeris Tool Marketplace")).toBeInTheDocument();
+    expect(await screen.findByText(i18n.t("qveris.title"))).toBeInTheDocument();
     expect(await screen.findByDisplayValue("https://qveris.ai/api/v1")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("sk-...8TI")).toBeInTheDocument();
     expect(screen.getByText("123.45")).toBeInTheDocument();
@@ -176,13 +175,13 @@ describe("Settings QVeris card", () => {
 
     // The base-URL input shows its default value before the config GET resolves,
     // so wait for the save button to leave its loading-disabled state instead.
-    await waitFor(() => expect(screen.getByRole("button", { name: "Save QVeris settings" })).toBeEnabled());
-    fireEvent.click(screen.getByLabelText("Enable paid QVeris route"));
-    fireEvent.change(screen.getByLabelText("Base URL"), { target: { value: "https://example.test/qveris" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: i18n.t("qveris.save") })).toBeEnabled());
+    fireEvent.click(screen.getByLabelText(i18n.t("qveris.enabled")));
+    fireEvent.change(screen.getByLabelText(i18n.t("qveris.baseUrl")), { target: { value: "https://example.test/qveris" } });
     fireEvent.change(screen.getByPlaceholderText("sk-...8TI"), { target: { value: "sk-new-key" } });
-    fireEvent.change(screen.getByLabelText("Mode"), { target: { value: "paid" } });
+    fireEvent.change(screen.getByLabelText(i18n.t("qveris.mode")), { target: { value: "paid" } });
     fireEvent.change(screen.getByDisplayValue("50"), { target: { value: "80" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save QVeris settings" }));
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("qveris.save") }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/qveris/config", expect.objectContaining({ method: "PUT" })));
     const putCall = fetchMock.mock.calls.find(([path, init]) => String(path) === "/qveris/config" && init?.method === "PUT");
@@ -201,66 +200,33 @@ describe("Settings QVeris card", () => {
 
     // The base-URL input shows its default value before the config GET resolves,
     // so wait for the save button to leave its loading-disabled state instead.
-    await waitFor(() => expect(screen.getByRole("button", { name: "Save QVeris settings" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "Save QVeris settings" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: i18n.t("qveris.save") })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("qveris.save") }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/qveris/config", expect.objectContaining({ method: "PUT" })));
     const putCall = fetchMock.mock.calls.find(([path, init]) => String(path) === "/qveris/config" && init?.method === "PUT");
     expect(JSON.parse(String(putCall?.[1]?.body))).not.toHaveProperty("api_key");
   });
 
-  it("stores a desktop API key through safe storage and restarts the backend", async () => {
-    const setCredential = vi.fn().mockResolvedValue({
-      available: true,
-      configured: ["QVERIS_API_KEY"],
-      migrated: [],
-    });
-    const restartBackend = vi.fn().mockResolvedValue(true);
-    window.vibeDesktop = {
-      isDesktop: true,
-      getCredentialStatus: vi.fn(),
-      setCredential,
-      restartBackend,
-    };
-    const fetchMock = mockQVerisFetch();
-    render(<QVerisSettings />);
-
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Save QVeris settings" })).toBeEnabled(),
-    );
-    fireEvent.change(screen.getByPlaceholderText("sk-...8TI"), {
-      target: { value: "sk-desktop-key" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save QVeris settings" }));
-
-    await waitFor(() =>
-      expect(setCredential).toHaveBeenCalledWith("QVERIS_API_KEY", "sk-desktop-key"),
-    );
-    const putCall = fetchMock.mock.calls.find(
-      ([path, init]) => String(path) === "/qveris/config" && init?.method === "PUT",
-    );
-    expect(JSON.parse(String(putCall?.[1]?.body))).not.toHaveProperty("api_key");
-    expect(restartBackend).toHaveBeenCalledTimes(1);
-  });
-
   it("uses the signup href from the config response and renders the empty usage state", async () => {
     mockQVerisFetch(qverisConfig({ signup_url: "https://qveris.ai/?ref=config-response" }), qverisStatus({ recent: [] }));
     render(<QVerisSettings />);
 
-    const signup = await screen.findByRole("link", { name: "Open signup" });
+    const signup = await screen.findByRole("link", { name: i18n.t("qveris.signupCta") });
     expect(signup).toHaveAttribute("href", "https://qveris.ai/?ref=config-response");
     expect(screen.getByText("INVITE-FROM-API")).toBeInTheDocument();
-    expect(screen.getByText("No recent usage")).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("qveris.noUsage"))).toBeInTheDocument();
   });
 
-  it("renders QVeris copy in English and Chinese through i18n", async () => {
+  it("keeps QVeris copy in Chinese when English is requested", async () => {
     mockQVerisFetch(undefined, qverisStatus({ recent: [] }));
     const { unmount } = render(<QVerisSettings />);
-    expect(await screen.findByText("QVeris Tool Marketplace")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save QVeris settings" })).toBeInTheDocument();
+    expect(await screen.findByText("QVeris 工具市场")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存 QVeris 设置" })).toBeInTheDocument();
     unmount();
 
-    await i18n.changeLanguage("zh-CN");
+    await i18n.changeLanguage("en");
+    expect(i18n.language).toBe("zh-CN");
     mockQVerisFetch(undefined, qverisStatus({ recent: [] }));
     render(<QVerisSettings />);
     expect(await screen.findByText("QVeris 工具市场")).toBeInTheDocument();

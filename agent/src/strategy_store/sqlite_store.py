@@ -148,6 +148,11 @@ class SqliteStrategyStore:
         self._lock = threading.RLock()
         self._init_db()
 
+    def close(self) -> None:
+        """Close the underlying SQLite connection."""
+        with self._lock:
+            self._conn.close()
+
     # -- Schema bootstrap ---------------------------------------------------
 
     def _init_db(self) -> None:

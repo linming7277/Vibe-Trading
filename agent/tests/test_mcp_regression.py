@@ -26,7 +26,6 @@ from __future__ import annotations
 import importlib
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -166,14 +165,6 @@ def test_mcp_server_exposes_well_known_tool_names() -> None:
         "get_research_goal",
         "add_goal_evidence",
         "update_research_goal_status",
-        "trading_connections",
-        "trading_select_connection",
-        "trading_check",
-        "trading_account",
-        "trading_positions",
-        "trading_orders",
-        "trading_quote",
-        "trading_history",
     }
     missing = expected - registered
     assert not missing, (
@@ -237,61 +228,7 @@ def test_mcp_registry_omits_shell_tools_under_default_policy(monkeypatch: pytest
     assert "cancel_background" not in registry.tool_names
 
 
-class _RecordingRegistry:
-    """Tiny registry stub that records MCP wrapper payloads."""
-
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, dict[str, Any]]] = []
-
-    def execute(self, name: str, payload: dict[str, Any]) -> str:
-        self.calls.append((name, payload))
-        return "{}"
-
-
-def test_trading_mcp_wrappers_do_not_send_implicit_local_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
-    """No-arg trading_* MCP calls must not override profile defaults."""
+def test_trading_mcp_wrappers_are_not_exposed() -> None:
+    """Personal edition must not expose broker connector functions via MCP."""
     mod = _import_mcp_server()
-    registry = _RecordingRegistry()
-    monkeypatch.setattr(mod, "_get_registry", lambda: registry)
-
-    mod.trading_check()
-    mod.trading_account()
-    mod.trading_positions()
-    mod.trading_orders()
-
-    assert registry.calls == [
-        ("trading_check", {}),
-        ("trading_account", {}),
-        ("trading_positions", {}),
-        ("trading_orders", {"include_executions": False}),
-    ]
-
-
-def test_trading_mcp_wrappers_forward_explicit_local_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Explicit local override fields are still forwarded to the backend."""
-    mod = _import_mcp_server()
-    registry = _RecordingRegistry()
-    monkeypatch.setattr(mod, "_get_registry", lambda: registry)
-
-    mod.trading_account(
-        connection="ibkr-paper-local",
-        host="localhost",
-        port=4002,
-        client_id=123,
-        account="DU12345",
-    )
-    mod.trading_check(account="DU12345")
-
-    assert registry.calls == [
-        (
-            "trading_account",
-            {
-                "connection": "ibkr-paper-local",
-                "host": "localhost",
-                "port": 4002,
-                "client_id": 123,
-                "account": "DU12345",
-            },
-        ),
-        ("trading_check", {"account": "DU12345"}),
-    ]
+    assert not any(name.startswith("trading_") for name in vars(mod))

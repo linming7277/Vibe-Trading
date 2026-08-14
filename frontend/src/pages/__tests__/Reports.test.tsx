@@ -46,17 +46,17 @@ describe("Reports page", () => {
 
     render(<Reports />, { wrapper: MemoryRouter });
 
-    expect(await screen.findByText("Backtest Report Library")).toBeInTheDocument();
+    expect(await screen.findByText("回测报告库")).toBeInTheDocument();
     expect(apiMock.listRuns).toHaveBeenCalledWith(100);
     expect(screen.queryByText("chat-only")).not.toBeInTheDocument();
     const reportRunLinks = screen.getAllByRole("link", { name: /-report$/ });
     expect(reportRunLinks[0]).toHaveAttribute("href", "/runs/new-report");
     expect(reportRunLinks[1]).toHaveAttribute("href", "/runs/old-report");
-    const fullReportLinks = screen.getAllByRole("link", { name: "Full Report" });
+    const fullReportLinks = screen.getAllByRole("link", { name: "完整报告" });
     expect(fullReportLinks[0]).toHaveAttribute("href", "/runs/new-report");
     expect(fullReportLinks[1]).toHaveAttribute("href", "/runs/old-report");
-    expect(screen.getByRole("textbox", { name: "Search" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Status" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "搜索" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "状态" })).toBeInTheDocument();
   });
 
   it("filters reports by search text", async () => {
@@ -82,7 +82,7 @@ describe("Reports page", () => {
     render(<Reports />, { wrapper: MemoryRouter });
     await screen.findByText("aapl-report");
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索" }), {
       target: { value: "MSFT" },
     });
 

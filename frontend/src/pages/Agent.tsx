@@ -10,7 +10,7 @@ import {
   type StoredAgentMessage,
 } from "@/stores/agent";
 import { useSSE } from "@/hooks/useSSE";
-import { ApiError, AUTH_REQUIRED_MESSAGE, api, isAuthRequiredError, type GoalSnapshot, type MandateProposal, type MandateCommitted, type LiveAction, type LiveHalted, type LLMSettings } from "@/lib/api";
+import { ApiError, AUTH_REQUIRED_MESSAGE, api, isAuthRequiredError, type GoalSnapshot, type LLMSettings } from "@/lib/api";
 import { isReportWorthyRun } from "@/lib/runReports";
 import type { AgentMessage, SwarmRunStatus, ToolCallEntry } from "@/types/agent";
 import { AgentAvatar } from "@/components/chat/AgentAvatar";
@@ -20,7 +20,6 @@ import { ModelRuntimeBar } from "@/components/chat/ModelRuntimeBar";
 import { ThinkingTimeline } from "@/components/chat/ThinkingTimeline";
 import { ConversationTimeline } from "@/components/chat/ConversationTimeline";
 import { ActivityLine } from "@/components/chat/ActivityLine";
-import { MandateProposalCard } from "@/components/chat/MandateProposalCard";
 import { SwarmStatusCard } from "@/components/chat/SwarmStatusCard";
 import {
   Composer,
@@ -28,11 +27,6 @@ import {
   type ComposerHandle,
 } from "@/components/chat/Composer";
 import { GoalPanel } from "@/components/chat/GoalPanel";
-import {
-  LiveActionChip,
-  LiveRuntimePanel,
-  type LiveRuntimePanelHandle,
-} from "@/components/chat/LiveRuntimePanel";
 import {
   applySwarmEvent,
   buildSwarmStatusFromStarted,
@@ -151,25 +145,6 @@ function toDisplayPrompt(content: string): {
   };
 }
 
-/* ---------- Connector runtime channel ----------
- * Mandate proposals and live-action chips render as standalone timeline items,
- * never folded into the thinking timeline (SPEC Consent §2 grouping note). They
- * are driven by dedicated state rather than the chat message store because they
- * are privileged-surface artifacts, not chat messages, and the proposal card
- * needs commit/adjust callbacks the generic MessageBubble does not carry. */
-interface ProposalItem {
-  kind: "proposal";
-  timestamp: number;
-  proposal: MandateProposal;
-  committed: MandateCommitted | null;
-}
-interface LiveActionItem {
-  kind: "live_action";
-  timestamp: number;
-  action: LiveAction;
-}
-type LiveItem = ProposalItem | LiveActionItem;
-
 function isCriterionStatusMet(status: string): boolean {
   return !["", "pending", "open", "unsatisfied"].includes(status.toLowerCase());
 }
@@ -210,7 +185,6 @@ export function Agent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const listRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<ComposerHandle>(null);
-  const liveRuntimeRef = useRef<LiveRuntimePanelHandle>(null);
   const goalOpenRequestRef = useRef(0);
   const sseSessionRef = useRef<string | null>(null);
   const prevSseStatusRef = useRef<string>("disconnected");
@@ -240,8 +214,6 @@ export function Agent() {
   const [goalComposerActive, setGoalComposerActive] = useState(false);
   const [goalSnapshot, setGoalSnapshot] = useState<GoalSnapshot | null>(null);
 
-  /* Connector runtime channel state (SPEC Consent §1/§4/§5) */
-  const [liveItems, setLiveItems] = useState<LiveItem[]>([]);
   const [visibleRowCount, setVisibleRowCount] = useState(TIMELINE_WINDOW_SIZE);
   const visibleRowsSessionRef = useRef<string | null>(null);
   const [llmSettings, setLlmSettings] = useState<LLMSettings | null>(null);
@@ -1077,59 +1049,6 @@ export function Agent() {
         loadGoalSnapshot(sid);
       },
 
-      "mandate.proposal": (d) => {
-        touch();
-        const proposal = d as unknown as MandateProposal;
-        if (!proposal.proposal_id || !Array.isArray(proposal.profiles)) return;
-        setLiveItems((items) => [
-          ...items,
-          { kind: "proposal", timestamp: Date.now(), proposal, committed: null },
-        ]);
-        scrollToBottom();
-      },
-
-      "mandate.committed": (d) => {
-        touch();
-        const committed = d as unknown as MandateCommitted;
-        if (!committed.proposal_id) return;
-        setLiveItems((items) => items.map((item) => (
-          item.kind === "proposal" && item.proposal.proposal_id === committed.proposal_id
-            ? { ...item, committed }
-            : item
-        )));
-        // A fresh mandate may bring up the runner; refresh the runtime panel now.
-        liveRuntimeRef.current?.handleMandateCommitted();
-        scrollToBottom();
-      },
-
-      "live.halted": (d) => {
-        touch();
-        const halted = d as unknown as LiveHalted;
-        // Preemptive kill switch: the server has cancelled resting orders and may have
-        // flattened positions (SPEC §7.5 #6). Reflect the halted state across surfaces;
-        // the RunnerStatus panel re-polls so its per-broker rows show "halted".
-        liveRuntimeRef.current?.handleHalted(halted);
-        toast.warning(t('agent.connectorHalted'));
-      },
-
-      "live.resumed": (d) => {
-        touch();
-        // Kill switch cleared via a privileged surface action (SPEC Consent §4);
-        // clear the halted banner and re-poll runtime status.
-        void d;
-        liveRuntimeRef.current?.handleResumed();
-        toast.success(t('agent.connectionRestored'));
-      },
-
-      "live.action": (d) => {
-        touch();
-        const action = d as unknown as LiveAction;
-        if (!action.kind) return;
-        setLiveItems((items) => [...items, { kind: "live_action", timestamp: Date.now(), action }]);
-        liveRuntimeRef.current?.handleLiveAction(action);
-        scrollToBottom();
-      },
-
       heartbeat: () => {},
       reconnect: (d) => { act().setSseStatus("reconnecting", Number(d.attempt ?? 0)); },
     });
@@ -1154,9 +1073,6 @@ export function Agent() {
       genRef.current = gen;
       doDisconnect();
       setRuntimeIdentity({});
-      // Live-channel timeline items are per-session; clear on switch.
-      setLiveItems([]);
-      liveRuntimeRef.current?.resetSession();
       if (curSid && curMsgs.length > 0) cacheSession(curSid, curMsgs);
 
       // Atomic switch: cache hit = instant, cache miss = show loading skeleton
@@ -1189,8 +1105,6 @@ export function Agent() {
       genRef.current += 1;
       doDisconnect();
       setRuntimeIdentity({});
-      setLiveItems([]);
-      liveRuntimeRef.current?.resetSession();
       if (curSid && curMsgs.length > 0) cacheSession(curSid, curMsgs);
       reset();
     }
@@ -1555,11 +1469,7 @@ export function Agent() {
     setVisibleRowCount(TIMELINE_WINDOW_SIZE);
   }, [sessionId]);
 
-  /* Merge message groups with live-channel items, ordered by timestamp, so a
-   * mandate proposal / live-action chip renders inline at the point it arrived. */
-  type TimelineRow =
-    | { sort: number; render: "group"; group: MsgGroup; key: string }
-    | { sort: number; render: "live"; item: LiveItem; key: string };
+  type TimelineRow = { sort: number; render: "group"; group: MsgGroup; key: string };
   const timelineRows = useMemo<TimelineRow[]>(() => {
     const rows: TimelineRow[] = groups.map((g, i) => {
       const ts = g.kind === "timeline" ? g.msgs[0].timestamp : g.msg.timestamp;
@@ -1568,14 +1478,8 @@ export function Agent() {
         : `${sessionId ?? "draft"}_message_${g.msgIdx}_${g.msg.id || g.msg.timestamp}_${i}`;
       return { sort: ts, render: "group", group: g, key };
     });
-    for (const item of liveItems) {
-      const key = item.kind === "proposal"
-        ? `${sessionId ?? "draft"}_lp_${item.proposal.proposal_id}`
-        : `${sessionId ?? "draft"}_la_${item.action.audit_id || item.timestamp}`;
-      rows.push({ sort: item.timestamp, render: "live", item, key });
-    }
     return rows.sort((a, b) => a.sort - b.sort);
-  }, [groups, liveItems, sessionId]);
+  }, [groups, sessionId]);
 
   const visibleCountForSession = visibleRowsSessionRef.current === sessionId
     ? visibleRowCount
@@ -1662,24 +1566,6 @@ export function Agent() {
               mountRowCountRef.current !== null &&
               rowIdx >= mountRowCountRef.current
             );
-            if (row.render === "live") {
-              if (row.item.kind === "proposal") {
-                return (
-                  <div key={row.key} className={shouldAnimate ? "msg-enter" : undefined}>
-                    <MandateProposalCard
-                      proposal={row.item.proposal}
-                      committed={row.item.committed}
-                      onAdjust={submitComposerPrompt}
-                    />
-                  </div>
-                );
-              }
-              return (
-                <div key={row.key} className={shouldAnimate ? "msg-enter" : undefined}>
-                  <LiveActionChip action={row.item.action} />
-                </div>
-              );
-            }
             const g = row.group;
             if (g.kind === "timeline") {
               const isLastRow = rowIdx === timelineRows.length - 1;
@@ -1757,12 +1643,7 @@ export function Agent() {
         className="border-t p-4 bg-background/80 backdrop-blur-sm"
       >
         <div className="max-w-3xl mx-auto">
-          <LiveRuntimePanel
-            ref={liveRuntimeRef}
-            sessionId={sessionId}
-            hasLiveItems={liveItems.length > 0}
-          >
-            <Composer
+          <Composer
               ref={composerRef}
               streaming={status === "streaming"}
               activityVerb={activity?.verb}
@@ -1791,8 +1672,7 @@ export function Agent() {
               onCancelGoal={handleCancelGoalComposer}
               onStartSwarm={handleStartSwarm}
               onCancelSwarm={handleCancelSwarm}
-            />
-          </LiveRuntimePanel>
+          />
         </div>
       </div>
     </div>

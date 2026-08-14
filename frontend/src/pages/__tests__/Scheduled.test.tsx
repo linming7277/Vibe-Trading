@@ -2,6 +2,9 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Scheduled } from "@/pages/Scheduled";
 import { ApiError, api, type ScheduledRun } from "@/lib/api";
+import i18n from "@/i18n";
+
+const tr = (key: string, values?: Record<string, string>) => String(i18n.t(key as never, values as never));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -50,7 +53,7 @@ describe("Scheduled page", () => {
     mocked.listScheduledRuns.mockResolvedValue([run()]);
     render(<Scheduled />);
 
-    expect(await screen.findByText("Mon–Fri at 23:30")).toBeInTheDocument();
+    expect(await screen.findByText(tr("scheduled.cadenceWeekly", { days: "周一–周五", time: "23:30" }))).toBeInTheDocument();
     const row = screen.getByRole("listitem");
     expect(within(row).getByText("Pacific/Auckland")).toBeInTheDocument();
     expect(within(row).getByText("pre-open scan of NZX names")).toBeInTheDocument();
@@ -60,20 +63,20 @@ describe("Scheduled page", () => {
     mocked.listScheduledRuns.mockResolvedValue([run({ timezone: null, schedule: "0 9 * * *" })]);
     render(<Scheduled />);
 
-    expect(await screen.findByText("Daily at 09:00")).toBeInTheDocument();
+    expect(await screen.findByText(tr("scheduled.cadenceDaily", { time: "09:00" }))).toBeInTheDocument();
     expect(within(screen.getByRole("listitem")).getByText("UTC")).toBeInTheDocument();
   });
 
   it("creates a job from the wall-clock composer", async () => {
     mocked.createScheduledRun.mockResolvedValue(run());
     render(<Scheduled />);
-    await screen.findByText(/No scheduled runs yet/);
+    await screen.findByText(tr("scheduled.empty"));
 
-    fireEvent.change(screen.getByLabelText("Research prompt"), {
+    fireEvent.change(screen.getByLabelText(tr("scheduled.promptLabel")), {
       target: { value: "scan the pre-open movers" },
     });
-    fireEvent.change(screen.getByLabelText("Local time"), { target: { value: "23:30" } });
-    fireEvent.submit(screen.getByRole("button", { name: /Schedule run/ }));
+    fireEvent.change(screen.getByLabelText(tr("scheduled.timeLabel")), { target: { value: "23:30" } });
+    fireEvent.submit(screen.getByRole("button", { name: tr("scheduled.create") }));
 
     await waitFor(() =>
       expect(mocked.createScheduledRun).toHaveBeenCalledWith(
@@ -91,12 +94,12 @@ describe("Scheduled page", () => {
       new ApiError("timezone 'Not/AZone' is not a recognized IANA timezone key", 422),
     );
     render(<Scheduled />);
-    await screen.findByText(/No scheduled runs yet/);
+    await screen.findByText(tr("scheduled.empty"));
 
-    fireEvent.change(screen.getByLabelText("Research prompt"), {
+    fireEvent.change(screen.getByLabelText(tr("scheduled.promptLabel")), {
       target: { value: "scan" },
     });
-    fireEvent.submit(screen.getByRole("button", { name: /Schedule run/ }));
+    fireEvent.submit(screen.getByRole("button", { name: tr("scheduled.create") }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "not a recognized IANA timezone",
@@ -108,15 +111,15 @@ describe("Scheduled page", () => {
     mocked.deleteScheduledRun.mockResolvedValue(undefined);
     render(<Scheduled />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Delete scheduled run/ }));
+    fireEvent.click(await screen.findByRole("button", { name: tr("scheduled.deleteAria", { prompt: "pre-open scan of NZX names" }) }));
     expect(mocked.deleteScheduledRun).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("button", { name: /Confirm deleting/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("button", { name: tr("scheduled.confirmDeleteAria", { prompt: "pre-open scan of NZX names" }) })).not.toBeInTheDocument();
     expect(mocked.deleteScheduledRun).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: /Delete scheduled run/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Confirm deleting/ }));
+    fireEvent.click(screen.getByRole("button", { name: tr("scheduled.deleteAria", { prompt: "pre-open scan of NZX names" }) }));
+    fireEvent.click(screen.getByRole("button", { name: tr("scheduled.confirmDeleteAria", { prompt: "pre-open scan of NZX names" }) }));
     await waitFor(() =>
       expect(mocked.deleteScheduledRun).toHaveBeenCalledWith("auckland-scan"),
     );
@@ -124,15 +127,15 @@ describe("Scheduled page", () => {
 
   it("blocks a whitespace-only prompt client-side", async () => {
     render(<Scheduled />);
-    await screen.findByText(/No scheduled runs yet/);
+    await screen.findByText(tr("scheduled.empty"));
 
-    fireEvent.change(screen.getByLabelText("Research prompt"), {
+    fireEvent.change(screen.getByLabelText(tr("scheduled.promptLabel")), {
       target: { value: "   " },
     });
-    fireEvent.submit(screen.getByRole("button", { name: /Schedule run/ }));
+    fireEvent.submit(screen.getByRole("button", { name: tr("scheduled.create") }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Enter a research prompt",
+      tr("scheduled.promptRequired"),
     );
     expect(mocked.createScheduledRun).not.toHaveBeenCalled();
   });

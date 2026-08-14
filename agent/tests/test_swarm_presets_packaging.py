@@ -19,7 +19,7 @@ from src.swarm.presets import PRESETS_DIR, list_presets, load_preset
 
 # Lock to the canonical roster shipped today. Bump intentionally if a preset
 # is added or removed so a release that silently drops files is caught here.
-EXPECTED_PRESET_COUNT = 30
+EXPECTED_PRESET_COUNT = 31
 
 
 def test_presets_dir_lives_inside_swarm_package() -> None:
@@ -47,6 +47,8 @@ def test_value_investing_committee_is_routable() -> None:
 
     assert "value_investing_committee" in _PRESET_NAMES
     assert _normalize_preset_name("value_investing_committee") == "value_investing_committee"
+    assert "short_term_trading_committee" in _PRESET_NAMES
+    assert _normalize_preset_name("short_term_trading_committee") == "short_term_trading_committee"
 
 
 def test_every_preset_yaml_is_loadable() -> None:
@@ -194,7 +196,14 @@ def test_missing_preset_error_names_both_locations(user_presets_dir) -> None:
     with pytest.raises(FileNotFoundError) as excinfo:
         load_preset("does_not_exist")
     message = str(excinfo.value)
-    assert "bundled" in message and str(user_presets_dir) in message
+    assert "bundled" in message
+    # Paths below the real home directory are redacted in user-facing errors;
+    # pytest's temporary directory is outside home and remains fully useful.
+    expected_user_dir = str(user_presets_dir)
+    home = str(Path.home())
+    if expected_user_dir.startswith(home):
+        expected_user_dir = expected_user_dir.replace(home, "~", 1)
+    assert expected_user_dir.replace("\\", "/") in message.replace("\\", "/")
 
 
 def test_explicit_user_preset_accepted_by_swarm_tool(user_presets_dir) -> None:

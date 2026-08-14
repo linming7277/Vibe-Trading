@@ -44,6 +44,8 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
+from src.config.personal import visible_factor_universes
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -107,8 +109,7 @@ _VALID_THEMES = {
     "liquidity", "microstructure", "sentiment", "growth", "leverage",
 }
 _VALID_UNIVERSES = {
-    "equity_us", "equity_cn", "equity_hk", "equity_in", "equity_kr",
-    "crypto", "futures",
+    "equity_us", "equity_cn", "equity_hk", "crypto", "futures",
 }
 # Ranking metrics for /alpha/compare — keep in sync with
 # ``src.factors.compare_runner.SORT_KEYS`` (kept local to avoid a heavy import).
@@ -430,7 +431,7 @@ def register_alpha_routes(
                     "id": a.id,
                     "zoo": a.zoo,
                     "theme": meta.get("theme", []),
-                    "universe": meta.get("universe", []),
+                    "universe": visible_factor_universes(meta.get("universe", [])),
                     "nickname": meta.get("nickname"),
                     "decay_horizon": meta.get("decay_horizon"),
                     "min_warmup_bars": meta.get("min_warmup_bars"),
@@ -481,7 +482,12 @@ def register_alpha_routes(
                 "id": alpha.id,
                 "zoo": alpha.zoo,
                 "module_path": alpha.module_path,
-                "meta": alpha.meta,
+                "meta": {
+                    **(alpha.meta or {}),
+                    "universe": visible_factor_universes(
+                        (alpha.meta or {}).get("universe", [])
+                    ),
+                },
             },
             "source_code": source_code,
         }

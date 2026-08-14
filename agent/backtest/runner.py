@@ -35,6 +35,7 @@ from backtest.loaders.registry import (
     resolve_loader,
 )
 from backtest.loaders.base import NoAvailableSourceError, validate_ohlc
+from src.config.personal import is_disabled_market_symbol
 # Symbol classification lives in ``_market_hooks`` so runner.py and
 # composite.py share a single source of truth (audit-2026-05-18 B1+C1+C2).
 # ``_detect_market`` is also re-exported here for back-compat with
@@ -91,6 +92,12 @@ class BacktestConfigSchema(BaseModel):
             raise ValueError("codes must be a non-empty list")
         if any(not c.strip() for c in v):
             raise ValueError("codes must not contain empty strings")
+        disabled = [code for code in v if is_disabled_market_symbol(code)]
+        if disabled:
+            raise ValueError(
+                "India and Korea markets are disabled in this personal edition: "
+                + ", ".join(disabled)
+            )
         return v
 
     @field_validator("start_date", "end_date")
@@ -797,8 +804,6 @@ _MARKET_TO_SOURCE = {
     "a_share": "tushare",
     "us_equity": "yfinance",
     "hk_equity": "yfinance",
-    "india_equity": "yahoo",
-    "kr_equity": "pykrx",
     "ca_equity": "yahoo",
     "crypto": "okx",
     "futures": "tushare",
@@ -1281,19 +1286,6 @@ def _create_market_engine(source: str, config: dict, codes: List[str]):
         from backtest.engines.forex import ForexEngine
         return ForexEngine(config)
 
-    # India equity routing — must precede source-based routing because India's
-    # effective source is ``yahoo``, which has no Wave-1 branch and would
-    # otherwise fall through to the crypto default.
-    if "india_equity" in markets:
-        from backtest.engines.india_equity import IndiaEquityEngine
-        return IndiaEquityEngine(config)
-
-    # Korea equity routing — same reason as India: its effective source
-    # (``pykrx``) has no Wave-1 branch and would fall through to the default.
-    if "kr_equity" in markets:
-        from backtest.engines.korea_equity import KoreaEquityEngine
-        return KoreaEquityEngine(config)
-
     # Original routing (Wave 1)
     if source in ("okx", "ccxt"):
         from backtest.engines.crypto import CryptoEngine
@@ -1460,11 +1452,9 @@ def fetch_data_map(config: dict) -> DataFetchResult:
         codes = _normalize_codes(codes, source)
         primary_source = source
         loader = _get_loader(source)()
-        # ``_get_loader`` may hand back a *different* loader when the requested
-        # one is unavailable (e.g. an optional package like pykrx is missing, so
-        # the kr_equity chain resolves to yahoo). Record who actually served the
-        # bars, never the name that was asked for — a run card that claims
-        # ``pykrx`` while Yahoo supplied the data is a provenance lie.
+        # ``_get_loader`` may hand back a different loader when the requested
+        # one is unavailable. Record the provider that actually served the bars
+        # instead of the originally requested source.
         served_by = str(getattr(loader, "name", source) or source)
         if served_by != source:
             logger.warning(

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import i18n from "@/i18n";
 import { ModelRuntimeBar } from "../ModelRuntimeBar";
 import type { LLMSettings } from "@/lib/api";
 
@@ -36,7 +37,7 @@ describe("ModelRuntimeBar", () => {
 
     expect(screen.getByText("DeepSeek")).toBeInTheDocument();
     expect(screen.getByText("deepseek-v4-flash-202607")).toBeInTheDocument();
-    expect(screen.getByText(/Reasoning Effort: High/)).toBeInTheDocument();
+    expect(screen.getByText(`${i18n.t("settings.reasoningEffort")}: ${i18n.t("settings.reasoningEffortHigh")}`)).toBeInTheDocument();
   });
 
   it("distinguishes explicit no-reasoning from the provider default", () => {
@@ -46,7 +47,7 @@ describe("ModelRuntimeBar", () => {
       />,
     );
 
-    expect(screen.getByText(/Reasoning Effort: None \(explicit\)/)).toBeInTheDocument();
+    expect(screen.getByText(`${i18n.t("settings.reasoningEffort")}: ${i18n.t("settings.reasoningEffortNone")}`)).toBeInTheDocument();
   });
 
   it("shows the persisted historical reasoning effort instead of current settings", () => {
@@ -59,7 +60,7 @@ describe("ModelRuntimeBar", () => {
       />,
     );
 
-    expect(screen.getByText(/Reasoning Effort: High/)).toBeInTheDocument();
-    expect(screen.queryByText(/Reasoning Effort: Low/)).not.toBeInTheDocument();
+    expect(screen.getByText(`${i18n.t("settings.reasoningEffort")}: ${i18n.t("settings.reasoningEffortHigh")}`)).toBeInTheDocument();
+    expect(screen.queryByText(`${i18n.t("settings.reasoningEffort")}: ${i18n.t("settings.reasoningEffortLow")}`)).not.toBeInTheDocument();
   });
 });

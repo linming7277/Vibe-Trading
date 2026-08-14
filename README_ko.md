@@ -29,8 +29,6 @@
 </p>
 
 <p align="center">
-  <a href="https://vibetrading.wiki/">웹사이트</a> &nbsp;&middot;&nbsp;
-  <a href="https://vibetrading.wiki/docs/">문서</a> &nbsp;&middot;&nbsp;
   <a href="#-뉴스">뉴스</a> &nbsp;&middot;&nbsp;
   <a href="#-주요-기능">기능</a> &nbsp;&middot;&nbsp;
   <a href="#-섀도우-계정">섀도우 계정</a> &nbsp;&middot;&nbsp;
@@ -357,8 +355,6 @@ vibe-trading run -p "Analyze my trading behavior, extract my shadow strategy, an
 | `okx` · `ccxt` · `binance` | crypto | none | OKX + 100+ exchanges + Binance historical / USD-M perps |
 | `futu` | HK / A | OpenD | optional local FutuOpenD |
 | `mt5` | forex / metals | MT5 terminal | MetaTrader 5 (Exness-style) forex / metal bars, 1m–1D |
-| `pykrx` | 한국 (KRX: KOSPI/KOSDAQ) | 없음 | `.KS` / `.KQ`용 KOSPI / KOSDAQ 일봉 (선택적 `krx` extra) |
-| `india_broker` | 인도 (NSE/BSE) | 브로커 로그인 | `.NS` / `.BO`용 읽기 전용 Shoonya / Dhan 봉 (폴백 체인 말단) |
 | `local` | any | none | your own CSV / Parquet / DuckDB via `local:` prefix |
 
 **폴백 체인 (IP 차단 위험 순):**
@@ -366,8 +362,6 @@ vibe-trading run -p "Analyze my trading behavior, extract my shadow strategy, an
 - **A주** → `tencent` · `mootdx` · `eastmoney` · `baostock` · `akshare` · `tushare` · `local`
 - **미국** → `yahoo` · `stooq` · `sina` · `eastmoney` · `yfinance` · `tiingo` · `fmp` · `finnhub` · `alphavantage` · `longbridge` · `akshare` · `local`
 - **홍콩** → `tencent` · `eastmoney` · `yahoo` · `futu` · `akshare` · `yfinance` · `tushare` · `longbridge` · `local`
-- **인도 (NSE/BSE)** → `yahoo` · `yfinance` · `india_broker` · `local`
-- **한국 (KOSPI/KOSDAQ)** → `pykrx` · `yahoo` · `yfinance` · `local`
 - **크립토** → `okx` · `ccxt` · `binance` · `yfinance` · `local`
 - **외환/귀금속** → `mt5` · `yfinance` · `akshare` · `local` &nbsp;·&nbsp; *(선물 / 펀드 / 매크로 → `tushare`/`akshare` → `local`)*
 
@@ -499,7 +493,6 @@ connector-first 프로필. 대부분의 브로커가 read + 페이퍼 계정 주
 | **Futu** | HK / US / A | read + paper + bounded live |
 | **eToro** | global | read + paper + bounded live (Public API; demo 키는 구조적으로 `/demo` 경로에만 도달하며, 카피 트레이딩 워크플로도 지원) |
 | **MetaTrader 5** | forex / CFD | read + paper + bounded live (Exness-style; demo ⇔ paper identity guard) |
-| **Longbridge** · **Dhan** · **Shoonya** | US / HK · India (NSE/BSE) | read + paper only — no runtime paper/live discriminator, so live order placement is hard-refused |
 | **Trading 212** | UK / EU | fully read-only — `place_order` / `cancel_order` hard-refuse even paper |
 
 Paper-vs-live는 **구조적 브로커별 런타임 가드**(account-id 형식, 호스트 분리, demo 플래그, 또는 trade environment)이며, agent가 뒤집을 수 있는 config 플래그가 아닙니다. 그런 구분자를 노출하지 않는 브로커는 페이퍼 + 읽기 전용으로 제한됩니다.
@@ -559,8 +552,6 @@ Paper-vs-live는 **구조적 브로커별 런타임 가드**(account-id 형식, 
 |--------|--------|-------|
 | **ChinaA** | A-share | T+1, price limits, pre-ST filter |
 | **GlobalEquity** | US / HK / 캐나다 | 동일 세션 거래, 시장별 주문 단위·호가·비용 |
-| **IndiaEquity** | India (NSE/BSE) | T+1, circuit bands, config-driven STT / stamp / SEBI / GST cost stack |
-| **KoreaEquity** | 한국 (KRX: KOSPI/KOSDAQ) | 롱 온리, 통합 호가 단위에서 ±30% 가격제한폭을 체결 시점에 판정, 2026년 0.20% 증권거래세 |
 | **Crypto** | crypto spot / USD-M perps | funding settlements, execution/mark split |
 | **ChinaFutures** · **GlobalFutures** | futures | margin, contract multipliers |
 | **Forex** | FX / metals | via the `mt5` loader |
@@ -1598,7 +1589,7 @@ Vibe-Trading/
 │   │
 │   └── backtest/                   # Backtest engines
 │       ├── engines/                #   8 engines + composite cross-market engine + options_portfolio
-│       ├── loaders/                #   24 sources: tushare, okx, binance, yfinance, akshare, baostock, tencent, mootdx, ccxt, futu, pykrx, local, eastmoney, sina, stooq, yahoo, finnhub, alphavantage, tiingo, fmp, longbridge, mt5, qveris, india_broker
+│       ├── loaders/                #   22 sources: tushare, okx, binance, yfinance, akshare, baostock, tencent, mootdx, ccxt, futu, local, eastmoney, sina, stooq, yahoo, finnhub, alphavantage, tiingo, fmp, longbridge, mt5, qveris
 │       │   ├── base.py             #   DataLoader Protocol
 │       │   └── registry.py         #   Registry + auto-fallback chains
 │       └── optimizers/             #   MVO, equal vol, max div, risk parity

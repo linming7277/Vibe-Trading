@@ -1,5 +1,4 @@
 import { render, screen } from "@testing-library/react";
-import i18n from "../../../i18n";
 import { MetricsCard } from "../MetricsCard";
 
 describe("MetricsCard", () => {
@@ -12,22 +11,6 @@ describe("MetricsCard", () => {
     trade_count: 42,
   };
 
-  beforeAll(() => {
-    i18n.addResourceBundle(
-      "en",
-      "translation",
-      {
-        metrics: {
-          gloss: {
-            sharpe: "Return earned per unit of total risk.",
-          },
-        },
-      },
-      true,
-      true,
-    );
-  });
-
   it("renders nothing when metrics is empty", () => {
     const { container } = render(<MetricsCard metrics={{}} />);
     expect(container.innerHTML).toBe("");
@@ -35,18 +18,18 @@ describe("MetricsCard", () => {
 
   it("renders metric labels", () => {
     render(<MetricsCard metrics={sampleMetrics} />);
-    expect(screen.getByText("Total Return")).toBeInTheDocument();
-    expect(screen.getByText("Sharpe")).toBeInTheDocument();
-    expect(screen.getByText("Max DD")).toBeInTheDocument();
-    expect(screen.getByText("Trades")).toBeInTheDocument();
+    expect(screen.getByText("总收益率")).toBeInTheDocument();
+    expect(screen.getByText("夏普比率")).toBeInTheDocument();
+    expect(screen.getByText("最大回撤")).toBeInTheDocument();
+    expect(screen.getByText("交易次数")).toBeInTheDocument();
   });
 
   it("adds a localized plain-language tooltip to each metric cell", () => {
     render(<MetricsCard metrics={{ sharpe: 1.5 }} />);
 
-    expect(screen.getByText("Sharpe").parentElement).toHaveAttribute(
+    expect(screen.getByText("夏普比率").parentElement).toHaveAttribute(
       "title",
-      "Return earned per unit of total risk.",
+      "策略每承担一单位总体风险获得的收益，通常越高越好。",
     );
   });
 
@@ -68,10 +51,10 @@ describe("MetricsCard", () => {
     render(<MetricsCard metrics={manyMetrics} compact />);
 
     // Should show the first 6 labels from DISPLAY_ORDER that exist
-    expect(screen.getByText("Total Return")).toBeInTheDocument();
-    expect(screen.getByText("Trades")).toBeInTheDocument();
+    expect(screen.getByText("总收益率")).toBeInTheDocument();
+    expect(screen.getByText("交易次数")).toBeInTheDocument();
     // Should NOT show 7th+ metric
-    expect(screen.queryByText("Calmar")).not.toBeInTheDocument();
+    expect(screen.queryByText("卡尔马")).not.toBeInTheDocument();
   });
 
   it("ignores metrics not in DISPLAY_ORDER", () => {
@@ -81,15 +64,15 @@ describe("MetricsCard", () => {
 
   it("applies sentiment colors", () => {
     render(<MetricsCard metrics={{ sharpe: 1.5 }} />);
-    // sharpe >= 1.0 → positive → text-success
+    // Chinese market convention: positive values use the red market-up token.
     const el = screen.getByText("+1.50");
-    expect(el.className).toContain("text-success");
+    expect(el.className).toContain("text-market-up");
   });
 
   it("applies negative sentiment for bad values", () => {
     render(<MetricsCard metrics={{ max_drawdown: -0.3 }} />);
-    // max_drawdown <= -0.2 → negative → text-danger
+    // Chinese market convention: negative values use the green market-down token.
     const el = screen.getByText("-30.00%");
-    expect(el.className).toContain("text-danger");
+    expect(el.className).toContain("text-market-down");
   });
 });

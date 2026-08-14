@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from src.agent.tools import BaseTool, ToolRegistry
+from src.config.personal import DISABLED_TRADING_TOOL_NAMES
 
 if TYPE_CHECKING:
     from src.config.schema import AgentConfig
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 _SUBCLASSES_CACHE: list[type[BaseTool]] | None = None
 _SHELL_TOOL_NAMES = {"bash", "background_run", "cancel_background"}
+_DISABLED_PERSONAL_MODULES = {"propose_mandate_tool", "trading_connector_tool"}
 
 
 def _discover_subclasses() -> list[type[BaseTool]]:
@@ -44,7 +46,7 @@ def _discover_subclasses() -> list[type[BaseTool]]:
 
     pkg_dir = str(Path(__file__).parent)
     for _, module_name, _ in pkgutil.iter_modules([pkg_dir]):
-        if module_name.startswith("_"):
+        if module_name.startswith("_") or module_name in _DISABLED_PERSONAL_MODULES:
             continue
         try:
             importlib.import_module(f"src.tools.{module_name}")
@@ -135,6 +137,9 @@ def build_registry(
     registry = ToolRegistry()
     for cls in _discover_subclasses():
         try:
+            if cls.name in DISABLED_TRADING_TOOL_NAMES:
+                logger.info("Tool %s disabled by personal-edition trading policy", cls.name)
+                continue
             if cls.name in _SHELL_TOOL_NAMES and not include_shell_tools:
                 logger.info("Tool %s disabled by shell tool policy", cls.name)
                 continue
@@ -173,49 +178,16 @@ def build_registry(
 
         for server_name, server_config in agent_config.mcp_servers.items():
             try:
-                # Live brokers (e.g. Robinhood) gate their order-placing tools
-                # behind the mandate + kill switch; reads stay plain (read-only).
-                # Detection is by config key OR URL host, so a live-broker URL
-                # under an aliased key cannot bypass the gate.
-                from src.live.registry import (
-                    is_live_broker,
-                    should_register_live_channel,
-                    wrap_live_broker_tools,
-                )
+                # Broker MCP servers remain disabled in the personal edition,
+                # including read-only surfaces, because no supported Guotai
+                # Haitong connector exists in this project.
+                from src.live.registry import is_live_broker
 
                 server_url = server_config.url
                 live = is_live_broker(server_name, server_url)
-
-                # Headless / no-token: skip an unauthorized live channel rather
-                # than block on a browser that can't open (SPEC Transport §4).
                 if live:
-                    cache_dir = (
-                        server_config.auth.cache_dir
-                        if server_config.auth is not None
-                        else None
-                    )
-                    if not should_register_live_channel(
-                        interactive=interactive, url=server_url, cache_dir=cache_dir
-                    ):
-                        profile_hint = (
-                            "ibkr-live-official-mcp-readonly"
-                            if server_name.strip().lower() == "ibkr"
-                            else f"{server_name}-live-mcp"
-                        )
-                        skip_msg = (
-                            f"{server_name} live connector configured but not authorized — "
-                            f"run `vibe-trading connector authorize {profile_hint}` "
-                            f"on a desktop session"
-                        )
-                        logger.warning(skip_msg)
-                        if warn_callback is not None:
-                            warn_callback(skip_msg)
-                        continue
-                    info_msg = (
-                        f"{server_name} live connector is available through trading_* tools; "
-                        "broker-specific MCP wrappers are hidden from the agent registry"
-                    )
-                    logger.info(info_msg)
+                    info_msg = f"Broker MCP server '{server_name}' disabled in personal edition"
+                    logger.warning(info_msg)
                     if warn_callback is not None:
                         warn_callback(info_msg)
                     continue
@@ -225,10 +197,6 @@ def build_registry(
                     server_config,
                     local_server_name=local_server_names[server_name],
                 )
-                if live:
-                    wrappers = wrap_live_broker_tools(
-                        server_name, wrappers, url=server_url
-                    )
                 for tool in wrappers:
                     registry.register(tool)
                 logger.info(

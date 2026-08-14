@@ -39,11 +39,6 @@ from src.market_data import (
         ("AAPL.US", "yahoo"),
         ("700.HK", "tencent"),
         ("00700.HK", "tencent"),
-        ("RELIANCE.NS", "yahoo"),  # India NSE
-        ("TCS.NS", "yahoo"),
-        ("M&M.NS", "yahoo"),  # ampersand in ticker
-        ("BAJAJ-AUTO.NS", "yahoo"),  # hyphen in ticker
-        ("500325.BO", "yahoo"),  # India BSE (numeric scrip code)
         ("TD.TO", "yahoo"),  # Canada TSX
         ("BBD-B.TO", "yahoo"),  # hyphenated TSX class symbol
         ("PNG.V", "yahoo"),  # Canada TSX Venture
@@ -310,31 +305,6 @@ def test_fetch_auto_hk_akshare_reachable_within_default_budget() -> None:
     assert "09988.HK" in out
     assert attempts[-1] == "akshare"
     assert len(attempts) <= 5
-
-
-def test_fetch_auto_india_walks_india_chain() -> None:
-    """India symbols must degrade through the india_equity chain (chain
-    selection is market-aware for every market, not just HK)."""
-    from backtest.loaders.base import NoAvailableSourceError
-
-    attempts: list[str] = []
-
-    def resolver(src: str):
-        attempts.append(src)
-        if src == "yfinance":
-            return _StubLoader
-        raise NoAvailableSourceError(f"{src} unavailable in test")
-
-    out = fetch_market_data(
-        codes=["RELIANCE.NS"],
-        start_date="2026-01-01",
-        end_date="2026-01-02",
-        source="auto",
-        loader_resolver=resolver,
-    )
-    assert attempts == ["yahoo", "yfinance"]
-    assert "_unresolved" not in out
-    assert "RELIANCE.NS" in out
 
 
 def test_fetch_auto_us_still_walks_us_chain() -> None:

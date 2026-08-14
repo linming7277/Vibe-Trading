@@ -1,8 +1,9 @@
 import i18n from '@/i18n';
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 import { toast } from "sonner";
-import { GitCompare, ArrowLeftRight } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, GitCompare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api, type RunListItem, type RunData, type EquityPoint } from "@/lib/api";
 import { echarts, CHART_GROUP, connectCharts } from "@/lib/echarts";
@@ -326,6 +327,7 @@ export function Compare() {
 
   return (
     <div className="mx-auto max-w-5xl p-8 space-y-6">
+      <Link to="/backtests" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />返回策略回测</Link>
       <h1 className="flex items-center gap-2 text-2xl font-semibold">
         <GitCompare className="h-5 w-5" aria-hidden="true" /> {t("compare.title")}
       </h1>

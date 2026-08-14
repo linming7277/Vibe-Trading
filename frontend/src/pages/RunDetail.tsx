@@ -2,7 +2,7 @@ import i18n from '@/i18n';
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams, useNavigate } from "react-router";
+import { Link, useParams } from "react-router";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -97,7 +97,6 @@ function yieldToBrowser(): Promise<void> {
 
 export function RunDetail() {
   const { runId } = useParams<{ runId: string }>();
-  const navigate = useNavigate();
   const { t } = useTranslation();
   const [run, setRun] = useState<RunData | null>(null);
   const [code, setCode] = useState<Record<string, string>>({});
@@ -190,12 +189,12 @@ export function RunDetail() {
       <p className="text-sm text-muted-foreground">
         {i18n.t("runDetail.runNotFoundDesc")}
       </p>
-      <button
-        onClick={() => navigate(-1)}
+      <Link
+        to="/backtests"
         className="text-sm text-primary hover:underline inline-flex items-center gap-1.5"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> {i18n.t("runDetail.goBack")}
-      </button>
+      </Link>
     </div>
   );
 
@@ -294,13 +293,13 @@ export function RunDetail() {
       {/* Header */}
       <div className="border-b border-border/60 p-4 space-y-3">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
+          <Link
+            to="/backtests"
             className="p-1 rounded-md hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground"
             title={i18n.t("runDetail.goBack")}
           >
             <ArrowLeft className="h-4 w-4" />
-          </button>
+          </Link>
           {ok ? (
             <>
               <CheckCircle2 className="h-5 w-5 text-success" aria-hidden="true" />
@@ -796,7 +795,7 @@ function parseTradeNumber(value?: string): number | null {
 
 function signedNumberClass(value: number | null): string {
   if (value == null || value === 0) return "text-muted-foreground";
-  return value > 0 ? "text-success" : "text-danger";
+  return value > 0 ? "text-market-up" : "text-market-down";
 }
 
 function formatSigned(value: number, suffix = ""): string {
@@ -907,8 +906,8 @@ function TradesTab({ run }: { run: RunData }) {
                   <td className="py-2 pr-4">
                     <span className={cn(
                       "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
-                      side === "BUY" && "bg-success/10 text-success",
-                      side === "SELL" && "bg-danger/10 text-danger",
+                      side === "BUY" && "bg-market-up/10 text-market-up",
+                      side === "SELL" && "bg-market-down/10 text-market-down",
                       side === "" && "bg-muted text-muted-foreground",
                     )}>
                       {side === "BUY" ? i18n.t("runDetail.sideBuy") : side === "SELL" ? i18n.t("runDetail.sideSell") : tr.side}

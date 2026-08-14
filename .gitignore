@@ -102,12 +102,9 @@ AGENTS.md
 
 .DS_Store
 
-# Desktop shell build outputs
-desktop/electron/node_modules/
-desktop/electron/dist/
-desktop/electron/.cache/
-desktop/electron/release/
-desktop/electron/runtime/
+# Local Windows launcher state and logs
+.launcher/
+.runtime/
 
 # Alpha Zoo wiki artifacts (generated, not source)
 wiki/alpha-library/manifest.json

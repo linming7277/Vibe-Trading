@@ -40,32 +40,6 @@ describe("api request helper", () => {
     } satisfies Partial<ApiError>);
   });
 
-  it("posts an authenticated connector verification request with an encoded profile id", async () => {
-    vi.stubGlobal("localStorage", {
-      getItem: vi.fn(() => "remote-test-key"),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-    });
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ status: "ok", connection_state: "connected" }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { api } = await loadApiModule();
-
-    await expect(api.verifyConnector("longbridge/live sdk")).resolves.toMatchObject({ status: "ok" });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/live/connectors/longbridge%2Flive%20sdk/verify?force=true",
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({ Authorization: "Bearer remote-test-key" }),
-      }),
-    );
-  });
-
   it("sends the stored API key when fetching a correlation matrix", async () => {
     vi.stubGlobal("localStorage", {
       getItem: vi.fn(() => "remote-test-key"),
@@ -128,7 +102,7 @@ describe("api request helper", () => {
     );
   });
 
-  it("resolves authorization errors through the active i18n key", async () => {
+  it("keeps authorization errors on the Chinese product locale", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -141,18 +115,14 @@ describe("api request helper", () => {
 
     const apiModule = await loadApiModule();
     const { default: i18n } = await import("@/i18n");
-    i18n.addResource(
-      "en",
-      "translation",
-      "agent.authRequired",
-      "Add an API key in Settings.",
-    );
     await i18n.changeLanguage("en");
 
-    expect(apiModule.AUTH_REQUIRED_MESSAGE).toBe("Add an API key in Settings.");
+    const expected = i18n.t("agent.authRequired" as never);
+    expect(i18n.language).toBe("zh-CN");
+    expect(apiModule.AUTH_REQUIRED_MESSAGE).toBe(expected);
     await expect(apiModule.api.getCorrelation("A,B", 90, "pearson")).rejects.toMatchObject({
       status: 401,
-      message: "Add an API key in Settings.",
+      message: expected,
     } satisfies Partial<ApiError>);
   });
 });

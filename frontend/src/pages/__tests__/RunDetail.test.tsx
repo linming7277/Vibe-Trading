@@ -2,6 +2,9 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { RunDetail } from "../RunDetail";
 import type { RunData } from "@/lib/api";
+import i18n from "@/i18n";
+
+const tr = (key: string) => String(i18n.t(key as never));
 
 const apiMock = vi.hoisted(() => ({
   getRun: vi.fn(),
@@ -66,7 +69,7 @@ describe("RunDetail page", () => {
 
     expect(screen.getByText("New run")).toBeInTheDocument();
     expect(screen.queryByText("Old run")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Code" }));
+    fireEvent.click(screen.getByRole("tab", { name: tr("runDetail.code") }));
     expect(await screen.findByText("NEW_CODE")).toBeInTheDocument();
     expect(screen.queryByText("OLD_CODE")).not.toBeInTheDocument();
   });
@@ -103,7 +106,7 @@ describe("RunDetail page", () => {
 
     expect(screen.getByText("New run")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "OLD" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Trades" }));
+    fireEvent.click(screen.getByRole("tab", { name: tr("runDetail.trades") }));
     expect(screen.queryByText("OLD TRADE")).not.toBeInTheDocument();
   });
 
@@ -126,12 +129,12 @@ describe("RunDetail page", () => {
     renderRunDetail("/runs/accessible");
 
     await screen.findByText("Accessible run");
-    expect(screen.getByText("Completed")).toHaveClass("sr-only");
+    expect(screen.getByText(tr("swarm.status.completed"))).toHaveClass("sr-only");
     expect(screen.getByRole("heading", { level: 1, name: "accessible" })).toHaveClass("text-2xl", "font-semibold");
     expect(screen.getByRole("tablist")).toBeInTheDocument();
 
-    const chartTab = screen.getByRole("tab", { name: "Chart" });
-    const tradesTab = screen.getByRole("tab", { name: "Trades" });
+    const chartTab = screen.getByRole("tab", { name: tr("runDetail.chart") });
+    const tradesTab = screen.getByRole("tab", { name: tr("runDetail.trades") });
     expect(chartTab).toHaveAttribute("aria-selected", "true");
     expect(chartTab).toHaveClass("font-medium");
     expect(tradesTab).toHaveAttribute("aria-selected", "false");
@@ -142,7 +145,7 @@ describe("RunDetail page", () => {
     expect(tradesTab).toHaveClass("font-medium");
     const table = screen.getByRole("table");
     expect(table.parentElement).toHaveClass("overflow-x-auto", "rounded-xl", "border");
-    expect(screen.getByRole("columnheader", { name: "Time" })).toHaveClass("ps-4");
+    expect(screen.getByRole("columnheader", { name: tr("runDetail.time") })).toHaveClass("ps-4");
   });
 
   it("pads and scroll-wraps run-card key/value and artifact tables", async () => {
@@ -160,12 +163,12 @@ describe("RunDetail page", () => {
     renderRunDetail("/runs/card");
 
     await screen.findByText("Run card");
-    fireEvent.click(screen.getByRole("tab", { name: "Run Card" }));
+    fireEvent.click(screen.getByRole("tab", { name: tr("runDetail.runCard") }));
 
     const keyCell = await screen.findByText("engine");
     expect(keyCell).toHaveClass("ps-4");
     expect(keyCell.closest("table")?.parentElement).toHaveClass("overflow-x-auto");
-    expect(screen.getByRole("columnheader", { name: "Path" })).toHaveClass("ps-4");
+    expect(screen.getByRole("columnheader", { name: tr("runDetail.path") })).toHaveClass("ps-4");
     expect(screen.getByText("artifacts/result.json")).toHaveClass("ps-4");
   });
 });
@@ -193,14 +196,14 @@ describe("RunDetail page", () => {
     renderRunDetail("/runs/studio-run");
 
     await screen.findByText("Studio run");
-    fireEvent.click(screen.getByRole("tab", { name: "Portfolio Studio" }));
+    fireEvent.click(screen.getByRole("tab", { name: tr("runDetail.studio") }));
 
-    expect(await screen.findByText("Risk X-Ray")).toBeInTheDocument();
+    expect(await screen.findByText(tr("runDetail.riskXray"))).toBeInTheDocument();
     expect(screen.getByText("0.520")).toBeInTheDocument();
     expect(screen.getByText("22.0%")).toBeInTheDocument();
     expect(screen.getByText("AAPL")).toBeInTheDocument();
     expect(screen.getByText("NVDA")).toBeInTheDocument();
-    expect(screen.getByText("Rebalance Notes")).toBeInTheDocument();
+    expect(screen.getByText(tr("runDetail.rebalanceNotes"))).toBeInTheDocument();
     // the date shows up twice: once in the rebalances table, once in the summary card
     expect(screen.getAllByText("2026-02-02")).toHaveLength(2);
     // 35.0% shows up three times: the table row plus the mean and max summary cards
@@ -219,5 +222,5 @@ describe("RunDetail page", () => {
     renderRunDetail("/runs/plain-run");
 
     await screen.findByText("Plain run");
-    expect(screen.queryByRole("tab", { name: "Portfolio Studio" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: tr("runDetail.studio") })).not.toBeInTheDocument();
   });

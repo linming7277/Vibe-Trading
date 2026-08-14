@@ -9,6 +9,8 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from src.config.personal import is_disabled_market_symbol
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_ROWS = 250
@@ -23,9 +25,6 @@ _SOURCE_PATTERNS = [
     (re.compile(r"^\d{6}\.(SZ|SH|BJ)$", re.I), "tencent"),
     (re.compile(r"^[A-Z]+\.US$", re.I), "yahoo"),
     (re.compile(r"^\d{3,5}\.HK$", re.I), "tencent"),
-    # India: NSE (RELIANCE.NS) / BSE (500325.BO). Tickers may carry '&' and '-'
-    # (e.g. M&M.NS, BAJAJ-AUTO.NS). Served by Yahoo's public chart endpoint.
-    (re.compile(r"^[A-Z0-9&.\-]+\.(NS|BO)$", re.I), "yahoo"),
     # Canada: Toronto Stock Exchange (TD.TO) / TSX Venture (PNG.V).
     (re.compile(r"^[A-Z0-9&.\-]+\.(TO|V)$", re.I), "yahoo"),
     # Yahoo futures (GC=F, CL=F) and forex (EURUSD=X) suffix conventions —
@@ -34,9 +33,6 @@ _SOURCE_PATTERNS = [
     # China-market loaders that cannot resolve them.
     (re.compile(r"^[A-Z0-9]+=F$", re.I), "yahoo"),
     (re.compile(r"^[A-Z]+=X$", re.I), "yahoo"),
-    # Korea: KOSPI (005930.KS) / KOSDAQ (247540.KQ), 6-digit codes. Served by
-    # pykrx (KRX public data, no auth); registry falls back to Yahoo/yfinance.
-    (re.compile(r"^\d{6}\.(KS|KQ)$", re.I), "pykrx"),
     (re.compile(r"^[A-Z]+-USDT$", re.I), "okx"),
     (re.compile(r"^[A-Z]+/USDT$", re.I), "ccxt"),
     # Forex pairs and metals (EUR/USD, XAU/USD, EURUSD.FX). mt5 is the head of
@@ -50,6 +46,8 @@ _SOURCE_PATTERNS = [
 
 def detect_source(code: str) -> str:
     """Infer the best loader source for a normalized symbol."""
+    if is_disabled_market_symbol(code):
+        raise ValueError(f"India and Korea market data are disabled: {code}")
     for pattern, source in _SOURCE_PATTERNS:
         if pattern.match(code):
             return source
@@ -126,6 +124,13 @@ def fetch_market_data(
     from backtest.loaders.base import NoAvailableSourceError
     from backtest.loaders.registry import FALLBACK_CHAINS
 
+    disabled_codes = [code for code in codes if is_disabled_market_symbol(code)]
+    if disabled_codes:
+        raise ValueError(
+            "India and Korea market data are disabled in this personal edition: "
+            + ", ".join(disabled_codes)
+        )
+
     results: dict[str, Any] = {}
     provenance: dict[str, dict[str, Any]] = {}
     result_aliases = {
@@ -145,7 +150,7 @@ def fetch_market_data(
 
         Prefers the chain of the symbol's own market when ``src`` is a member
         of it. Matching by source name alone is ambiguous — ``yahoo`` appears
-        in the US, HK, India and Korea chains, and a first-match lookup would
+        in several equity chains, and a first-match lookup would
         send HK symbols down the US chain, exhausting the attempt budget on
         US-only sources.
 

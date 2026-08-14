@@ -133,8 +133,8 @@ class TestProtocol:
 class TestFallbackChains:
     def test_all_expected_markets_present(self) -> None:
         expected = {
-            "a_share", "us_equity", "hk_equity", "india_equity", "kr_equity",
-            "ca_equity", "crypto", "futures", "fund", "macro", "forex",
+            "a_share", "us_equity", "hk_equity", "ca_equity", "crypto",
+            "futures", "fund", "macro", "forex",
         }
         assert expected == set(FALLBACK_CHAINS.keys())
 

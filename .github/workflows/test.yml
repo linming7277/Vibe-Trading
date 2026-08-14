@@ -61,6 +61,8 @@ jobs:
           python -m py_compile mcp_server.py
           python -m py_compile src/agent/loop.py
           python -m py_compile src/tools/__init__.py
+          python -m py_compile src/tools/workspace_research_tool.py
+          python -m py_compile src/research_workspace/global_equity.py
           python -m py_compile backtest/runner.py
 
       - name: Run tests
@@ -84,7 +86,7 @@ jobs:
       - name: Frontend tests
         run: |
           cd frontend
-          npx vitest run --reporter=verbose
+          npm run test:run -- --reporter=verbose
 
   windows-background:
     name: ${{ matrix.name }} / Python 3.14 background lifecycle
@@ -124,40 +126,21 @@ jobs:
           agent/tests/test_bash_tool.py
           -q
 
-  desktop-electron-windows:
-    name: Windows desktop source lifecycle
-    runs-on: windows-2025
-    timeout-minutes: 30
-
-    steps:
-      # actions/checkout v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-
-      # actions/setup-python v7.0.0
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: "3.12"
-          architecture: x64
-          cache: pip
-
-      # actions/setup-node v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: desktop/electron/package-lock.json
-
-      - name: Install Vibe-Trading source backend
-        run: python -m pip install -e .
-
-      - name: Install desktop dependencies
-        working-directory: desktop/electron
-        run: npm ci
-
-      - name: Build desktop shell
-        working-directory: desktop/electron
-        run: npm run build
-
-      - name: Run desktop lifecycle and parent-death smoke tests
-        working-directory: desktop/electron
-        run: npm run smoke:lifecycle
+      - name: Parse Windows launcher scripts
+        shell: powershell
+        run: |
+          $errors = @()
+          foreach ($path in @(
+            "launcher/windows/HengzhiLauncher.ps1",
+            "launcher/windows/ServiceHost.ps1",
+            "launcher/windows/Smoke-Hengzhi-Stack.ps1"
+          )) {
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path),
+              [ref]$null,
+              [ref]$parseErrors
+            )
+            $errors += $parseErrors
+          }
+          if ($errors.Count) { $errors | Format-List; exit 1 }

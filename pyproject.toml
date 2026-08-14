@@ -1,7 +1,7 @@
 [project]
 name = "vibe-trading-ai"
 version = "0.1.13"
-description = "Natural-language finance research AI agent with backtesting"
+description = "Chinese-first personal investment research workspace with agent analysis and backtesting"
 # Upper bound is real, not cautionary: smartmoneyconcepts -> numba -> llvmlite,
 # and llvmlite ships no 3.14 wheel, so pip falls back to a source build that
 # needs cmake and fails with a 103-line traceback. Raise this once llvmlite
@@ -68,12 +68,6 @@ dependencies = [
     "prompt_toolkit>=3.0.0",
 ]
 
-[project.urls]
-Homepage = "https://vibetrading.wiki/"
-Documentation = "https://vibetrading.wiki/docs/"
-Repository = "https://github.com/HKUDS/Vibe-Trading"
-Issues = "https://github.com/HKUDS/Vibe-Trading/issues"
-
 [project.scripts]
 vibe-trading = "cli:main"
 vibe-trading-mcp = "mcp_server:main"
@@ -130,11 +124,6 @@ openbb = [
     # when this import succeeds, so a base install stays unaffected.
     "openbb-ai>=2.0.0,<3",
 ]
-krx = [
-    # Free, no-auth Korea (KRX: KOSPI/KOSDAQ) EOD OHLCV. Without this extra
-    # the kr_equity chain falls back to yahoo/yfinance (.KS/.KQ suffixes).
-    "pykrx>=1.0.45",
-]
 stats = [
     # Econometrics behind src/quantlib/timeseries: stationarity (ADF),
     # cointegration, Granger causality, Ljung-Box, VIF and GARCH. Those
@@ -152,74 +141,16 @@ ashare = [
 harmonic = [
     "pyharmonics>=1.5.0",
 ]
-dingtalk = [
-    "dingtalk-stream>=0.24.0",
-]
-discord = [
-    "discord.py>=2.4.0",
-]
 feishu = [
     "lark-oapi>=1.4.0",
     "qrcode>=7.4.2",
 ]
-matrix = [
-    "aiohttp>=3.14.3",
-    "matrix-nio[e2e]>=0.25.0",
-    "mistune>=3.0.0",
-    "nh3>=0.2.18",
-]
-mochat = [
-    "msgpack>=1.0.0",
-    "python-socketio[asyncio_client]>=5.11.0",
-]
-msteams = [
-    "cryptography>=50.0.0",
-    "PyJWT[crypto]>=2.8.0",
-]
-napcat = [
-    "aiohttp>=3.14.3",
-    "websockets>=12.0",
-]
-qq = [
-    "aiohttp>=3.14.3",
-    "qq-botpy>=1.2.0",
-]
-slack = [
-    "slack-sdk>=3.33.0",
-    "slackify-markdown>=0.2.4,<1",
-]
-telegram = [
-    "python-telegram-bot>=21.0",
-]
-wecom = [
-    "wecom-aibot-sdk>=1.0.0",
-]
 weixin = [
     "qrcode>=7.4.2",
 ]
-whatsapp = [
-    "neonize>=0.3.18.post0",
-]
 channels = [
-    "aiohttp>=3.14.3",
-    "cryptography>=50.0.0",
-    "dingtalk-stream>=0.24.0",
-    "discord.py>=2.4.0",
     "lark-oapi>=1.4.0",
-    "matrix-nio[e2e]>=0.25.0",
-    "mistune>=3.0.0",
-    "msgpack>=1.0.0",
-    "neonize>=0.3.18.post0",
-    "nh3>=0.2.18",
-    "PyJWT[crypto]>=2.8.0",
-    "python-socketio[asyncio_client]>=5.11.0",
-    "python-telegram-bot>=21.0",
     "qrcode>=7.4.2",
-    "qq-botpy>=1.2.0",
-    "slack-sdk>=3.33.0",
-    "slackify-markdown>=0.2.4,<1",
-    "websockets>=12.0",
-    "wecom-aibot-sdk>=1.0.0",
 ]
 dev = [
     "black>=24.0,<27",

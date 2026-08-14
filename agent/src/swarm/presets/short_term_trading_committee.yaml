@@ -1,0 +1,101 @@
+name: short_term_trading_committee
+title: "Short-Term Trading Committee"
+description: "Reviews a deterministic emotion-line signal through emotion, flow, event and risk lenses; it may approve, reject, wait or reduce risk, but never rewrite the engine score."
+
+agents:
+  - id: emotion_researcher
+    role: Emotion Regime Researcher
+    system_prompt: |
+      Review the supplied deterministic emotion score and regime for {company} in {market}.
+      Explain which observed features support or contradict it. Never invent or replace the engine score.
+      Cite evidence IDs and explicitly identify missing or stale data.
+    tools: [load_skill, get_market_data, web_search]
+    skills: [sentiment-analysis, behavioral-finance]
+    max_iterations: 20
+    timeout_seconds: 900
+
+  - id: flow_researcher
+    role: Capital Flow Researcher
+    system_prompt: |
+      Review capital-flow, turnover and sector-heat evidence for {company} in {market}.
+      Distinguish persistent flow from one-day noise. Never create an unsupported score.
+    tools: [load_skill, get_market_data]
+    skills: [tushare, sentiment-analysis]
+    max_iterations: 20
+    timeout_seconds: 900
+
+  - id: event_researcher
+    role: Technical and Event Researcher
+    system_prompt: |
+      Check price/volume structure, catalysts and event risks for {company} in {market}.
+      Identify unfillable conditions, expiry risks and contrary evidence without altering the engine signal.
+    tools: [load_skill, get_market_data, web_search]
+    skills: [technical-basic, event-driven]
+    max_iterations: 20
+    timeout_seconds: 900
+
+  - id: risk_officer
+    role: Risk Officer
+    system_prompt: |
+      Enforce the engine position cap, stop and validity window for {company} in {market}.
+      You may only recommend reject, wait, or a lower position cap/tighter stop.
+    tools: [load_skill]
+    skills: [risk-analysis]
+    max_iterations: 20
+    timeout_seconds: 900
+
+  - id: trading_pm
+    role: Trading PM
+    system_prompt: |
+      Synthesize the four reviews for committee {committee_id}, signal {signal_id}, engine run {engine_run_id}.
+      Choose approve/reject/wait. Do not change the base score, increase position cap, loosen stop or extend validity.
+      Your final action must call publish_committee_decision with structured fields and real evidence IDs.
+      If evidence or engine output is insufficient, publish wait; never fabricate identifiers.
+      {upstream_context}
+    tools: [publish_committee_decision]
+    max_iterations: 20
+    timeout_seconds: 900
+
+tasks:
+  - id: task-emotion
+    agent_id: emotion_researcher
+    prompt_template: "Review emotion regime evidence for {company} ({market}), signal {signal_id}."
+    depends_on: []
+  - id: task-flow
+    agent_id: flow_researcher
+    prompt_template: "Review capital-flow evidence for {company} ({market}), signal {signal_id}."
+    depends_on: []
+  - id: task-event
+    agent_id: event_researcher
+    prompt_template: "Review technical and event evidence for {company} ({market}), signal {signal_id}."
+    depends_on: []
+  - id: task-risk
+    agent_id: risk_officer
+    prompt_template: "Audit risk limits for {company} ({market}), signal {signal_id}."
+    depends_on: []
+  - id: task-pm
+    agent_id: trading_pm
+    prompt_template: "Publish the structured final decision for committee {committee_id} and signal {signal_id}."
+    depends_on: [task-emotion, task-flow, task-event, task-risk]
+    input_from:
+      emotion: task-emotion
+      flow: task-flow
+      event: task-event
+      risk: task-risk
+
+variables:
+  - name: company
+    description: "Target security"
+    required: true
+  - name: market
+    description: "CN or HK"
+    required: true
+  - name: committee_id
+    description: "Structured committee identifier"
+    required: false
+  - name: signal_id
+    description: "Proposed strategy signal identifier"
+    required: false
+  - name: engine_run_id
+    description: "Deterministic engine run identifier"
+    required: false

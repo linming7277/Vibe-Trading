@@ -1,0 +1,6 @@
+version: macro-sector-cn-v1.0.0
+market: CN
+taxonomy: SW_L2
+axes: [growth, liquidity, inflation, policy, risk_appetite]
+default_sensitivity: 0
+sectors: {}

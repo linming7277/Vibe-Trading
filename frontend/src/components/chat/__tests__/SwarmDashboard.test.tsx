@@ -28,20 +28,7 @@ function makeAgents(): SwarmAgentStatus[] {
 
 describe("SwarmDashboard", () => {
   beforeAll(async () => {
-    i18n.addResourceBundle(
-      "en",
-      "translation",
-      {
-        swarmStatus: {
-          detailsUnavailable: "details unavailable",
-          teamStarting:
-            "The team is spinning up — first updates in a few seconds…",
-        },
-      },
-      true,
-      true,
-    );
-    await i18n.changeLanguage("en");
+    await i18n.changeLanguage("zh-CN");
   });
 
   it("renders responsive wide rows and narrow cards without horizontal overflow", () => {
@@ -87,7 +74,7 @@ describe("SwarmDashboard", () => {
     const html = renderToStaticMarkup(<SwarmDashboard agents={[]} />);
 
     expect(html).toContain(
-      "The team is spinning up — first updates in a few seconds…",
+      "智能体团队正在启动，稍等几秒就有第一批进展…",
     );
     expect(html).not.toContain('data-agent-layout="wide"');
     expect(html).not.toContain('data-agent-layout="narrow"');
@@ -102,8 +89,8 @@ describe("SwarmDashboard", () => {
       />,
     );
 
-    expect(html).toContain("Completed — details unavailable");
-    expect(html).not.toContain("The team is spinning up");
+    expect(html).toContain("Completed — 暂无详细信息");
+    expect(html).not.toContain("智能体团队正在启动");
     expect(html).not.toContain("animate-pulse");
     expect(html).not.toContain("animate-spin");
   });

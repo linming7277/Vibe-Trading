@@ -29,8 +29,6 @@
 </p>
 
 <p align="center">
-  <a href="https://vibetrading.wiki/">公式サイト</a> &nbsp;&middot;&nbsp;
-  <a href="https://vibetrading.wiki/docs/">ドキュメント</a> &nbsp;&middot;&nbsp;
   <a href="#-ニュース">ニュース</a> &nbsp;&middot;&nbsp;
   <a href="#-主な機能">機能</a> &nbsp;&middot;&nbsp;
   <a href="#-shadow-account">Shadow Account</a> &nbsp;&middot;&nbsp;
@@ -357,8 +355,6 @@ vibe-trading run -p "Analyze my trading behavior, extract my shadow strategy, an
 | `okx` · `ccxt` · `binance` | crypto | none | OKX + 100+ exchanges + Binance historical / USD-M perps |
 | `futu` | HK / A | OpenD | optional local FutuOpenD |
 | `mt5` | forex / metals | MT5 terminal | MetaTrader 5 (Exness-style) forex / metal bars, 1m–1D |
-| `pykrx` | 韓国（KRX：KOSPI/KOSDAQ） | 不要 | `.KS` / `.KQ` の KOSPI / KOSDAQ 日足（任意の `krx` extra） |
-| `india_broker` | インド（NSE/BSE） | ブローカーログイン | `.NS` / `.BO` 向けの読み取り専用 Shoonya / Dhan bars（フォールバックチェーン末尾） |
 | `local` | any | none | your own CSV / Parquet / DuckDB via `local:` prefix |
 
 **フォールバックチェーン（IP 規制リスク順）：**
@@ -366,8 +362,6 @@ vibe-trading run -p "Analyze my trading behavior, extract my shadow strategy, an
 - **A 株** → `tencent` · `mootdx` · `eastmoney` · `baostock` · `akshare` · `tushare` · `local`
 - **米国株** → `yahoo` · `stooq` · `sina` · `eastmoney` · `yfinance` · `tiingo` · `fmp` · `finnhub` · `alphavantage` · `longbridge` · `akshare` · `local`
 - **香港株** → `tencent` · `eastmoney` · `yahoo` · `futu` · `akshare` · `yfinance` · `tushare` · `longbridge` · `local`
-- **インド株（NSE/BSE）** → `yahoo` · `yfinance` · `india_broker` · `local`
-- **韓国（KOSPI/KOSDAQ）** → `pykrx` · `yahoo` · `yfinance` · `local`
 - **暗号資産** → `okx` · `ccxt` · `binance` · `yfinance` · `local`
 - **為替/貴金属** → `mt5` · `yfinance` · `akshare` · `local` &nbsp;·&nbsp; *(先物 / ファンド / マクロ → `tushare`/`akshare` → `local`)*
 
@@ -499,7 +493,6 @@ connector-first のプロファイル。多くは read + ペーパー口座で�
 | **Futu** | HK / US / A | read + paper + bounded live |
 | **eToro** | global | read + paper + bounded live（Public API；demo キーは構造上 `/demo` パスにしか到達せず、コピートレードのワークフローにも対応） |
 | **MetaTrader 5** | forex / CFD | read + paper + bounded live (Exness-style; demo ⇔ paper identity guard) |
-| **Longbridge** · **Dhan** · **Shoonya** | US / HK · India (NSE/BSE) | read + paper only — no runtime paper/live discriminator, so live order placement is hard-refused |
 | **Trading 212** | UK / EU | fully read-only — `place_order` / `cancel_order` hard-refuse even paper |
 
 Paper-vs-live is a **structural per-broker runtime guard** (account-id format, host separation, demo flag, or trade environment), never a config flag the agent can flip. A broker exposing no such discriminator is capped at paper + read-only.
@@ -559,8 +552,6 @@ Paper-vs-live is a **structural per-broker runtime guard** (account-id format, h
 |--------|--------|-------|
 | **ChinaA** | A-share | T+1, price limits, pre-ST filter |
 | **GlobalEquity** | US / HK / カナダ | 同一セッション売買、市場別のロット・呼値・コスト |
-| **IndiaEquity** | India (NSE/BSE) | T+1, circuit bands, config-driven STT / stamp / SEBI / GST cost stack |
-| **KoreaEquity** | 韓国（KRX：KOSPI/KOSDAQ） | ロングオンリー、統一呼値グリッド上で ±30% 制限値幅を約定時点に判定、2026 年 0.20% の証券取引税 |
 | **Crypto** | crypto spot / USD-M perps | funding settlements, execution/mark split |
 | **ChinaFutures** · **GlobalFutures** | futures | margin, contract multipliers |
 | **Forex** | FX / metals | via the `mt5` loader |
@@ -1601,7 +1592,7 @@ Vibe-Trading/
 │   │
 │   └── backtest/                   # バックテストエンジン
 │       ├── engines/                #   8 エンジン + クロスマーケット composite engine + options_portfolio
-│       ├── loaders/                #   24 ソース: tushare、okx、binance、yfinance、akshare、baostock、tencent、mootdx、ccxt、futu、pykrx、local、eastmoney、sina、stooq、yahoo、finnhub、alphavantage、tiingo、fmp、longbridge、mt5、qveris、india_broker
+│       ├── loaders/                #   22 ソース: tushare、okx、binance、yfinance、akshare、baostock、tencent、mootdx、ccxt、futu、local、eastmoney、sina、stooq、yahoo、finnhub、alphavantage、tiingo、fmp、longbridge、mt5、qveris
 │       │   ├── base.py             #   DataLoader Protocol
 │       │   └── registry.py         #   Registry + 自動フォールバックチェーン
 │       └── optimizers/             #   MVO、equal vol、max div、risk parity

@@ -6,18 +6,19 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, string | number>) => {
       const labels: Record<string, string> = {
-        "agent.activity.verbs.working": "Working",
-        "agent.activity.verbs.readingMarketData": "Reading the market data",
-        "agent.activity.verbs.writingStrategy": "Writing the strategy",
-        "agent.activity.verbs.runningBacktest": "Running the backtest",
-        "agent.activity.verbs.validatingNumbers": "Double-checking the numbers",
-        "agent.activity.done": "Done",
-        "agent.activity.failed": "Failed",
-        "agent.activity.stopped": "Stopped by you",
+        "agent.activity.verbs.working": "正在处理",
+        "agent.activity.verbs.readingMarketData": "正在读取市场数据",
+        "agent.activity.verbs.writingStrategy": "正在编写策略",
+        "agent.activity.verbs.runningBacktest": "正在运行回测",
+        "agent.activity.verbs.validatingNumbers": "正在复核数据",
+        "agent.activity.done": "完成",
+        "agent.activity.failed": "失败",
+        "agent.activity.stopped": "已由你停止",
+        "agent.activity.continue": "继续",
       };
-      if (key === "agent.activity.steps") return `${values?.count} steps`;
-      if (key === "agent.activity.timeout") return `Stopped waiting after ${values?.elapsed}`;
-      if (key === "toolProgress.step") return `Step ${values?.step} · ${values?.tool}`;
+      if (key === "agent.activity.steps") return `${values?.count} 个步骤`;
+      if (key === "agent.activity.timeout") return `等待 ${values?.elapsed} 后已停止`;
+      if (key === "toolProgress.step") return `步骤 ${values?.step} · ${values?.tool}`;
       return labels[key] ?? key;
     },
   }),
@@ -63,7 +64,7 @@ describe("ThinkingTimeline", () => {
       }),
     ]} />);
 
-    expect(screen.getByText(/Done · 1 steps · 3s/)).toBeInTheDocument();
+    expect(screen.getByText(/完成 · 1 个步骤 · 3s/)).toBeInTheDocument();
   });
 
   it("shows the latest legacy group as active", () => {
@@ -72,7 +73,7 @@ describe("ThinkingTimeline", () => {
       makeMsg({ tool: "backtest", status: "running" }),
     ]} isLatest />);
 
-    expect(screen.getByText(/Running the backtest · Run the backtest/)).toBeInTheDocument();
+    expect(screen.getByText(/正在运行回测 · 运行回测/)).toBeInTheDocument();
   });
 
   it("auto-collapses a completed activity after 900ms", () => {
@@ -111,7 +112,7 @@ describe("ThinkingTimeline", () => {
     const disclosure = screen.getByRole("button");
     fireEvent.click(disclosure);
     expect(disclosure).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText(/Run command/)).toBeVisible();
+    expect(screen.getByText(/运行命令/)).toBeVisible();
   });
 
   it("renders the durable failed state instead of inferring from row icons", () => {
@@ -126,7 +127,7 @@ describe("ThinkingTimeline", () => {
       }),
     ]} />);
 
-    expect(screen.getByText("Failed · 0 steps · 1s")).toBeInTheDocument();
+    expect(screen.getByText("失败 · 0 个步骤 · 1s")).toBeInTheDocument();
   });
 
   it("keeps zero-tool turns as an activity row", () => {
@@ -141,7 +142,7 @@ describe("ThinkingTimeline", () => {
       }),
     ]} />);
 
-    expect(screen.getByText("Done · 0 steps · 0s")).toBeInTheDocument();
+    expect(screen.getByText("完成 · 0 个步骤 · 0s")).toBeInTheDocument();
   });
 
   it("delegates Continue for stopped turns", () => {
@@ -161,7 +162,7 @@ describe("ThinkingTimeline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "agent.activity.continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "继续" }));
     expect(onContinue).toHaveBeenCalledWith(stopped);
   });
 

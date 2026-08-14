@@ -1,5 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import i18n from "@/i18n";
 import { Settings } from "../Settings";
+
+const tr = (key: string) => i18n.t(key);
 
 const apiMock = vi.hoisted(() => ({
   getLLMSettings: vi.fn(),
@@ -72,9 +75,9 @@ function channelStatus(overrides = {}) {
     outbound_queue: 0,
     session_count: 0,
     channels: {
-      websocket: {
-        name: "websocket",
-        display_name: "WebSocket",
+      feishu: {
+        name: "feishu",
+        display_name: "飞书",
         configured: true,
         enabled: true,
         available: true,
@@ -83,16 +86,16 @@ function channelStatus(overrides = {}) {
         error: "",
         install_hint: "",
       },
-      telegram: {
-        name: "telegram",
-        display_name: "Telegram",
+      weixin: {
+        name: "weixin",
+        display_name: "微信",
         configured: true,
         enabled: false,
         available: false,
         loaded: false,
         running: false,
-        error: "ModuleNotFoundError",
-        install_hint: "pip install 'vibe-trading-ai[telegram]'",
+        error: "未配置",
+        install_hint: "请配置微信通道",
       },
     },
     ...overrides,
@@ -117,21 +120,21 @@ describe("Settings IM channels panel", () => {
   it("renders channel runtime status and refreshes it", async () => {
     render(<Settings />);
 
-    expect(await screen.findByText("IM Channels")).toBeInTheDocument();
-    expect(screen.getByText("websocket")).toBeInTheDocument();
-    expect(screen.getByText("telegram")).toBeInTheDocument();
-    expect(screen.getByText("pip install 'vibe-trading-ai[telegram]'")).toBeInTheDocument();
+    expect(await screen.findByText(tr("settings.channels.title"))).toBeInTheDocument();
+    expect(screen.getByText("feishu")).toBeInTheDocument();
+    expect(screen.getByText("weixin")).toBeInTheDocument();
+    expect(screen.getByText("请配置微信通道")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: tr("settings.channels.refresh") }));
 
     await waitFor(() => expect(apiMock.getChannelStatus).toHaveBeenCalledTimes(2));
   });
 
   it("starts channels from the settings control surface", async () => {
     render(<Settings />);
-    await screen.findByText("IM Channels");
+    await screen.findByText(tr("settings.channels.title"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Start channels" }));
+    fireEvent.click(screen.getByRole("button", { name: tr("settings.channels.start") }));
 
     await waitFor(() => expect(apiMock.startChannels).toHaveBeenCalledTimes(1));
   });
@@ -143,21 +146,19 @@ describe("Settings IM channels panel", () => {
 
     render(<Settings />);
 
-    expect(await screen.findByText("LLM Settings")).toBeInTheDocument();
-    expect(screen.getByText("Data Source Settings")).toBeInTheDocument();
-    expect(screen.getByText("IM Channels")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start channels" })).toBeDisabled();
+    expect(await screen.findByText(tr("settings.llmSettings"))).toBeInTheDocument();
+    expect(screen.getByText(tr("settings.dataSourceSettings"))).toBeInTheDocument();
+    expect(screen.getByText(tr("settings.channels.title"))).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: tr("settings.channels.refresh") })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: tr("settings.channels.start") })).toBeDisabled();
   });
 
   it("translates stable model-discovery warning codes in the frontend", async () => {
     render(<Settings />);
-    await screen.findByText("LLM Settings");
+    await screen.findByText(tr("settings.llmSettings"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Load models" }));
+    fireEvent.click(screen.getByRole("button", { name: tr("settings.loadModels") }));
 
-    expect(await screen.findByText(
-      "Enter or save this provider's API key to load its available models.",
-    )).toBeInTheDocument();
+    expect(await screen.findByText(tr("settings.modelDiscoveryApiKeyRequired"))).toBeInTheDocument();
   });
 });

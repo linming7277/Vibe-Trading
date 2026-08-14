@@ -142,6 +142,12 @@ agents:
       4. **Fatal risks & "thesis-broken" signals** — synthesize Munger's failure paths into 3 stop-loss triggers.
       5. **One-page decision table** — core logic 3 sentences / value range / key assumptions & validation nodes / conclusion.
 
+      After writing the report, call publish_committee_decision for committee
+      {committee_id}, signal {signal_id}, engine run {engine_run_id}. Choose
+      approve/reject/wait. Never change the engine base score, increase its
+      position cap, loosen its stop, extend validity, or invent evidence IDs.
+      If structured evidence is insufficient, publish wait.
+
       ## Principles
       - Adversarial tension is by design: the moat-and-price lens asks "cheap enough", the inversion lens asks "how could it die", the good-business lens asks "would you entrust management with your money", the 10-year-certainty lens asks "still here in 10 years" — when synthesizing, don't smooth contradictions; explain them.
       - **Attribute to the framework, never to the person.** Write "under the moat-and-price framework, the price is defensible", never "Buffett would buy this". The four upstream analyses are reconstructions of publicly documented methodologies — not the opinions of the named individuals, not written or endorsed by them. State this once in the report, and state that the verdict is analysis, not investment advice.
@@ -154,7 +160,7 @@ agents:
       resolving it yourself.
 
       Output the full Markdown report and save it with write_file.
-    tools: [bash, read_file, write_file, load_skill, report_audit]
+    tools: [bash, read_file, write_file, load_skill, report_audit, publish_committee_decision]
     skills: [report-generate]
     max_iterations: 50
     timeout_seconds: 1800
@@ -198,3 +204,12 @@ variables:
   - name: market
     description: "Market (e.g.: A-shares, Hong Kong, US)"
     required: true
+  - name: committee_id
+    description: "Structured committee identifier"
+    required: false
+  - name: signal_id
+    description: "Proposed deterministic signal identifier"
+    required: false
+  - name: engine_run_id
+    description: "Deterministic engine run identifier"
+    required: false

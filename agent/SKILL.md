@@ -1,7 +1,7 @@
 ---
 name: vibe-trading
 version: 0.1.13
-description: Professional finance research toolkit — backtesting (9 engines + benchmark comparison panel), factor analysis, Alpha Zoo (462 pre-built alphas across qlib158/alpha101/gtja191/academic/fundamental), options pricing, 89 finance skills, 30 multi-agent swarm teams, Trade Journal analyzer, and Shadow Account (extract → backtest → render) across 24 market-data sources (tushare, yfinance, okx, binance, akshare, baostock, tencent, mootdx, ccxt, futu, mt5, local, eastmoney, sina, stooq, yahoo, pykrx, india_broker, qveris, longbridge, plus optional-key finnhub/alphavantage/tiingo/fmp).
+description: Professional finance research toolkit — backtesting (7 engines + benchmark comparison panel), factor analysis, Alpha Zoo (462 pre-built alphas across qlib158/alpha101/gtja191/academic/fundamental), options pricing, 89 finance skills, 31 multi-agent swarm teams, Trade Journal analyzer, and Shadow Account (extract → backtest → render) across 22 market-data sources (tushare, yfinance, okx, binance, akshare, baostock, tencent, mootdx, ccxt, futu, mt5, local, eastmoney, sina, stooq, yahoo, qveris, longbridge, plus optional-key finnhub/alphavantage/tiingo/fmp).
 dependencies:
   python: ">=3.11,<3.14"
   pip:
@@ -23,7 +23,7 @@ mcp:
 
 # Vibe-Trading
 
-Professional finance research toolkit with AI-powered backtesting (9 engines), multi-agent teams, 89 specialized skills, the **Alpha Zoo** (462 pre-built quantitative alphas across qlib158 / alpha101 / gtja191 / academic / fundamental with one-line CLI benchmarking), and the Shadow Account loop — extract your implicit trading rules from a journal, backtest them across A股/港股/美股/crypto, then see where they would have served you better.
+Professional finance research toolkit with AI-powered backtesting (7 engines), multi-agent teams, 89 specialized skills, the **Alpha Zoo** (462 pre-built quantitative alphas across qlib158 / alpha101 / gtja191 / academic / fundamental with one-line CLI benchmarking), and the Shadow Account loop — extract your implicit trading rules from a journal, backtest them across A股/港股/美股/crypto, then see where they would have served you better.
 
 ## Setup
 
@@ -74,11 +74,9 @@ Feed a CSV broker export (同花顺 / 东财 / 富途 / generic), and the agent 
 5. `scan_shadow_signals` — list today's symbols that match your shadow's entry cadence (research only).
 
 ### Backtesting
-Create and run quantitative strategies across 9 engines (ChinaA, GlobalEquity, IndiaEquity, KoreaEquity, Crypto, ChinaFutures, GlobalFutures, Forex + options) with 24 market-data sources (auto-detect + ordered fallback):
+Create and run quantitative strategies across 7 engines (ChinaA, GlobalEquity, Crypto, ChinaFutures, GlobalFutures, Forex + options) with 22 market-data sources (auto-detect + ordered fallback):
 - **HK/US equities** via yfinance / stooq / yahoo (free, no API key); optionally via **Longbridge** historical OHLCV (`longbridge`, requires the optional SDK and `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN`). To force it for a run, set `"source": "longbridge"` in `config.json`.
 - **Canada equities (TSX/TSXV)** via yahoo / yfinance using Yahoo's canonical `<TICKER>.TO` (TSX, e.g. `TD.TO`) or `<TICKER>.V` (TSXV, e.g. `PNG.V`) suffixes — free, no API key. The GlobalEquity engine uses CAD identity, whole-share orders, configurable Canadian commission/slippage, and the TSX/TSXV price-increment grid.
-- **India equities (NSE/BSE)** via yahoo / yfinance using `<SYMBOL>.NS` (NSE, e.g. `RELIANCE.NS`) or `<SCRIP>.BO` (BSE, e.g. `500325.BO`) — free, no API key. The `IndiaEquityEngine` models T+1 delivery, no overnight shorts (set `allow_short` for intraday), configurable circuit bands, 1-share lots, and the STT/stamp-duty/exchange/GST cost stack. Optionally back-fill from your live broker via the `india_broker` source (Shoonya/Dhan; requires broker login).
-- **Korea equities (KRX: KOSPI/KOSDAQ)** via pykrx using `<CODE>.KS` (KOSPI, e.g. `005930.KS`) or `<CODE>.KQ` (KOSDAQ, e.g. `247540.KQ`) — free, no API key (`pip install "vibe-trading-ai[krx]"`; yahoo/yfinance fallback needs no extra). pykrx serves **daily bars only** (an intraday request falls through to another source) and its adjusted series is Naver-backed rather than a verbatim KRX print. The `KoreaEquityEngine` models same-day round trips (no T+1), the ±30% daily price limit measured from the previous close and quantized to the KRX tick grid, tick-rounded fills, the 0.20% sell-side transaction tax (2026 rate), and 1-share lots. It is **long-only**: `allow_short` is refused, because KRX covered-short and uptick rules cannot be enforced on daily bars.
 - **Cryptocurrency** via OKX or CCXT/100+ exchanges (free, no API key)
 - **China A-shares** via AKShare / baostock / tencent / sina / eastmoney / mootdx (free, no API key) — `TUSHARE_TOKEN` optional for premium quality
 - **Futures, forex, macro** via AKShare (free, no API key)
@@ -87,7 +85,7 @@ Create and run quantitative strategies across 9 engines (ChinaA, GlobalEquity, I
 - **Premium cross-market data** via QVeris (optional API key)
 - **Premium US data** via optional-key finnhub / alphavantage / tiingo / fmp (graceful fallback to free sources)
 
-Factors: the Alpha101 and QLib158 zoos are tagged for the `equity_in` and `equity_kr` universes, so they compute on NSE/BSE and KRX bars (the GTJA191 zoo stays China-only). Live/paper India trading uses the Shoonya / Dhan connectors (paper + read-only live; live order placement is structurally disabled because those brokers expose no paper/live switch).
+Factors: the enabled universes are China, US, Hong Kong, crypto, and futures. India and Korea universes are disabled in this personal edition.
 
 Example workflow:
 1. Use `list_skills()` to discover strategy patterns
@@ -96,7 +94,7 @@ Example workflow:
 4. Use `backtest()` to run and get metrics (Sharpe, return, drawdown, etc.)
 
 ### Multi-Agent Swarm Teams
-30 pre-built agent teams for complex research:
+31 pre-built agent teams for complex research:
 - **Investment Committee**: bull/bear debate → risk review → PM decision
 - **Global Equities Desk**: A-share + HK/US + crypto → global strategist
 - **Crypto Trading Desk**: funding/basis + liquidation + flow → risk manager
@@ -131,7 +129,7 @@ Comprehensive knowledge base covering:
 
 Use `load_skill(name)` to access full methodology docs with code templates.
 
-## Available MCP Tools (70)
+## Available MCP Tools (62)
 
 | Tool | Description | API Key |
 |------|-------------|---------|
@@ -148,7 +146,7 @@ Use `load_skill(name)` to access full methodology docs with code templates.
 | `analyze_options` | Black-Scholes price + Greeks | None |
 | `analyze_options_payoff` | Multi-leg expiry payoff + spot/IV scenarios | None |
 | `pattern_recognition` | Detect chart patterns (H&S, double top, etc.) | None |
-| `get_market_data` | Fetch OHLCV data (auto-detect + ordered fallback across 24 sources) | None* |
+| `get_market_data` | Fetch OHLCV data (auto-detect + ordered fallback across 22 sources) | None* |
 | `get_fund_flow` | Capital fund-flow (main/retail net inflow) | None* |
 | `get_dragon_tiger` | Dragon-tiger list (龙虎榜) top buyer/seller seats | None* |
 | `get_northbound_flow` | Northbound (Stock Connect) net flow | None* |
@@ -187,14 +185,6 @@ Use `load_skill(name)` to access full methodology docs with code templates.
 | `list_runs` | List recent swarm runs with metadata | None |
 | `reap_stale_runs` | Finalize stale swarm runs | None |
 | `retry_run` | Re-run a failed/stale swarm run | LLM key |
-| `trading_connections` | List selectable connector profiles | None |
-| `trading_select_connection` | Select the default connector profile | None |
-| `trading_check` | Check connector readiness | Connector app/OAuth |
-| `trading_account` | Read account summary from selected connector | Connector app/OAuth |
-| `trading_positions` | Read positions from selected connector | Connector app/OAuth |
-| `trading_orders` | Read open orders from selected connector | Connector app/OAuth |
-| `trading_quote` | Read a quote snapshot from selected connector | Connector app/OAuth |
-| `trading_history` | Read historical bars from selected connector | Connector app/OAuth |
 | `get_institutional_holdings` | SEC 13F-HR holdings by manager/ticker + quarter-over-quarter position diffs | None |
 | `etf_holdings` | ETF look-through — SEC N-PORT (US) and full-book A-share fund reports | None |
 | `prediction_market` | Event-contract search/market/history as labelled implied probability | None |
@@ -206,7 +196,7 @@ Use `load_skill(name)` to access full methodology docs with code templates.
 | `technical_indicators` | RSI / MACD / Bollinger / SMA / EMA through the existing loaders | None* |
 | `get_fundamentals` | PIT-safe SEC fundamentals panels (filed-date anchored) | None |
 
-<sub>*A-share symbols require `TUSHARE_TOKEN`. HK/US/Canada/crypto are free. Trading connector rows use the selected connector profile, e.g. IBKR local TWS/Gateway or Robinhood MCP OAuth.</sub>
+<sub>*A-share symbols require `TUSHARE_TOKEN`. HK/US/Canada/crypto are free.</sub>
 
 ## Quick Start
 
@@ -239,7 +229,7 @@ Create `~/.vibe-trading/agent.json`:
 }
 ```
 
-Ordinary external MCP tools appear automatically in every `vibe-trading run` / `vibe-trading chat` call. They are injected after local tools under stable names: `mcp_<server>_<tool>`. Live-broker MCP servers are consumed through the connector-scoped `trading_*` tools instead of exposing raw `mcp_<broker>_*` tools to the agent.
+Ordinary external MCP tools appear automatically in every `vibe-trading run` / `vibe-trading chat` call. They are injected after local tools under stable names: `mcp_<server>_<tool>`. Live-broker MCP servers are disabled in this personal edition.
 
 ### Official IBKR MCP read-only probe
 

@@ -31,9 +31,8 @@ def _client(
     config = channel_config.load_channels_config(config_path)
     config.update(
         {
-            "websocket": {"enabled": False, "allow_from": ["*"]},
-            "telegram": {"enabled": False},
-            "slack": {"enabled": True},
+            "feishu": {"enabled": False},
+            "weixin": {"enabled": False},
         }
     )
 
@@ -46,7 +45,7 @@ def _client(
     return TestClient(api_server.app, client=("127.0.0.1", 50000))
 
 
-def test_channels_status_reports_all_configured_adapters(tmp_path: Path, monkeypatch) -> None:
+def test_channels_status_reports_only_personal_edition_adapters(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
 
     response = client.get("/channels/status")
@@ -54,10 +53,9 @@ def test_channels_status_reports_all_configured_adapters(tmp_path: Path, monkeyp
     assert response.status_code == 200
     payload = response.json()
     assert payload["running"] is False
-    assert payload["channels"]["websocket"]["configured"] is True
-    assert payload["channels"]["telegram"]["enabled"] is False
-    assert payload["channels"]["slack"]["enabled"] is True
-    assert "available" in payload["channels"]["slack"]
+    assert set(payload["channels"]) == {"feishu", "weixin"}
+    assert payload["channels"]["feishu"]["configured"] is True
+    assert payload["channels"]["weixin"]["enabled"] is False
     assert "reply_timeout_s" not in payload["channels"]
     assert "send_max_retries" not in payload["channels"]
     assert api_server._channel_runtime is not None
@@ -93,9 +91,21 @@ def test_channels_pairing_command_uses_shared_store(tmp_path: Path, monkeypatch)
 
     response = client.post(
         "/channels/pairing/command",
-        json={"channel": "telegram", "command": "list"},
+        json={"channel": "feishu", "command": "list"},
     )
 
     assert response.status_code == 200
-    assert response.json()["channel"] == "telegram"
+    assert response.json()["channel"] == "feishu"
     assert "No pending pairing requests" in response.json()["reply"]
+
+
+def test_channels_pairing_rejects_removed_adapter(tmp_path: Path, monkeypatch) -> None:
+    client = _client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/channels/pairing/command",
+        json={"channel": "telegram", "command": "list"},
+    )
+
+    assert response.status_code == 422
+    assert "supported" in response.json()["detail"]

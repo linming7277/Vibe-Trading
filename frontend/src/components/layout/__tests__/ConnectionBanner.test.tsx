@@ -3,16 +3,6 @@ import i18n from "../../../i18n";
 import { ConnectionBanner } from "../ConnectionBanner";
 
 describe("ConnectionBanner", () => {
-  beforeAll(() => {
-    i18n.addResourceBundle(
-      "en",
-      "translation",
-      { connection: { reload: "Reload" } },
-      true,
-      true,
-    );
-  });
-
   it("renders nothing when status is connected", () => {
     const { container } = render(<ConnectionBanner status="connected" />);
     expect(container.innerHTML).toBe("");
@@ -25,13 +15,12 @@ describe("ConnectionBanner", () => {
 
   it("shows the calm reconnecting message regardless of attempt count", () => {
     render(<ConnectionBanner status="reconnecting" retryAttempt={3} />);
-    expect(screen.getByText(/reconnecting/i)).toBeInTheDocument();
-    expect(screen.getByText(/Reconnecting/)).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("connection.reconnecting"))).toBeInTheDocument();
   });
 
   it("renders the same message when retryAttempt is not provided", () => {
     render(<ConnectionBanner status="reconnecting" />);
-    expect(screen.getByText(/Reconnecting/)).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("connection.reconnecting"))).toBeInTheDocument();
   });
 
   it("has warning styling", () => {
@@ -44,8 +33,8 @@ describe("ConnectionBanner", () => {
   it("switches to the terminal state after five reconnect attempts", () => {
     render(<ConnectionBanner status="reconnecting" retryAttempt={5} />);
 
-    expect(screen.getByText(/Connection lost/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("connection.disconnected"))).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: i18n.t("connection.reload") })).toBeInTheDocument();
     expect(document.querySelector(".animate-spin")).not.toBeInTheDocument();
   });
 });

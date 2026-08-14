@@ -1,4 +1,4 @@
-"""Interactive CLI front door for Vibe-Trading.
+"""恒值投资交互式 CLI 入口。
 
 Responsibilities:
 
@@ -35,56 +35,6 @@ from cli.onboard import run_onboarding
 from cli.theme import Theme, get_console
 
 
-def _register_live_slash_commands() -> None:
-    """Surface connector live-trading slash commands in the shared registry.
-
-    Discoverability fix (SPEC.md Consent §4 + §9 audit): ``/connector``,
-    ``/halt`` and ``/resume`` are privileged kill-switch / runner surface actions intercepted
-    in the REPL input path (never dispatched to the model), so they were absent
-    from the slash registry — meaning ``/help``, the typeahead completer, and the
-    fuzzy matcher never listed them. We append them here, at this module's import
-    time, which runs on every interactive startup *before* the lazily-imported
-    ``cli.commands.help`` / ``cli.completer`` first read the registry. Both of
-    those read ``slash_router.SLASH_COMMANDS`` (help) / call ``match_commands``
-    (completer) which resolve the connector module attribute, so the single
-    reassignment here surfaces the commands in all three places.
-
-    The registry is a tuple of frozen dataclasses, so we build a NEW tuple rather
-    than mutate in place. Registration is idempotent — re-import (e.g. in tests)
-    never duplicates rows.
-    """
-    from cli.commands import slash_router
-
-    existing = {cmd.name for cmd in slash_router.SLASH_COMMANDS}
-    additions = (
-        slash_router.Command(
-            "connector", "Trading connector profiles (status / start / halt)", "cli.main"
-        ),
-        slash_router.Command(
-            "halt", "Kill switch — halt ALL live trading now", "cli.main"
-        ),
-        slash_router.Command(
-            "resume", "Clear the kill switch (re-enable live trading)", "cli.main"
-        ),
-    )
-    new = tuple(cmd for cmd in additions if cmd.name not in existing)
-    if not new:
-        return
-    # Insert the connector group just before ``quit`` (the conventional last row) so
-    # the kill switch sits with the other safety-relevant commands.
-    commands = list(slash_router.SLASH_COMMANDS)
-    quit_idx = next(
-        (i for i, c in enumerate(commands) if c.name == "quit"), len(commands)
-    )
-    commands[quit_idx:quit_idx] = list(new)
-    slash_router.SLASH_COMMANDS = tuple(commands)
-    # ``/stop`` is the kill-switch alias of ``/halt`` (SPEC Consent §4) so the
-    # fuzzy matcher / find_exact resolve it.
-    if "stop" not in slash_router._ALIASES:
-        slash_router._ALIASES = {**slash_router._ALIASES, "stop": "halt"}
-
-
-_register_live_slash_commands()
 # QVERIS-INTEGRATION
 def _register_data_slash_commands() -> None:  # QVERIS-INTEGRATION
     """Surface data routing mode in the shared slash registry."""  # QVERIS-INTEGRATION
@@ -1397,7 +1347,7 @@ def _build_typer_app():  # type: ignore[no-untyped-def]
     app = typer.Typer(
         add_completion=False,
         no_args_is_help=False,
-        help="Vibe-Trading — natural-language finance research agent.",
+        help="恒值投资——智能投资研究工具。",
         rich_markup_mode=None,
     )
 

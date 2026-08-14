@@ -13,7 +13,6 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   Download,
-  Landmark,
   Loader2,
   Paperclip,
   Plus,
@@ -26,15 +25,6 @@ import {
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { AgentActivity } from "@/stores/agent";
-import {
-  LiveRuntimeControl,
-  LiveRuntimeStatus,
-} from "@/components/chat/LiveRuntimePanel";
-
-const CONNECTOR_CHECK_PROMPT =
-  "List my trading connector profiles, show which one is selected, then check that selected connector. If it is not ready, tell me exactly what setup step is missing. Do not place or modify orders.";
-const CONNECTOR_PORTFOLIO_PROMPT =
-  "Use the selected trading connector profile to summarize my account, positions, concentration, cash, and portfolio risk. Do not place or modify orders.";
 
 const ACCEPTED_FILE_TYPES =
   ".pdf,.docx,.xlsx,.xls,.pptx,.csv,.tsv,.txt,.md,.log,.json,.yaml,.yml,.toml,.html,.xml,.rst,.png,.jpg,.jpeg,.gif,.bmp,.webp,.tiff";
@@ -211,7 +201,6 @@ export const Composer = memo(forwardRef<ComposerHandle, Props>(function Composer
         </div>
       )}
       {panels}
-      <LiveRuntimeStatus />
       {attachment && (
         <div className="flex items-center gap-1">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-medium">
@@ -229,7 +218,6 @@ export const Composer = memo(forwardRef<ComposerHandle, Props>(function Composer
           {t("agent.uploading")}
         </div>
       )}
-      <LiveRuntimeControl />
       <div className="flex items-end gap-2 rounded-2xl border border-border/60 bg-background p-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_8px_24px_-12px_rgba(0,0,0,0.12)] transition-shadow focus-within:ring-2 focus-within:ring-primary/25 dark:bg-card">
         <div className="relative" ref={uploadMenuRef}>
           <button
@@ -289,31 +277,6 @@ export const Composer = memo(forwardRef<ComposerHandle, Props>(function Composer
               >
                 <Users className="h-4 w-4" />
                 {t("agent.agentSwarm")}
-              </button>
-              <div className="border-t my-1" />
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setShowUploadMenu(false);
-                  submitPrompt(CONNECTOR_CHECK_PROMPT);
-                }}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
-              >
-                <Landmark className="h-4 w-4" />
-                {t("agent.checkConnector")}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setShowUploadMenu(false);
-                  submitPrompt(CONNECTOR_PORTFOLIO_PROMPT);
-                }}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
-              >
-                <Landmark className="h-4 w-4" />
-                {t("agent.analyzePortfolio")}
               </button>
             </div>
           )}

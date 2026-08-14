@@ -72,38 +72,20 @@ class FakeSessionService:
         return list(self.messages.get(session_id, []))
 
 
-def test_channel_manager_can_construct_websocket_with_default_gateway() -> None:
+def test_channel_manager_rejects_removed_websocket_adapter() -> None:
     bus = MessageBus()
     manager = ChannelManager(
         {"websocket": {"enabled": True, "host": "127.0.0.1", "port": 0, "allow_from": ["*"]}},
         bus,
     )
 
-    assert "websocket" in manager.channels
-    assert manager.channels["websocket"].name == "websocket"
+    assert "websocket" not in manager.channels
 
 
-def test_registry_reports_all_built_in_channels_with_dependency_recovery() -> None:
-    expected = {
-        "dingtalk",
-        "discord",
-        "email",
-        "feishu",
-        "matrix",
-        "mochat",
-        "msteams",
-        "napcat",
-        "qq",
-        "signal",
-        "slack",
-        "telegram",
-        "websocket",
-        "wecom",
-        "weixin",
-        "whatsapp",
-    }
+def test_registry_reports_only_personal_edition_channels() -> None:
+    expected = {"feishu", "weixin"}
 
-    assert expected.issubset(set(discover_channel_names()))
+    assert expected == set(discover_channel_names())
     assert {"config", "runtime"}.isdisjoint(set(discover_channel_names()))
 
     statuses = inspect_channels({"telegram": {"enabled": True}, "slack": {"enabled": True}})
@@ -114,6 +96,7 @@ def test_registry_reports_all_built_in_channels_with_dependency_recovery() -> No
         assert "install_hint" in statuses[name]
         assert "available" in statuses[name]
 
+    assert set(statuses) == expected
     missing = [item for item in statuses.values() if not item["available"]]
     assert all(item["install_hint"].startswith("pip install") for item in missing)
 
@@ -129,13 +112,13 @@ def test_registry_ignores_global_channel_settings() -> None:
         )
     )
 
-    assert "telegram" in statuses
+    assert "telegram" not in statuses
     assert "reply_timeout_s" not in statuses
     assert "send_max_retries" not in statuses
     assert "model_dump" not in statuses
 
 
-def test_channel_manager_status_includes_every_configured_adapter() -> None:
+def test_channel_manager_status_excludes_removed_configured_adapters() -> None:
     bus = MessageBus()
     manager = ChannelManager(
         {
@@ -152,16 +135,7 @@ def test_channel_manager_status_includes_every_configured_adapter() -> None:
 
     assert "send_max_retries" not in status
     assert "reply_timeout_s" not in status
-    assert status["websocket"]["loaded"] is True
-    assert status["websocket"]["enabled"] is True
-    assert status["telegram"]["configured"] is True
-    assert status["telegram"]["enabled"] is False
-    assert status["slack"]["configured"] is True
-    assert status["slack"]["enabled"] is True
-    assert "available" in status["slack"]
-    if not status["slack"]["loaded"]:
-        assert status["slack"]["error"]
-        assert status["slack"]["install_hint"].startswith("pip install")
+    assert set(status) == {"feishu", "weixin"}
 
 
 def test_registry_marks_lazy_sdk_adapter_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -178,18 +152,21 @@ def test_registry_marks_lazy_sdk_adapter_unavailable(monkeypatch: pytest.MonkeyP
 
 
 def test_channel_manager_skips_enabled_adapter_when_lazy_sdk_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    import src.channels.discord as discord_channel
+    import src.channels.feishu as feishu_channel
 
-    monkeypatch.setattr(discord_channel, "DISCORD_AVAILABLE", False)
+    monkeypatch.setattr(feishu_channel, "FEISHU_AVAILABLE", False)
 
-    manager = ChannelManager({"discord": {"enabled": True, "token": "x"}}, MessageBus())
-    status = manager.get_status()["discord"]
+    manager = ChannelManager(
+        {"feishu": {"enabled": True, "app_id": "x", "app_secret": "y"}},
+        MessageBus(),
+    )
+    status = manager.get_status()["feishu"]
 
-    assert "discord" not in manager.channels
+    assert "feishu" not in manager.channels
     assert status["enabled"] is True
     assert status["available"] is False
     assert status["loaded"] is False
-    assert status["install_hint"] == "pip install 'vibe-trading-ai[discord]'"
+    assert status["install_hint"] == "pip install 'vibe-trading-ai[feishu]'"
 
 
 def test_websocket_turn_wall_accepts_optional_chat_id() -> None:

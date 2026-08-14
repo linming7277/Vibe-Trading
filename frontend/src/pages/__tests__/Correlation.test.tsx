@@ -32,14 +32,14 @@ describe("Correlation page", () => {
     apiMock.getCorrelation.mockReturnValueOnce(pending.promise);
 
     render(<Correlation />);
-    fireEvent.click(screen.getByRole("button", { name: "Compute" }));
+    fireEvent.click(screen.getByRole("button", { name: "计算" }));
     expect(await screen.findByTestId("correlation-result")).toHaveTextContent("OLD");
 
-    fireEvent.click(screen.getByRole("button", { name: "Compute" }));
+    fireEvent.click(screen.getByRole("button", { name: "计算" }));
     expect(screen.queryByTestId("correlation-result")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "AAPL,SPY" } });
-    expect(screen.getByRole("button", { name: "Compute" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "计算" })).toBeEnabled();
 
     await act(async () => {
       pending.resolve({ labels: ["STALE"], matrix: [[1]] });

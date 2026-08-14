@@ -1,22 +1,7 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-
-const PROXY_PATHS = [
-  "/auth",
-  "/sessions",
-  "/swarm/presets",
-  "/swarm/runs",
-  "/qveris",
-  "/settings/llm",
-  "/settings/data-sources",
-  "/channels",
-  "/mandate",
-  "/live",
-  "/upload",
-  "/shadow-reports",
-  "/scheduled-runs",
-];
+import { API_PROXY_PATHS } from "./proxyPaths";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -39,13 +24,14 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5899,
       proxy: {
-        ...Object.fromEntries(PROXY_PATHS.map((p) => [p, apiProxy])),
+        ...Object.fromEntries(API_PROXY_PATHS.map((p) => [p, apiProxy])),
         // SPA RunDetail page — only the two-segment ``/runs/{id}``
         // form should fall back to ``index.html`` on browser navigation.
         // ``/runs/{id}/code`` and ``/runs/{id}/pine`` are API-only and
         // must keep proxying to the backend even when Accept is text/html.
         "^/runs/[^/]+/?$": apiProxyWithHtmlFallback,
         "/runs": apiProxy,
+        "/reports": apiProxyWithHtmlFallback,
         "/correlation": apiProxyWithHtmlFallback,
         "^/alpha(?:/|$)": apiProxy,
       },

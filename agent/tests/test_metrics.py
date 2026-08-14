@@ -158,13 +158,6 @@ class TestBarsPerYear:
         assert calc_bars_per_year("1D", "longbridge") == 252
         assert calc_bars_per_year("1m", "longbridge") == 252 * 390
 
-    # Indian equity (252-day, 375-min session)
-    def test_india_broker(self) -> None:
-        assert calc_bars_per_year("1D", "india_broker") == 252
-        assert calc_bars_per_year("1m", "india_broker") == 252 * 375
-        assert calc_bars_per_year("5m", "india_broker") == 252 * 75
-        assert calc_bars_per_year("1H", "india_broker") == 252 * 7
-
     # Verify the default for every VALID_SOURCES entry is not the misleading 252×1 at intraday
     def test_no_intraday_source_falls_to_default(self) -> None:
         """Every entry in VALID_SOURCES must have a trading-days lookup."""

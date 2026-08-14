@@ -64,6 +64,21 @@ async def _dispatch_scheduled_research_job(job) -> None:
     does not wait for that agent run to reach a terminal status. The executor's
     ``COMPLETED`` state for this dispatch path means "successfully enqueued."
     """
+    if job.config.get("value_entry_monitor"):
+        from src.value_workspace.service import ValueWorkspaceService
+
+        service = ValueWorkspaceService()
+        try:
+            events = service.evaluate_monitors()
+            host = _sys.modules.get("api_server") or _sys.modules.get("agent.api_server")
+            try:
+                runtime = host._get_channel_runtime() if host else None
+            except Exception:
+                runtime = None
+            await service.deliver_notifications(events, getattr(runtime, "manager", None))
+        finally:
+            service.close()
+        return
     host = _sys.modules.get("api_server") or _sys.modules.get("agent.api_server")
     svc = host._get_session_service()
     if not svc:
@@ -97,6 +112,9 @@ def _get_scheduled_research_executor():
 
 def _start_scheduled_research_executor() -> None:
     """Start scheduled research execution when explicitly enabled."""
+    from src.research_workspace.schedules import ensure_workspace_schedules
+
+    ensure_workspace_schedules(_get_scheduled_research_store())
     if not _scheduled_research_scheduler_enabled():
         return
     _get_scheduled_research_executor().start()

@@ -67,6 +67,7 @@ except Exception:  # pragma: no cover — rich is a project dep, fallback only
 
 from src.factors.compare_runner import SORT_KEYS as _COMPARE_SORT_KEYS, compare_alphas
 from src.factors.registry import Registry, RegistryError
+from src.config.personal import visible_factor_universes
 
 
 # Resolve repo root once: this file lives at
@@ -86,8 +87,7 @@ _UNIVERSE_CHOICES = ["csi300", "sp500", "btc-usdt"]
 # ``src.factors.registry.Universe`` and the REST allowlist in
 # ``src.api.alpha_routes._VALID_UNIVERSES``.
 _LIST_UNIVERSE_CHOICES = [
-    "equity_us", "equity_cn", "equity_hk", "equity_in", "equity_kr",
-    "crypto", "futures",
+    "equity_us", "equity_cn", "equity_hk", "crypto", "futures",
 ]
 # Benchmark universe -> the metadata universe its panel represents, so
 # ``alpha list --universe csi300`` keeps working (it used to filter on a name no
@@ -191,7 +191,7 @@ def cmd_alpha_list(args: argparse.Namespace) -> int:
                         "id": alpha.id,
                         "zoo": alpha.zoo,
                         "theme": meta.get("theme", []) or [],
-                        "universe": meta.get("universe", []) or [],
+                        "universe": visible_factor_universes(meta.get("universe", []) or []),
                         "decay_horizon": meta.get("decay_horizon"),
                     }
                 )
@@ -217,7 +217,7 @@ def cmd_alpha_list(args: argparse.Namespace) -> int:
                     alpha.id,
                     alpha.zoo,
                     ", ".join(meta.get("theme", []) or []),
-                    ", ".join(meta.get("universe", []) or []),
+                    ", ".join(visible_factor_universes(meta.get("universe", []) or [])),
                     meta.get("nickname") or "",
                 )
             _console.print(table)
@@ -230,7 +230,7 @@ def cmd_alpha_list(args: argparse.Namespace) -> int:
                 print(
                     f"{alpha.id}\t{alpha.zoo}\t"
                     f"{','.join(meta.get('theme', []) or [])}\t"
-                    f"{','.join(meta.get('universe', []) or [])}\t"
+                    f"{','.join(visible_factor_universes(meta.get('universe', []) or []))}\t"
                     f"{meta.get('nickname') or ''}"
                 )
             if truncated:
@@ -303,9 +303,9 @@ def cmd_alpha_show(args: argparse.Namespace) -> int:
             else f"theme: {', '.join(meta.get('theme', []) or [])}"
         )
         _print(
-            f"[bold]universe[/bold]: {', '.join(meta.get('universe', []) or [])}"
+            f"[bold]universe[/bold]: {', '.join(visible_factor_universes(meta.get('universe', []) or []))}"
             if _console
-            else f"universe: {', '.join(meta.get('universe', []) or [])}"
+            else f"universe: {', '.join(visible_factor_universes(meta.get('universe', []) or []))}"
         )
         if not brief:
             _print(

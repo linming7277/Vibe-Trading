@@ -16,6 +16,7 @@ import logging
 from typing import Any
 
 from src.agent.tools import BaseTool
+from src.config.personal import DISABLED_FACTOR_UNIVERSES, visible_factor_universes
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,11 @@ def _alpha_summary(registry: Any, alpha_id: str) -> dict[str, Any]:
     out: dict[str, Any] = {"id": alpha.id, "zoo": alpha.zoo}
     for field in _META_FIELDS_EXPOSED:
         if field in meta:
-            out[field] = meta[field]
+            out[field] = (
+                visible_factor_universes(meta[field])
+                if field == "universe"
+                else meta[field]
+            )
     return out
 
 
@@ -73,6 +78,8 @@ def _action_list(
     universe: str | None,
     limit: int,
 ) -> dict[str, Any]:
+    if universe in DISABLED_FACTOR_UNIVERSES:
+        raise ValueError(f"Factor universe {universe!r} is disabled in this personal edition")
     all_ids = registry.list(zoo=zoo, theme=theme, universe=universe)
     total = len(all_ids)
     truncated = total > limit

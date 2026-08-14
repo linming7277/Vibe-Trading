@@ -32,39 +32,19 @@ function makeStatus(overrides: Partial<SwarmRunStatus> = {}): SwarmRunStatus {
 
 describe("SwarmStatusCard", () => {
   beforeAll(async () => {
-    i18n.addResourceBundle(
-      "en",
-      "translation",
-      {
-        swarmStatus: {
-          detailsUnavailable: "details unavailable",
-          teamStarting:
-            "The team is spinning up — first updates in a few seconds…",
-        },
-        swarm: {
-          presets: {
-            investment_committee: "Investment Committee Review",
-            quant_strategy_desk: "Quant Strategy Desk",
-            value_investing_committee: "Value Investing Committee",
-          },
-        },
-      },
-      true,
-      true,
-    );
-    await i18n.changeLanguage("en");
+    await i18n.changeLanguage("zh-CN");
   });
 
   it("renders agent status rows", () => {
     const html = renderToStaticMarkup(<SwarmStatusCard status={makeStatus()} />);
 
     expect(html).toContain("Demo team");
-    expect(html).toContain("Running");
-    expect(html).toContain("Waiting");
-    expect(html).toContain("Done");
-    expect(html).toContain("Failed");
-    expect(html).toContain("Blocked");
-    expect(html).toContain("Retrying");
+    expect(html).toContain("运行中");
+    expect(html).toContain("等待中");
+    expect(html).toContain("已完成");
+    expect(html).toContain("失败");
+    expect(html).toContain("已阻塞");
+    expect(html).toContain("重试中");
     expect(html).toContain("checking exposure");
     expect(html).toContain("missing data");
   });
@@ -73,7 +53,7 @@ describe("SwarmStatusCard", () => {
     const html = renderToStaticMarkup(<SwarmStatusCard status={makeStatus({ agents: [] })} />);
 
     expect(html).toContain(
-      "The team is spinning up — first updates in a few seconds…",
+      "智能体团队正在启动，稍等几秒就有第一批进展…",
     );
   });
 
@@ -100,12 +80,12 @@ describe("SwarmStatusCard", () => {
   it("keeps determinate counts when real totals are available", () => {
     const html = renderToStaticMarkup(<SwarmStatusCard status={makeStatus()} />);
 
-    expect(html).toContain("3/6 agents");
-    expect(html).toContain("Round 1 of 2");
+    expect(html).toContain("3/6 个智能体");
+    expect(html).toContain("第 1/2 轮");
     expect(html).toContain('data-layer-state="determinate"');
     expect(html).toContain('role="progressbar"');
     expect(html).toContain('aria-valuemin="0"');
-    expect(html).toContain('aria-valuetext="Round 1 of 2"');
+    expect(html).toContain('aria-valuetext="第 1/2 轮"');
     expect(html).toContain("grid h-1.5 min-w-0 gap-1");
     expect(html).not.toContain("grid h-2 min-w-0 gap-1");
     expect(html).not.toContain(
@@ -125,10 +105,10 @@ describe("SwarmStatusCard", () => {
       />,
     );
 
-    expect(html).toContain("Completed — details unavailable");
-    expect(html).not.toContain("Assembling team");
-    expect(html).not.toContain("Preparing layers");
-    expect(html).not.toContain("The team is spinning up");
+    expect(html).toContain("已完成 — 暂无详细信息");
+    expect(html).not.toContain("正在组建智能体团队");
+    expect(html).not.toContain("正在安排分工顺序");
+    expect(html).not.toContain("智能体团队正在启动");
     expect(html).not.toContain("animate-pulse");
     expect(html).not.toContain("pulse-slide");
     expect(html).not.toContain("<progress");
@@ -144,7 +124,7 @@ describe("SwarmStatusCard", () => {
       <SwarmStatusCard status={makeStatus({ preset: "custom_alpha_team" })} />,
     );
 
-    expect(translated).toContain("Value Investing Committee");
+    expect(translated).toContain("价值投资委员会");
     expect(translated).not.toContain("value_investing_committee");
     expect(custom).toContain("Custom alpha team");
   });

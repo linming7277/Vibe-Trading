@@ -17,8 +17,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 20% 10%;
 
-    /* Brand accent */
-    --primary: 27 90% 52%;
+    /* 恒值投资：克制的机构蓝，适合长时间阅读与驾驶舱状态编码。 */
+    --primary: 222 78% 52%;
     --primary-foreground: 0 0% 100%;
 
     --muted: 220 14% 92%;
@@ -31,6 +31,9 @@
     /* Semantic colors */
     --success: 142 71% 45%;
     --danger: 0 84% 60%;
+    /* Chinese securities convention: red rises, green falls. */
+    --market-up: 0 84% 60%;
+    --market-down: 142 71% 36%;
     --warning: 38 92% 50%;
     --info: 217 91% 60%;
 
@@ -54,7 +57,7 @@
     --popover: 220 18% 12%;         /* surface-1.5 (slightly lighter than card) */
     --popover-foreground: 220 10% 93%;
 
-    --primary: 27 90% 52%;
+    --primary: 217 91% 64%;
     --primary-foreground: 0 0% 100%;
 
     --muted: 220 16% 16%;           /* surface-2 */
@@ -66,6 +69,8 @@
     /* Semantic colors */
     --success: 142 71% 45%;
     --danger: 0 62% 50%;
+    --market-up: 0 72% 58%;
+    --market-down: 142 61% 48%;
     --warning: 38 92% 50%;
     --info: 217 91% 60%;
 

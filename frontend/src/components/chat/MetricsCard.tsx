@@ -4,9 +4,9 @@ import { cn } from "@/lib/utils";
 import { getMetricLabel, DISPLAY_ORDER, formatMetricVal, metricSentiment } from "@/lib/formatters";
 
 const SENTIMENT = {
-  positive: "text-success",
+  positive: "text-market-up",
   neutral: "text-foreground",
-  negative: "text-danger",
+  negative: "text-market-down",
 } as const;
 
 // Verdict must never be color-only: metricSentiment is a threshold judgment

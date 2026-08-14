@@ -1,5 +1,5 @@
 {
-  "name": "vibe-trading-frontend",
+  "name": "hengzhi-investment-frontend",
   "private": true,
   "version": "0.1.13",
   "type": "module",
@@ -21,7 +21,6 @@
     "echarts": "^6.1.0",
     "highlight.js": "^11.11.1",
     "i18next": "^26.3.6",
-    "i18next-browser-languagedetector": "^8.2.1",
     "katex": "^0.18.1",
     "lucide-react": "^1.28.0",
     "react": "^19.2.8",

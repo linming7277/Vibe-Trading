@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { Compare } from "../Compare";
 import type { RunData } from "@/lib/api";
 
@@ -27,6 +28,10 @@ const runs = [
   { run_id: "new", prompt: "New", status: "success" },
 ];
 
+function renderCompare() {
+  return render(<MemoryRouter><Compare /></MemoryRouter>);
+}
+
 describe("Compare page", () => {
   beforeEach(() => {
     apiMock.listRuns.mockReset();
@@ -44,7 +49,7 @@ describe("Compare page", () => {
       return Promise.resolve({ status: "success", run_id: runId });
     });
 
-    render(<Compare />);
+    renderCompare();
     const selectors = await screen.findAllByRole("combobox");
     await waitFor(() => expect(selectors[0]).toHaveValue("old"));
     fireEvent.change(selectors[0], { target: { value: "new" } });
@@ -73,7 +78,7 @@ describe("Compare page", () => {
       return Promise.resolve({ status: "success", run_id: runId });
     });
 
-    const { container } = render(<Compare />);
+    const { container } = renderCompare();
     const selectors = await screen.findAllByRole("combobox");
     await waitFor(() => expect(selectors[0]).toHaveValue("old"));
     fireEvent.change(selectors[0], { target: { value: "new" } });
@@ -85,7 +90,7 @@ describe("Compare page", () => {
 
     expect(toastMock.error).not.toHaveBeenCalled();
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
-    expect(screen.queryByText("Select two runs to compare their metrics.")).not.toBeInTheDocument();
+    expect(screen.queryByText("选择两次运行以对比其指标。")).not.toBeInTheDocument();
 
     await act(async () => {
       newRequest.resolve({ status: "success", run_id: "new", metrics: { total_return: 0.2 } });
@@ -103,11 +108,11 @@ describe("Compare page", () => {
         : { total_return: 0.1, volatility: 0.1 },
     }));
 
-    render(<Compare />);
+    renderCompare();
 
-    expect(screen.getByRole("heading", { level: 1, name: "Strategy Comparison" })).toHaveClass("text-2xl", "font-semibold");
-    expect(await screen.findByText("Better:")).toHaveClass("sr-only");
-    expect(screen.getByText("Worse:")).toHaveClass("sr-only");
+    expect(screen.getByRole("heading", { level: 1, name: "策略对比" })).toHaveClass("text-2xl", "font-semibold");
+    expect(await screen.findByText(/表现更优/)).toHaveClass("sr-only");
+    expect(screen.getByText(/表现更差/)).toHaveClass("sr-only");
     expect(screen.getByText("\u2191")).toHaveAttribute("aria-hidden", "true");
     expect(screen.getByText("\u2193")).toHaveAttribute("aria-hidden", "true");
     expect(screen.getByRole("table").parentElement).toHaveClass("overflow-x-auto");

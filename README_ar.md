@@ -29,8 +29,6 @@
 </p>
 
 <p align="center">
-  <a href="https://vibetrading.wiki/">الموقع</a> &nbsp;&middot;&nbsp;
-  <a href="https://vibetrading.wiki/docs/">الوثائق</a> &nbsp;&middot;&nbsp;
   <a href="#-الأخبار">الأخبار</a> &nbsp;&middot;&nbsp;
   <a href="#-الميزات-الرئيسية">الميزات</a> &nbsp;&middot;&nbsp;
   <a href="#-حساب-الظل">حساب الظل</a> &nbsp;&middot;&nbsp;
@@ -357,8 +355,6 @@ vibe-trading run -p "Analyze my trading behavior, extract my shadow strategy, an
 | `okx` · `ccxt` · `binance` | crypto | none | OKX + 100+ exchanges + Binance historical / USD-M perps |
 | `futu` | HK / A | OpenD | optional local FutuOpenD |
 | `mt5` | الفوركس / المعادن | طرفية MT5 | طرفية MetaTrader 5 محلية اختيارية (Windows) — تغذية وسيطك الفعلية كما هي، مع حلّ لواحق الرموز بأسلوب Exness تلقائياً |
-| `pykrx` | كوريا (KRX: KOSPI/KOSDAQ) | لا شيء | أشرطة يومية لـ KOSPI / KOSDAQ لرموز `.KS` / `.KQ` (إضافة `krx` اختيارية) |
-| `india_broker` | الهند (NSE/BSE) | تسجيل دخول الوسيط | قراءة فقط لأشرطة Shoonya / Dhan لرموز `.NS` / `.BO` (ذيل سلسلة التراجع) |
 | `local` | any | none | your own CSV / Parquet / DuckDB via `local:` prefix |
 
 **سلاسل التراجع (بحسب خطر حظر عنوان IP):**
@@ -366,8 +362,6 @@ vibe-trading run -p "Analyze my trading behavior, extract my shadow strategy, an
 - **أسهم A** → `tencent` · `mootdx` · `eastmoney` · `baostock` · `akshare` · `tushare` · `local`
 - **أسهم US** → `yahoo` · `stooq` · `sina` · `eastmoney` · `yfinance` · `tiingo` · `fmp` · `finnhub` · `alphavantage` · `longbridge` · `akshare` · `local`
 - **أسهم HK** → `tencent` · `eastmoney` · `yahoo` · `futu` · `akshare` · `yfinance` · `tushare` · `longbridge` · `local`
-- **أسهم الهند (NSE/BSE)** → `yahoo` · `yfinance` · `india_broker` · `local`
-- **كوريا (KOSPI/KOSDAQ)** → `pykrx` · `yahoo` · `yfinance` · `local`
 - **الكريبتو** → `okx` · `ccxt` · `binance` · `yfinance` · `local`
 - **الفوركس / المعادن** → `mt5` · `yfinance` · `akshare` · `local` &nbsp;·&nbsp; *(العقود الآجلة / الصناديق / الاقتصاد الكلي → `tushare`/`akshare` → `local`)*
 
@@ -499,7 +493,6 @@ LONGBRIDGE_ACCESS_TOKEN=...
 | **Futu** | HK / US / A | قراءة + ورقي + تداول حي محدود |
 | **eToro** | global | قراءة + ورقي + تداول حي محدود (Public API؛ مفاتيح demo لا تصل بنيويًا إلا إلى مسارات `/demo`، مع دعم تدفقات التداول بالنسخ) |
 | **MetaTrader 5** | forex / CFD | قراءة + ورقي + تداول حي محدود (بأسلوب Exness؛ حارس هوية demo ⇔ paper) |
-| **Longbridge** · **Dhan** · **Shoonya** | US / HK · الهند (NSE/BSE) | قراءة + ورقي فقط — لا يوجد مُميِّز وقت-تشغيل بين paper/live، لذا يُرفض تنفيذ الأوامر الحية بشكل صارم |
 | **Trading 212** | UK / EU | قراءة فقط بالكامل — تَرفض `place_order` / `cancel_order` حتى الورقي بشكل صارم |
 
 التمييز بين الورقي والحي هو **حارس بنيوي على مستوى وقت التشغيل لكل وسيط** (صيغة معرّف الحساب، أو فصل المضيف، أو علامة demo، أو بيئة التداول)، وليس مجرّد إعداد يمكن للوكيل تبديله. أي وسيط لا يكشف عن هذا المُميِّز يُحصَر في الورقي + القراءة فقط.
@@ -559,8 +552,6 @@ LONGBRIDGE_ACCESS_TOKEN=...
 |--------|-------|---------|
 | **ChinaA** | أسهم A | T+1، وحدود السعر، ومرشّح ما قبل ST |
 | **GlobalEquity** | US / HK / كندا | تداول في الجلسة نفسها؛ أحجام وخطوات سعرية وتكاليف حسب السوق |
-| **IndiaEquity** | الهند (NSE/BSE) | T+1، ونطاقات القاطع (circuit)، وحزمة تكاليف STT / الدمغة / SEBI / GST قابلة للتهيئة |
-| **KoreaEquity** | كوريا (KRX: KOSPI/KOSDAQ) | شراء فقط، ونطاق ±30% يُحكم عليه لحظة التنفيذ على شبكة الخطوة السعرية الموحّدة، وضريبة تداول 0.20% لعام 2026 |
 | **Crypto** | crypto فوري / عقود USD-M الدائمة | تسويات التمويل، وفصل سعر التنفيذ عن سعر العلامة |
 | **ChinaFutures** · **GlobalFutures** | العقود الآجلة | الهامش، ومضاعِفات العقد |
 | **Forex** | FX / المعادن | عبر مُحمّل `mt5` |
@@ -1593,7 +1584,7 @@ Vibe-Trading/
 │   │
 │   └── backtest/                   # Backtest engines
 │       ├── engines/                #   8 engines + composite cross-market engine + options_portfolio
-│       ├── loaders/                #   24 sources: tushare, okx, binance, yfinance, akshare, baostock, tencent, mootdx, ccxt, futu, pykrx, local, eastmoney, sina, stooq, yahoo, finnhub, alphavantage, tiingo, fmp, longbridge, mt5, qveris, india_broker
+│       ├── loaders/                #   22 sources: tushare, okx, binance, yfinance, akshare, baostock, tencent, mootdx, ccxt, futu, local, eastmoney, sina, stooq, yahoo, finnhub, alphavantage, tiingo, fmp, longbridge, mt5, qveris
 │       │   ├── base.py             #   DataLoader Protocol
 │       │   └── registry.py         #   Registry + auto-fallback chains
 │       └── optimizers/             #   MVO, equal vol, max div, risk parity

@@ -7,8 +7,10 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
+
+from src.config.personal import SUPPORTED_CHANNELS
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +110,9 @@ def register_channels_routes(
     async def channels_pairing_command(payload: ChannelPairingCommandRequest):
         """Run a pairing command against the shared pairing store."""
         from src.channels.pairing import handle_pairing_command
+
+        if payload.channel not in SUPPORTED_CHANNELS:
+            raise HTTPException(status_code=422, detail="Only Feishu and Weixin channels are supported")
 
         return {
             "channel": payload.channel,

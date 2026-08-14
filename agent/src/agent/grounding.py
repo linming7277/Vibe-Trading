@@ -357,7 +357,6 @@ _SOURCE_ALIASES = {
     "futu": ("futu", "富途"),
     "mootdx": ("mootdx", "通达信"),
     "okx": ("okx", "欧易"),
-    "pykrx": ("pykrx", "krx"),
     "sina": ("sina", "新浪"),
     "stooq": ("stooq",),
     "tencent": ("tencent", "腾讯"),
@@ -377,8 +376,6 @@ _CURRENCY_ALIASES = {
     # mean yen by it; adding a JPY venue means revisiting this entry.
     "CNY": ("cny", "cnh", "rmb", "人民币", "¥", "￥"),
     "HKD": ("hkd", "hk$", "港元", "港币"),
-    "KRW": ("krw", "韩元", "韩圜"),
-    "INR": ("inr", "印度卢比", "卢比"),
     "CAD": ("cad", "c$", "加元", "加拿大元"),
 }
 _SYMBOL_HEADERS = {"symbol", "ticker", "code", "标的", "代码", "证券代码"}
@@ -578,10 +575,6 @@ def _infer_venue(symbol: str) -> str | None:
         ".SZ": "shenzhen",
         ".BJ": "beijing",
         ".HK": "hong_kong",
-        ".KS": "kospi",
-        ".KQ": "kosdaq",
-        ".NS": "nse",
-        ".BO": "bse",
         ".FX": "forex",
         ".TO": "toronto",
         ".V": "tsx_venture",
@@ -605,10 +598,6 @@ def _infer_currency(symbol: str) -> str | None:
         ".SZ": "CNY",
         ".BJ": "CNY",
         ".HK": "HKD",
-        ".KS": "KRW",
-        ".KQ": "KRW",
-        ".NS": "INR",
-        ".BO": "INR",
         ".TO": "CAD",
         ".V": "CAD",
     }

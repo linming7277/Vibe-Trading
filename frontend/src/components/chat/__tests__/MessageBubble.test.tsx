@@ -30,10 +30,6 @@ function makeMsg(overrides: Partial<StoredAgentMessage> = {}): StoredAgentMessag
 }
 
 describe("MessageBubble", () => {
-  beforeAll(() => {
-    i18n.addResource("en", "translation", "messageBubble.retry", "Try again");
-  });
-
   describe("user messages", () => {
     it("renders user content in the bounded neutral bubble without an avatar or timestamp", () => {
       const { container } = render(
@@ -103,14 +99,14 @@ describe("MessageBubble", () => {
 
     it("exposes the copy action to keyboard focus and announces success", async () => {
       render(<MessageBubble msg={makeMsg({ type: "answer", content: "Analysis" })} />);
-      const copyButton = screen.getByRole("button", { name: "Copy" });
+      const copyButton = screen.getByRole("button", { name: i18n.t("messageBubble.copy") });
       expect(copyButton).toHaveClass("focus-visible:opacity-100");
 
       const user = userEvent.setup();
       await user.click(copyButton);
 
-      expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
-      expect(screen.getByRole("status")).toHaveTextContent("Copied");
+      expect(screen.getByRole("button", { name: i18n.t("messageBubble.copied") })).toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent(i18n.t("messageBubble.copied"));
     });
 
     it("shows the total response time without exposing token counts", () => {
@@ -150,12 +146,12 @@ describe("MessageBubble", () => {
           onRetry={vi.fn()}
         />,
       );
-      const hint = screen.getByText(/Timed out/);
-      const retry = screen.getByRole("button", { name: "Try again" });
+      const hint = screen.getByText(i18n.t("messageBubble.timeoutHint"));
+      const retry = screen.getByRole("button", { name: i18n.t("messageBubble.retry") });
 
       expect(hint.tagName).toBe("P");
       expect(hint).toHaveClass("text-muted-foreground");
-      expect(retry).toHaveTextContent("Try again");
+      expect(retry).toHaveTextContent(i18n.t("messageBubble.retry"));
       expect(retry).not.toHaveTextContent(hint.textContent ?? "");
       expect(hint.compareDocumentPosition(retry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });

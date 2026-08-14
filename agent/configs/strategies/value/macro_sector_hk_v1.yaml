@@ -1,0 +1,6 @@
+version: macro-sector-hk-v1.0.0
+market: HK
+taxonomy: HSI_SUBINDUSTRY
+axes: [growth, liquidity, inflation, policy, risk_appetite]
+default_sensitivity: 0
+sectors: {}

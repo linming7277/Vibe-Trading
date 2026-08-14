@@ -44,14 +44,14 @@ _INTERVAL_MAP = {
 def _is_supported(code: str) -> bool:
     """Return whether *code* is a symbol this loader handles.
 
-    Covers US/HK/India/Korea/Canada equities plus Yahoo's own futures
+    Covers US/HK/Canada equities plus Yahoo's own futures
     (``GC=F``) and forex (``EURUSD=X``) suffix conventions, which the public
     chart endpoint serves verbatim (the code is used as-is in the request URL,
     no conversion) (#718).
     """
     upper = code.strip().upper()
     return upper.endswith(
-        (".US", ".HK", ".NS", ".BO", ".KS", ".KQ", ".TO", ".V", "=F", "=X")
+        (".US", ".HK", ".TO", ".V", "=F", "=X")
     )
 
 
@@ -175,9 +175,7 @@ class DataLoader:
     """Yahoo Finance global-equity OHLCV loader (free, direct HTTP, no auth)."""
 
     name = "yahoo"
-    markets = {
-        "us_equity", "hk_equity", "india_equity", "kr_equity", "ca_equity",
-    }
+    markets = {"us_equity", "hk_equity", "ca_equity"}
     # Yahoo chart volume is single shares for US/HK equities
     # (HKUDS/Vibe-Trading#1062; HK verified 2026-08-11, 00700.HK ratio 1.00
     # vs tencent/eastmoney). Other equity markets stay undeclared.

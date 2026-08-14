@@ -253,47 +253,333 @@ export const api = {
   alphaCompareStreamUrl: (jobId: string) =>
     withAuthTicket(`${BASE}/alpha/compare/${encodeURIComponent(jobId)}/stream`),
 
-  // Connector runtime channel — privileged surface actions (NOT agent tools).
-  // commit is the ONLY action that writes a mandate; halt trips the kill switch.
-  commitMandate: (body: CommitMandateRequest) =>
-    request<CommitMandateResponse>("/mandate/commit", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  haltLive: (session_id?: string, broker?: string, reason?: string) =>
-    request<HaltLiveResponse>("/live/halt", {
-      method: "POST",
-      body: JSON.stringify({ session_id, broker, reason }),
-    }),
-  resumeLive: (session_id?: string, broker?: string) =>
-    request<HaltLiveResponse>("/live/resume", {
-      method: "POST",
-      body: JSON.stringify({ session_id, broker }),
-    }),
-  // Read the persistent runtime status across all authorized brokers (SPEC §7.5).
-  // Polled by the RunnerStatus panel; a plain authenticated GET, never a chat message.
-  getLiveStatus: (signal?: AbortSignal) => request<LiveStatus>("/live/status", { signal }),
-  verifyConnector: (profileId: string) =>
-    request<ConnectorVerifyResponse>(`/live/connectors/${encodeURIComponent(profileId)}/verify?force=true`, {
-      method: "POST",
-    }),
-  authorizeLive: (broker: string) =>
-    request<LiveAuthorizeResponse>("/live/authorize", {
-      method: "POST",
-      body: JSON.stringify({ broker }),
-    }),
-  // Start/stop the persistent runner (SPEC §7.5). Privileged surface actions, not agent tools.
-  startLiveRunner: (broker: string) =>
-    request<LiveRunnerResponse>("/live/runner/start", {
-      method: "POST",
-      body: JSON.stringify({ broker }),
-    }),
-  stopLiveRunner: (broker: string) =>
-    request<LiveRunnerResponse>("/live/runner/stop", {
-      method: "POST",
-      body: JSON.stringify({ broker }),
-    }),
+  // 恒值投资 structured research workspace
+  getDashboard: () => request<DashboardToday>("/dashboard/today"),
+  getTdxStatus: () => request<TdxStatus>("/tdx/status"),
+  getTdxMarketOverview: () => request<TdxMarketOverview>("/tdx/market/overview"),
+  getTdxMarketRanks: (options?: { category?: string; query?: string; sector?: string; sort?: string; direction?: string; limit?: number; offset?: number }) =>
+    request<TdxRankResult>(`/tdx/market/ranks?${queryString(options)}`),
+  getTdxSectors: (options?: { category?: string; query?: string; limit?: number; offset?: number }) =>
+    request<TdxSectorResult>(`/tdx/sectors?${queryString(options)}`),
+  getTdxSector: (code: string) => request<TdxSectorDetail>(`/tdx/sectors/${encodeURIComponent(code)}`),
+  screenTdxSecurities: (options?: TdxScreenerFilters) =>
+    request<TdxScreenerResult>(`/tdx/screener?${queryString(options)}`),
+  getTdxFunds: (options?: { category?: string; query?: string; limit?: number; offset?: number }) =>
+    request<TdxFundResult>(`/tdx/funds?${queryString(options)}`),
+  searchTdxSecurities: (query: string, limit = 20) =>
+    request<{ items: TdxSecuritySearchItem[] }>(`/tdx/securities/search?query=${encodeURIComponent(query)}&limit=${limit}`),
+  getTdxSecurityOverview: (symbol: string) =>
+    request<TdxSecurityOverview>(`/tdx/securities/${encodeURIComponent(symbol)}/overview`),
+  getTdxFinancialHistory: (symbol: string, options?: { as_of?: string; period_type?: string }) =>
+    request<TdxFinancialHistory>(`/tdx/financial-history/${encodeURIComponent(symbol)}?${queryString(options)}`),
+  startTdxFormulaScan: (body: TdxFormulaScanRequest) =>
+    request<TdxFormulaScan>("/tdx/formula-scans", { method: "POST", body: JSON.stringify(body) }),
+  getTdxFormulaScan: (id: string) => request<TdxFormulaScan>(`/tdx/formula-scans/${encodeURIComponent(id)}`),
+  startTdxUpdate: (module = "all") =>
+    request<TdxJob>("/tdx/update", { method: "POST", body: JSON.stringify({ module }) }),
+  getTdxJob: (id: string) => request<TdxJob>(`/tdx/jobs/${encodeURIComponent(id)}`),
+  getTdxData: (dataset: string, options?: { category?: string; query?: string; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams();
+    if (options?.category) params.set("category", options.category);
+    if (options?.query) params.set("query", options.query);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const suffix = params.size ? `?${params.toString()}` : "";
+    return request<TdxDataset>(`/tdx/data/${encodeURIComponent(dataset)}${suffix}`);
+  },
+  refreshTdxSecurity: (symbol: string) =>
+    request<Record<string, unknown>>("/tdx/securities/refresh", { method: "POST", body: JSON.stringify({ symbol }) }),
+  getTdxSecurity: (symbol: string) => request<Record<string, unknown>>(`/tdx/securities/${encodeURIComponent(symbol)}`),
+  getTdxKline: (body: { symbol: string; period?: string; count?: number; dividend_type?: string }) =>
+    request<Record<string, unknown>>("/tdx/klines", { method: "POST", body: JSON.stringify(body) }),
+  refreshDashboard: (body: { module?: string; market?: MarketCode }) =>
+    request<ResearchRun>("/dashboard/refresh", { method: "POST", body: JSON.stringify(body) }),
+  getResearchRun: (id: string) => request<ResearchRun>(`/research-runs/${encodeURIComponent(id)}`),
+  getMacroBrief: (market: MarketCode) => request<MacroBrief>(`/macro/briefs/latest?market=${market}`),
+  getSectorRankings: (market: MarketCode) => request<{ market: MarketCode; items: SectorScore[] }>(`/sectors/rankings?market=${market}`),
+  screenSecurities: (market: MarketCode, query = "") => request<{ market: MarketCode; items: SecurityCandidate[] }>(`/securities/screener?market=${market}&query=${encodeURIComponent(query)}`),
+  getCompanyDossier: (market: MarketCode, symbol: string) => request<CompanyDossier>(`/securities/${market}/${encodeURIComponent(symbol)}/dossier`),
+  researchCompany: (market: MarketCode, symbol: string) => request<CompanyResearchResult>(`/securities/${market}/${encodeURIComponent(symbol)}/research`, { method: "POST", body: JSON.stringify({ create_report: true }) }),
+  listResearchReports: (reportType?: string) => request<ResearchReport[]>(`/reports${reportType ? `?report_type=${encodeURIComponent(reportType)}` : ""}`),
+  getResearchReport: (id: string) => request<ResearchReport>(`/reports/${encodeURIComponent(id)}`),
+  listCommittees: () => request<Committee[]>("/committees"),
+  getCommittee: (id: string) => request<Committee>(`/committees/${encodeURIComponent(id)}`),
+  createCommittee: (body: { market: MarketCode; symbol: string; company_name?: string }) => request<Committee>("/committees", { method: "POST", body: JSON.stringify(body) }),
+  cancelCommittee: (id: string) => request<Committee>(`/committees/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+  committeeSseUrl: (id: string) => withAuthTicket(`${BASE}/committees/${encodeURIComponent(id)}/events`),
+  listTradePlans: (status?: TradePlanStatus) => request<TradePlan[]>(`/trade-plans${status ? `?status=${status}` : ""}`),
+  createTradePlan: (body: Partial<TradePlan>) => request<TradePlan>("/trade-plans", { method: "POST", body: JSON.stringify(body) }),
+  updateTradePlan: (id: string, body: Partial<TradePlan>) => request<TradePlan>(`/trade-plans/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  listPortfolios: () => request<Portfolio[]>("/portfolios"),
+  getPortfolio: (id: string) => request<Portfolio>(`/portfolios/${encodeURIComponent(id)}`),
+  createPortfolio: (body: CreatePortfolioRequest) => request<Portfolio>("/portfolios", { method: "POST", body: JSON.stringify(body) }),
+  updatePortfolio: (id: string, body: Partial<Portfolio>) => request<Portfolio>(`/portfolios/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deletePortfolio: (id: string) => request<void>(`/portfolios/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  addPortfolioTransaction: (id: string, body: PortfolioTransactionRequest) => request<PortfolioTransaction>(`/portfolios/${encodeURIComponent(id)}/transactions`, { method: "POST", body: JSON.stringify(body) }),
+  getPortfolioPositions: (id: string) => request<PortfolioPosition[]>(`/portfolios/${encodeURIComponent(id)}/positions`),
+  getPortfolioAnalytics: (id: string) => request<PortfolioAnalytics>(`/portfolios/${encodeURIComponent(id)}/analytics`),
+  importPortfolioCsv: async (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${BASE}/portfolios/${encodeURIComponent(id)}/import`, { method: "POST", headers: authHeaders(), body: form });
+    if (!res.ok) throw await errorFromResponse(res);
+    return res.json() as Promise<{ imported: number; errors: Array<{ line: number; error: string }> }>;
+  },
+
+  // Deterministic value/emotion strategy engines
+  createStrategyRun: (body: CreateStrategyRunRequest) =>
+    request<EngineRun>("/strategy-runs", { method: "POST", body: JSON.stringify(body) }),
+  getStrategyRun: (id: string) => request<EngineRun>(`/strategy-runs/${encodeURIComponent(id)}`),
+  getStrategyFormulas: () => request<StrategyFormulaResponse>("/strategy/formulas"),
+  getStrategyDataStatus: () => request<StrategyDataStatus>("/strategy/data/status"),
+  getValueDashboard: (market: "CN" | "HK") => request<StrategyDashboard>(`/strategy/value/dashboard?market=${market}`),
+  getValueDataStatus: () => request<ValueDataStatus>("/strategy/value/data/status"),
+  startValueRefresh: (modules: ValueRefreshModule[] = ["all"], asOf?: string) =>
+    request<ValueRefreshJob>("/strategy/value/refresh", { method: "POST", body: JSON.stringify({ modules, as_of: asOf }) }),
+  getValueRefreshJob: (id: string) => request<ValueRefreshJob>(`/strategy/value/refresh/${encodeURIComponent(id)}`),
+  getValueMacro: (asOf?: string) => request<ValueMacroSnapshot>(`/strategy/value/macro${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getValuePolicies: (options?: { status?: string; limit?: number }) =>
+    request<{ items: ValuePolicyEvent[] }>(`/strategy/value/policies?${queryString(options)}`),
+  getValueSectorScores: (options?: { as_of?: string; status?: string; query?: string }) =>
+    request<ValueSectorScoreList>(`/strategy/value/sectors?market=CN&${queryString(options)}`),
+  getValueLeaderScores: (sectorCode: string, asOf?: string) =>
+    request<ValueLeaderScoreList>(`/strategy/value/leaders?market=CN&sector_code=${encodeURIComponent(sectorCode)}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getValueSectors: (market: "CN" | "HK") => request<StrategyScoreList>(`/strategy/value/sectors?market=${market}`),
+  getValueLeaders: (market: "CN" | "HK") => request<StrategyScoreList>(`/strategy/value/leaders?market=${market}`),
+  getValueSignals: (market: "CN" | "HK") => request<StrategySignal[]>(`/strategy/value/signals?market=${market}`),
+  getValueProfiles: () => request<{ items: CalculationProfile[] }>("/strategy/value/profiles"),
+  createValueProfile: (body: Pick<CalculationProfile, "name" | "mode" | "model_weights">) =>
+    request<CalculationProfile>("/strategy/value/profiles", { method: "POST", body: JSON.stringify(body) }),
+  updateValueProfile: (id: string, body: Pick<CalculationProfile, "name" | "mode" | "model_weights">) =>
+    request<CalculationProfile>(`/strategy/value/profiles/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteValueProfile: (id: string) => request<{ status: string }>(`/strategy/value/profiles/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  getValueWorkbench: (profileId?: string) => request<ValueWorkbench>(`/strategy/value/workbench${profileId ? `?profile_id=${encodeURIComponent(profileId)}` : ""}`),
+  getValueTracks: (runId: string) => request<{ run_id: string; items: ValueTrack[] }>(`/strategy/value/tracks?run_id=${encodeURIComponent(runId)}`),
+  getValueTrackLeaders: (runId: string, trackId: string) => request<{ run_id: string; track_id: string; items: ValueTrackLeader[] }>(`/strategy/value/tracks/${encodeURIComponent(trackId)}/leaders?run_id=${encodeURIComponent(runId)}`),
+  createValueResearchBatch: (body: { run_id: string; track_id: string; symbols: string[]; concurrency?: number }) =>
+    request<CompanyResearchBatch>("/strategy/value/research-batches", { method: "POST", body: JSON.stringify(body) }),
+  getValueResearchBatches: () => request<{ items: CompanyResearchBatch[] }>("/strategy/value/research-batches"),
+  getValueResearchBatch: (id: string) => request<CompanyResearchBatch>(`/strategy/value/research-batches/${encodeURIComponent(id)}`),
+  cancelValueResearchBatch: (id: string) => request<CompanyResearchBatch>(`/strategy/value/research-batches/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+  getValueMonitors: () => request<{ items: ValueEntryMonitor[] }>("/strategy/value/monitors"),
+  createValueMonitor: (body: { research_job_id: string; conditions: Record<string, unknown>; channels: string[] }) =>
+    request<ValueEntryMonitor>("/strategy/value/monitors", { method: "POST", body: JSON.stringify(body) }),
+  updateValueMonitor: (id: string, body: Partial<Pick<ValueEntryMonitor, "status" | "conditions" | "channels">>) =>
+    request<ValueEntryMonitor>(`/strategy/value/monitors/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  evaluateValueMonitors: () => request<{ items: ValueMonitorEvent[] }>("/strategy/value/monitors/evaluate", { method: "POST" }),
+  getValueMonitorEvents: () => request<{ items: ValueMonitorEvent[] }>("/strategy/value/monitor-events"),
+  getEmotionDashboard: (market: "CN" | "HK") => request<StrategyDashboard>(`/strategy/emotion/dashboard?market=${market}`),
+  getEmotionSectors: (market: "CN" | "HK") => request<StrategyScoreList>(`/strategy/emotion/sectors?market=${market}`),
+  getEmotionCandidates: (market: "CN" | "HK", horizon: "short" | "swing") =>
+    request<StrategyScoreList>(`/strategy/emotion/candidates?market=${market}&horizon=${horizon}`),
+  getEmotionSignals: (market: "CN" | "HK", horizon?: "short" | "swing") =>
+    request<StrategySignal[]>(`/strategy/emotion/signals?market=${market}${horizon ? `&horizon=${horizon}` : ""}`),
+  getDecisionChain: (runId: string) => request<DecisionChain>(`/decision-chains/${encodeURIComponent(runId)}`),
+  getStrategySignal: (signalId: string) => request<StrategySignal>(`/signals/${encodeURIComponent(signalId)}`),
+  createStrategyCommittee: (body: StrategyCommitteeRequest) =>
+    request<Committee>("/committees", { method: "POST", body: JSON.stringify(body) }),
+  publishCommitteeDecision: (committeeId: string, body: CommitteeDecisionRequest) =>
+    request<StructuredCommitteeDecision>(`/committees/${encodeURIComponent(committeeId)}/decision`, { method: "POST", body: JSON.stringify(body) }),
+  listPaperAccounts: () => request<PaperAccount[]>("/paper/accounts"),
+  getPaperAccount: (id: string) => request<PaperAccount>(`/paper/accounts/${encodeURIComponent(id)}`),
+  getPaperOrders: (id: string) => request<PaperOrder[]>(`/paper/accounts/${encodeURIComponent(id)}/orders`),
+  getPaperPositions: (id: string) => request<PaperPosition[]>(`/paper/accounts/${encodeURIComponent(id)}/positions`),
+  getPaperNav: (id: string) => request<PaperNav>(`/paper/accounts/${encodeURIComponent(id)}/nav`),
+  submitPaperOrder: (id: string, body: PaperOrderRequest) =>
+    request<PaperOrder>(`/paper/accounts/${encodeURIComponent(id)}/orders`, { method: "POST", body: JSON.stringify(body) }),
 };
+
+export type MarketCode = "CN" | "HK" | "US";
+export type SourceStatus = "live" | "agent" | "sample" | "stale" | string;
+
+export interface CreateStrategyRunRequest { strategy_line: "value" | "emotion"; market: "CN" | "HK"; as_of?: string; symbols?: string[]; force_refresh?: boolean; profile_id?: string; }
+export type ValueRefreshModule = "financial_history" | "market_history" | "macro" | "policy" | "scores" | "all";
+export interface ValueModuleState { code: Exclude<ValueRefreshModule, "all">; label: string; status: string; progress: number; total: number; item_count: number; message: string; error: string; metadata: Record<string, unknown>; started_at?: string | null; updated_at?: string | null; last_success_at?: string | null; }
+export interface ValueRefreshJob { id: string; modules: ValueRefreshModule[]; as_of: string; status: string; current_module: string; progress: number; total: number; results: Record<string, unknown>; errors: Array<{ module: string; error: string }>; created_at: string; started_at?: string | null; completed_at?: string | null; }
+export interface ValueDataStatus { professional_finance: { status: string; file_count: number; first_period?: string | null; last_period?: string | null; raw_version?: string | null }; modules: ValueModuleState[]; recent_jobs: ValueRefreshJob[]; latest_score_as_of?: string | null; schedule_template?: { name: string; cron: string; timezone: string; modules: ValueRefreshModule[]; enabled: boolean }; }
+export interface ValueScoreComponent { name: string; raw_value: unknown; normalized_value: number | null; weight: number; contribution: number | null; }
+export interface ValueMacroSnapshot { id?: string; as_of?: string | null; formula_version?: string; regime?: string; score?: number | null; coverage?: number; axis_coverage?: number; series_coverage?: number; series_count?: number; series_total?: number; release_verified_coverage?: number; first_observed_count?: number; confidence?: "LOW" | "MEDIUM" | "HIGH"; status: string; axes: Record<string, number | null>; states?: Record<string, string>; missing_fields?: string[]; missing_series?: string[]; sources?: string[]; provenance_key?: string; }
+export interface ValueSectorMacroDriver { axis: string; axis_name: string; axis_score: number; sensitivity: number; adjusted_score: number; contribution: number | null; }
+export interface ValueSectorScore { sector_code: string; sector_name: string; rank: number; score: number | null; base_score: number | null; coverage: number; confidence: "LOW" | "MEDIUM" | "HIGH"; status: string; member_coverage: number; raw_features?: Record<string, number | null>; normalized_features?: Record<string, number | null>; component_scores: Record<string, number | null>; components: ValueScoreComponent[]; missing_fields: string[]; formula_version: string; matrix_version?: string; data_as_of: string; sources: string[]; provenance_key: string; macro_fit?: number | null; macro_rank?: number; macro_group?: string; macro_group_name?: string; macro_exposure?: Record<string, number>; macro_stance?: "beneficiary" | "neutral" | "headwind" | "unavailable"; macro_drivers?: ValueSectorMacroDriver[]; macro_matrix_explicit?: boolean; }
+export interface ValueLeaderScore { sector_code: string; sector_name: string; symbol: string; name: string; rank: number; score: number | null; base_score: number | null; coverage: number; confidence: "LOW" | "MEDIUM" | "HIGH"; status: string; raw_features?: Record<string, number | null>; normalized_features?: Record<string, number | null>; component_scores: Record<string, number | null>; components: ValueScoreComponent[]; missing_fields: string[]; growth_status?: Record<string, string>; formula_version: string; data_as_of: string; sources: string[]; provenance_key: string; }
+export interface ValueSectorScoreList { market: "CN"; as_of?: string | null; items: ValueSectorScore[]; total: number; formula_version?: string; run?: EngineRun | null; }
+export interface ValueLeaderScoreList { market: "CN"; as_of?: string | null; sector_code: string; items: ValueLeaderScore[]; total: number; formula_version?: string; run?: EngineRun | null; }
+export interface ValuePolicyEvent { id: string; document_number: string; title: string; normalized_url: string; source: string; published_at?: string | null; fetched_at: string; status: string; classifications: Array<{ industry_code: string; industry_name: string; direction: number; strength: number; sensitivity: number; horizon_days: number; evidence: string; confidence: number; status: string }>; }
+export interface TdxFinancialHistory { symbol: string; as_of?: string | null; period_type?: string | null; total: number; items: Array<Record<string, number | string | null>>; package: Record<string, unknown>; }
+export interface EngineRun { id: string; strategy_line: "value" | "emotion"; market: "CN" | "HK"; as_of: string; formula_version: string; profile_id?: string | null; profile_version?: number | null; status: string; source_status: string; message: string; started_at: string; completed_at?: string | null; created?: boolean; }
+export interface CalculationProfile { id: string; name: string; mode: "single" | "composite"; model_weights: Record<string, number>; version: number; is_default: boolean; is_builtin: boolean; created_at: string; updated_at: string; }
+export interface ValueTrack { id: string; engine_run_id: string; profile_id: string; track_id: string; track_name: string; category: string; base_score: number | null; coverage: number; rank: number; component_scores: Record<string, number | null>; quality_flags: string[]; source_status: string; data_as_of: string; }
+export interface ValueTrackLeader { id: string; engine_run_id: string; track_id: string; symbol: string; name: string; leader_type: string; base_score: number | null; coverage: number; rank: number; component_scores: Record<string, number | null>; quality_flags: string[]; research_status: string; }
+export interface CompanyResearchJob { id: string; batch_id: string; symbol: string; name: string; status: "queued" | "running" | "partial" | "completed" | "failed"; stage: string; message: string; dossier_id?: string | null; report_id?: string | null; valuation_status: string; valuation: Record<string, unknown>; attempts: number; }
+export interface CompanyResearchBatch { id: string; engine_run_id: string; profile_id: string; track_id: string; status: string; total: number; completed: number; failed: number; cancel_requested: boolean; concurrency: number; created_at: string; completed_at?: string | null; jobs: CompanyResearchJob[]; created?: boolean; }
+export interface ValueEntryMonitor { id: string; symbol: string; name: string; engine_run_id: string; track_id: string; research_job_id: string; status: "active" | "paused" | "closed"; conditions: Record<string, unknown>; channels: string[]; confirmed_at: string; last_checked_at?: string | null; }
+export interface NotificationDelivery { id: string; event_id: string; channel: "in_app" | "feishu" | "weixin"; status: string; error: string; attempted_at: string; }
+export interface ValueMonitorEvent { id: string; monitor_id: string; event_type: string; severity: string; title: string; message: string; payload: Record<string, unknown>; triggered_at: string; acknowledged_at?: string | null; deliveries: NotificationDelivery[]; }
+export interface ValueWorkbench { profile: CalculationProfile; latest_run?: EngineRun | null; macro?: ValueMacroSnapshot | null; tracks: ValueTrack[]; sector_scores: ValueSectorScore[]; research_batches: CompanyResearchBatch[]; monitor_summary: { active: number; events: number }; }
+export interface StrategyFormula { id: string; strategy_line: "value" | "emotion"; name: string; version: string; weights: Record<string, number>; engine_path: string; universe: string; minimum_coverage: number | null; }
+export interface StrategyFormulaResponse { items: StrategyFormula[]; strategy_store_ids: string[]; }
+export interface StrategyProviderStatus { market: "CN" | "HK"; status: string; provider?: string | null; fallback_chain: string[]; error?: string; }
+export interface StrategyDataCatalogItem { id: string; market: string; dataset: string; partition_path: string; provider: string; data_as_of: string; available_at: string; row_count: number; coverage: number; status: string; metadata: Record<string, unknown>; }
+export interface StrategyDataStatus { providers: StrategyProviderStatus[]; partitions: number; catalog: StrategyDataCatalogItem[]; }
+export interface EngineScore { id: string; engine_run_id: string; engine: string; formula_version: string; strategy_line: "value" | "emotion"; market: "CN" | "HK"; subject_type: string; subject_id: string; data_as_of: string; available_at: string; raw_features: Record<string, number | null>; normalized_features: Record<string, number | null>; component_scores: Record<string, number | null>; base_score: number | null; coverage: number; status: string; quality_flags: string[]; evidence_ids: string[]; }
+export interface EngineRegime { id: string; strategy_line: "value" | "emotion"; market: "CN" | "HK"; regime: string; previous_regime?: string | null; score?: number | null; confidence: number; coverage: number; triggers: string[]; data_as_of: string; formula_version: string; }
+export interface StrategySignal { id: string; engine_run_id: string; strategy_line: "value" | "emotion"; horizon: "long" | "short" | "swing"; market: "CN" | "HK"; symbol: string; data_as_of: string; valid_from: string; valid_until: string; direction: string; base_score: number; entry_low?: number | null; entry_high?: number | null; stop_price?: number | null; target_low?: number | null; target_high?: number | null; position_cap: number; coverage: number; formula_versions: string[]; evidence_ids: string[]; status: string; invalidation_rules: string[]; }
+export interface StrategyDashboard { strategy_line: "value" | "emotion"; market: "CN" | "HK"; latest_run?: EngineRun | null; regime?: EngineRegime | null; scores: EngineScore[]; signals: StrategySignal[]; }
+export interface StrategyScoreList { market: "CN" | "HK"; items: EngineScore[]; run?: EngineRun | null; horizon?: string; }
+export interface DecisionChain { id: string; engine_run_id: string; strategy_line: string; market: string; macro_snapshot_id?: string | null; sector_score_id?: string | null; candidate_score_id?: string | null; committee_id?: string | null; timing_signal_id?: string | null; formula_versions: string[]; status: string; }
+export interface StrategyCommitteeRequest { market: "CN" | "HK"; symbol: string; company_name?: string; strategy_line: "value" | "emotion"; horizon: "long" | "short" | "swing"; signal_id: string; }
+export interface CommitteeDecisionRequest { signal_id: string; strategy_line: "value" | "emotion"; status: "approve" | "reject" | "wait"; direction: "buy" | "sell" | "wait"; position_cap: number; entry_low?: number | null; entry_high?: number | null; stop_price?: number | null; target_low?: number | null; target_high?: number | null; holding_period: string; confidence: number; summary: string; review_triggers: string[]; evidence_ids: string[]; engine_run_ids: string[]; }
+export interface StructuredCommitteeDecision extends CommitteeDecisionRequest { id: string; committee_id: string; decision_status: "approve" | "reject" | "wait"; created_at: string; }
+export interface PaperAccount { id: string; name: string; strategy_line: "value" | "emotion"; horizon: "long" | "short" | "swing"; market: "CN" | "HK"; currency: "CNY" | "HKD"; initial_cash: number; cash: number; status: string; updated_at: string; }
+export interface PaperOrder { id: string; account_id: string; signal_id: string; symbol: string; side: string; order_type: string; quantity: number; limit_price?: number | null; status: string; submitted_at: string; expires_at?: string | null; rejection_reason: string; }
+export interface PaperPosition { account_id: string; symbol: string; quantity: number; average_cost: number; realized_pnl: number; updated_at: string; }
+export interface PaperNav { account_id: string; currency: string; cash: number; market_value: number; nav: number; positions: PaperPosition[]; }
+export interface PaperOrderRequest { signal_id: string; committee_id: string; decision_id: string; quantity: number; limit_price?: number | null; board_lot?: number | null; }
+
+export interface ResearchRun { id: string; kind: string; market?: MarketCode | null; symbol?: string | null; status: string; message: string; started_at: string; completed_at?: string | null; }
+export interface MarketSnapshot { id: string; market: MarketCode; as_of: string; status: string; summary: string; metrics: Record<string, string | number>; risks: string[]; source_status: SourceStatus; }
+export interface MacroBrief { id: string; market: MarketCode; as_of: string; headline: string; stance: string; summary: string; themes: string[]; risks: string[]; source_status: SourceStatus; }
+export interface SectorScore { id: string; market: MarketCode; taxonomy: string; sector_code: string; sector_name: string; as_of: string; momentum: number; earnings: number; fund_flow: number; breadth: number; valuation: number; risk: number; base_score: number; agent_adjustment: number; agent_reason: string; final_score: number; rank: number; source_status: SourceStatus; }
+export interface SecurityCandidate { id: string; market: MarketCode; symbol: string; name: string; currency: string; exchange: string; taxonomy: string; sector_name: string; as_of: string; industry_position: number; growth: number; quality: number; valuation: number; momentum: number; liquidity: number; base_score: number; agent_adjustment: number; agent_reason: string; final_score: number; rank: number; excluded: boolean; exclusion_reason: string; source_status: SourceStatus; }
+export interface CompanyDossier { id: string; market: MarketCode; symbol: string; name: string; currency: string; exchange: string; taxonomy: string; sector_name: string; overview: string; bull_thesis: string; bear_thesis: string; metrics: Record<string, string | number>; catalysts: string[]; risks: string[]; data_as_of: string; source_status: SourceStatus; updated_at: string; }
+export interface ResearchReport { id: string; report_type: string; title: string; summary: string; content_md: string; market?: MarketCode | null; symbol?: string | null; data_as_of: string; source_kind: string; source_id?: string | null; source_status: SourceStatus; created_at: string; }
+export interface CompanyResearchResult { run: ResearchRun; dossier: CompanyDossier; report?: ResearchReport | null; }
+export interface DashboardMarket { market: MarketCode; meta: { currency: string; taxonomy: string; label: string }; snapshot?: MarketSnapshot | null; macro?: MacroBrief | null; sectors: SectorScore[]; candidates: SecurityCandidate[]; }
+export interface DashboardToday { markets: DashboardMarket[]; reports: ResearchReport[]; research_runs: ResearchRun[]; generated_at: string; }
+
+export type TdxModuleStatus = "never" | "running" | "ready" | "failed" | string;
+export interface TdxModule {
+  code: string;
+  label: string;
+  description: string;
+  status: TdxModuleStatus;
+  progress: number;
+  total: number;
+  item_count: number;
+  message: string;
+  error: string;
+  metadata: Record<string, unknown>;
+  started_at?: string | null;
+  updated_at?: string | null;
+}
+
+function queryString(values?: object): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(values ?? {})) {
+    if (value === undefined || value === null || value === "") continue;
+    params.set(key, String(value));
+  }
+  return params.toString();
+}
+export interface TdxJob {
+  id: string;
+  module: string;
+  status: string;
+  progress: number;
+  total: number;
+  message: string;
+  error: string;
+  created_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+export interface TdxStatus {
+  available: boolean;
+  tdx_home: string;
+  client_process_running: boolean;
+  active_job?: TdxJob | null;
+  modules: TdxModule[];
+  recent_jobs: TdxJob[];
+}
+export interface TdxRecord {
+  dataset: string;
+  key: string;
+  category: string;
+  name: string;
+  payload: Record<string, unknown>;
+  updated_at: string;
+}
+export interface TdxDataset { dataset: string; total: number; items: TdxRecord[]; }
+
+export interface TdxQuote {
+  code: string; name: string; price?: number | null; last_close?: number | null;
+  change_pct?: number | null; volume_lots?: number | null; amount_10k?: number | null;
+  data_as_of?: string; rank?: number; sectors?: Array<{ code: string; name: string }>;
+  pe_ttm?: number | null; pe_dynamic?: number | null; pb_mrq?: number | null;
+  dividend_yield?: number | null; turnover_rate?: number | null; market_cap_100m?: number | null;
+  revenue_10k?: number | null; net_profit_10k?: number | null; eps?: number | null;
+  [key: string]: unknown;
+}
+export interface TdxMarketOverview {
+  source: string; as_of?: string | null; client_running: boolean; indices: TdxQuote[];
+  breadth: { valid: number; up: number; down: number; flat: number; up_down_ratio?: number | null; median_change_pct?: number | null };
+  distribution: Array<{ label: string; count: number }>;
+  activity: TdxQuote[]; index_etfs: Array<Record<string, unknown>>; limit_up_preview: TdxQuote[];
+  special_counts?: Record<string, number>;
+}
+export interface TdxRankResult {
+  category: string; categories: string[]; total: number; limit: number; offset: number;
+  items: TdxQuote[]; as_of?: string | null;
+  coverage: { quotes: number; fundamentals: number; fundamental_pct: number };
+}
+export interface TdxSector extends TdxQuote {
+  category: string; member_count: number; up: number; down: number; breadth_pct?: number | null; leader?: TdxQuote | null;
+}
+export interface TdxSectorResult { categories: string[]; total: number; items: TdxSector[]; as_of?: string | null; }
+export interface TdxSectorDetail {
+  sector: TdxSector; members: TdxQuote[]; member_count: number; up: number; down: number;
+  leaders: TdxQuote[]; laggards: TdxQuote[]; etfs: Array<Record<string, unknown>>; as_of?: string | null;
+}
+export interface TdxScreenerFilters {
+  query?: string; sector?: string; min_price?: number; max_price?: number; min_change?: number; max_change?: number;
+  min_turnover?: number; max_pe?: number; max_pb?: number; min_dividend_yield?: number;
+  min_market_cap?: number; min_revenue?: number; min_net_profit?: number; min_eps?: number;
+  include_st?: boolean; include_quit?: boolean; include_bj?: boolean; is_hs300?: boolean; is_margin?: boolean; is_connect?: boolean;
+  sort?: string; direction?: string; limit?: number; offset?: number;
+}
+export interface TdxScreenerResult { total: number; items: TdxQuote[]; limit: number; offset: number; coverage: { quotes: number; fundamentals: number }; as_of?: string | null; }
+export interface TdxFundResult { category: string; categories: string[]; total: number; items: Array<Record<string, unknown>>; as_of?: string | null; }
+export interface TdxSecuritySearchItem { code: string; name: string; quote?: TdxQuote | null; updated_at: string; }
+export interface TdxSecurityOverview {
+  code: string; name: string; quote?: TdxQuote | null; fundamental?: Record<string, unknown> | null;
+  detail?: Record<string, unknown> | null; sectors: Array<Record<string, unknown>>;
+  klines: Array<Record<string, unknown>>; professional_finance_available: boolean; source: string; as_of: string;
+  cache?: { quote_updated_at?: string | null; fundamental_updated_at?: string | null; detail_updated_at?: string | null; stale: boolean };
+}
+export interface TdxFormulaScanRequest { formula_type: number; formula_code: string; formula_args?: string; universe?: string; period?: string; }
+export interface TdxFormulaScan {
+  id: string; formula_type: number; formula_code: string; formula_args: string; universe: string; period: string;
+  status: string; progress: number; total: number; results: Array<TdxQuote & { signals?: Array<{ line: string; value: unknown; date?: string }> }>;
+  message: string; error: string; created_at: string; completed_at?: string | null;
+}
+
+export interface CommitteeDecision { committee_id: string; direction: string; position_cap?: number | null; target_low?: number | null; target_high?: number | null; stop_price?: number | null; holding_period: string; confidence: number; review_triggers: string[]; evidence_date: string; summary: string; }
+export interface CommitteeTask { id?: string; task_id?: string; agent_id?: string; status?: string; output?: string; result?: string; error?: string; }
+export interface Committee { id: string; market: MarketCode; symbol: string; company_name: string; status: string; swarm_run_id?: string | null; created_at: string; completed_at?: string | null; decision?: CommitteeDecision | null; tasks?: CommitteeTask[]; final_report?: string | null; warning?: string; }
+export type TradePlanStatus = "draft" | "active" | "triggered" | "closed" | "cancelled";
+export interface TradePlan { id: string; committee_id?: string | null; market: MarketCode; symbol: string; name: string; status: TradePlanStatus; direction: string; position_cap?: number | null; entry_low?: number | null; entry_high?: number | null; target_low?: number | null; target_high?: number | null; stop_price?: number | null; triggers: string[]; notes: string; created_at: string; updated_at: string; }
+
+export interface Portfolio { id: string; name: string; base_currency: string; benchmark: string; initial_cash: number; cash: Record<string, number>; position_count?: number; created_at: string; updated_at: string; }
+export interface CreatePortfolioRequest { name: string; base_currency: string; benchmark?: string; initial_cash?: number; cash?: Record<string, number>; }
+export interface PortfolioTransactionRequest { market: MarketCode; symbol: string; name: string; side: "buy" | "sell"; trade_date: string; quantity: number; price: number; fee?: number; currency: string; notes?: string; }
+export interface PortfolioTransaction extends PortfolioTransactionRequest { id: string; portfolio_id: string; created_at: string; }
+export interface PortfolioPosition { market: MarketCode; symbol: string; name: string; currency: string; quantity: number; cost: number; average_cost: number; realized_pnl: number; latest_price?: number | null; market_value?: number | null; unrealized_pnl?: number | null; }
+export interface PortfolioAnalytics {
+  portfolio: Portfolio;
+  positions: PortfolioPosition[];
+  subtotals: Record<string, number>;
+  as_of: string;
+  base_currency_total?: number | null;
+  aggregate_available: boolean;
+  aggregate_warning?: string | null;
+  fx_evidence?: Array<Record<string, unknown>>;
+  concentration: Array<{ symbol: string; currency: string; weight: number }>;
+  risk_alerts: string[];
+  sector_exposure?: Array<{ market: MarketCode; sector: string; currency: string; market_value: number }>;
+  performance?: { total_return?: number | null; max_drawdown?: number | null };
+  correlation?: { status: string; reason?: string };
+  pending_trade_plans?: TradePlan[];
+}
 
 // --- Scheduled research types ---
 
@@ -955,211 +1241,6 @@ export interface AlphaCompareResult {
   winner: string;
   ranking: AlphaCompareRow[];
   skipped: AlphaCompareSkip[];
-}
-
-// --- Connector runtime channel types ---
-
-/** One mandate profile inside a `mandate.proposal` event (SPEC Consent §1). */
-export interface MandateProfile {
-  ordinal: number;
-  label: string;
-  /** Concrete ticker list, or a structural universe descriptor (e.g. "tech_sector"). */
-  universe: string[] | string;
-  max_order_usd: number;
-  daily_trade_cap: number;
-  /** "none" for cash-only, otherwise a leverage descriptor/multiple. */
-  leverage: string | number;
-  instruments: string[];
-  notes?: string;
-}
-
-/** Account block of a `mandate.proposal` event. */
-export interface MandateProposalAccount {
-  broker: string;
-  type: string;
-  funded_by: string;
-}
-
-/** Payload of the `mandate.proposal` SSE event (SPEC Consent §1). */
-export interface MandateProposal {
-  type?: string;
-  proposal_id: string;
-  session_id?: string;
-  intent_normalized?: string;
-  account?: MandateProposalAccount;
-  ceilings_ref?: string;
-  profiles: MandateProfile[];
-  funding_note?: string;
-  halt_note?: string;
-  /** Present only when this proposal was triggered by a mandate breach (SPEC Consent §3). */
-  reauth_for?: { breach_id?: string } | null;
-}
-
-/** Payload of the `mandate.committed` SSE event (SPEC Consent §1 COMMIT). */
-export interface MandateCommitted {
-  proposal_id?: string;
-  mandate_id?: string;
-  consent_record_id?: string;
-  selected_ordinal?: number;
-  broker?: string;
-  /** Resolved limits, surfaced for the compact active-mandate badge. */
-  max_order_usd?: number;
-  daily_trade_cap?: number;
-  expires_at?: string;
-}
-
-/** Payload of the `live.halted` SSE event (SPEC Consent §4). */
-export interface LiveHalted {
-  broker?: string | null;
-  tripped_at?: string;
-  by?: string;
-  reason?: string;
-}
-
-/** Payload of the `live.action` SSE event (SPEC Consent §5 audit notify). */
-export interface LiveAction {
-  audit_id?: string;
-  ts?: string;
-  kind: string;
-  intent_normalized?: string;
-  outcome?: string;
-  broker?: string;
-  remote_tool?: string;
-  error?: string | null;
-}
-
-export interface CommitMandateRequest {
-  broker: string;
-  proposal_id: string;
-  selected_ordinal: number;
-  /** Present only on the adjust path (SPEC Consent §3); null otherwise. */
-  adjustments?: Record<string, unknown> | null;
-  /** Explicit affirmative consent; the surface sets it on the user's click. */
-  consent_ack: boolean;
-  session_id?: string;
-  account_ref?: string;
-  lifetime_days?: number;
-}
-
-export interface CommitMandateResponse {
-  mandate_id: string;
-  consent_record_id: string;
-  selected_ordinal?: number;
-  broker?: string;
-  max_order_usd?: number;
-  daily_trade_cap?: number;
-  expires_at?: string;
-}
-
-export interface HaltLiveResponse {
-  halted: boolean;
-  broker?: string | null;
-  reason: string;
-  sentinel: string;
-}
-
-export interface LiveAuthorizeRequest {
-  broker: string;
-}
-
-export interface LiveAuthorizeResponse {
-  broker: string;
-  connector_profile: string;
-  oauth_token_present: boolean;
-  instruction: string;
-  note?: string;
-}
-
-/** Mandate limits surfaced inside a `GET /live/status` broker entry (SPEC §7.5). */
-export interface LiveMandateLimits {
-  max_order_notional_usd?: number;
-  max_total_exposure_usd?: number;
-  max_leverage?: number;
-  max_trades_per_day?: number;
-  allowed_instruments?: string[];
-  account_funding_usd?: number;
-  [key: string]: unknown;
-}
-
-/** Active mandate block of a `GET /live/status` broker entry. */
-export interface LiveMandateStatus {
-  broker?: string;
-  mandate_id?: string;
-  account_ref?: string;
-  created_at?: string;
-  limits?: LiveMandateLimits;
-  /** ISO timestamp the mandate auto-expires (SPEC §7.5 #7 proactive expiry). */
-  expires_at?: string;
-  expires_in_seconds?: number | null;
-  expired?: boolean;
-}
-
-/** Runner liveness block of a `GET /live/status` broker entry (SPEC §7.5 #3). */
-export interface LiveRunnerLiveness {
-  broker?: string;
-  alive: boolean;
-  /** Unix epoch seconds of the last heartbeat tick; null if the runner never started. */
-  last_tick?: number | string | null;
-  last_tick_age_seconds?: number | null;
-}
-
-export interface LiveBrokerAuthStatus {
-  broker: string;
-  oauth_token_present: boolean;
-  is_live_broker: boolean;
-  /** Optional during rolling upgrades from OAuth-only runtime responses. */
-  profile_id?: string | null;
-  transport?: string | null;
-  connection_state?: string | null;
-  configured?: boolean | null;
-  credential_source?: string | null;
-  sdk_installed?: boolean | null;
-  last_checked_at?: string | null;
-  environment_identity?: string | null;
-  readonly?: boolean | null;
-  capabilities?: string[] | null;
-  error_code?: string | null;
-  error?: string | null;
-}
-
-export interface ConnectorVerifyResponse {
-  status?: string;
-  profile_id?: string | null;
-  transport?: string | null;
-  connection_state?: string | null;
-  configured?: boolean | null;
-  credential_source?: string | null;
-  sdk_installed?: boolean | null;
-  last_checked_at?: string | null;
-  environment_identity?: string | null;
-  readonly?: boolean | null;
-  capabilities?: string[] | null;
-  error_code?: string | null;
-  error?: string | null;
-  [key: string]: unknown;
-}
-
-/** One broker entry in the `GET /live/status` response. */
-export interface LiveBrokerStatus {
-  auth: LiveBrokerAuthStatus;
-  mandate?: LiveMandateStatus | null;
-  runner: LiveRunnerLiveness;
-  halted: boolean;
-}
-
-/** Response of `GET /live/status` (SPEC §7.5 runner status panel + C2). */
-export interface LiveStatus {
-  brokers: LiveBrokerStatus[];
-  global_halted: boolean;
-}
-
-/** Response of `POST /live/runner/start|stop`. */
-export interface LiveRunnerResponse {
-  broker: string;
-  started?: boolean;
-  already_running?: boolean;
-  stopped?: boolean;
-  was_running?: boolean;
 }
 
 export interface MessageItem {

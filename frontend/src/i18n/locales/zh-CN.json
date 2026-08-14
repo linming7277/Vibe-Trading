@@ -24,7 +24,7 @@
     "collapse": "收起",
     "expand": "展开",
     "skipToMain": "跳转到主要内容",
-    "sidebar": "Vibe-Trading 侧边栏",
+    "sidebar": "恒值投资侧边栏",
     "mainNavigation": "主导航",
     "about": "关于"
   },
@@ -360,7 +360,7 @@
     "clearApiKey": "清除已保存的 API 密钥",
     "channels": {
       "title": "IM 通道",
-      "description": "将聊天适配器接入 Web UI 和 CLI 使用的同一套 Vibe-Trading 会话运行时。",
+      "description": "管理飞书与微信的消息接入。",
       "runtime": "运行时",
       "running": "运行中",
       "stopped": "已停止",
@@ -394,7 +394,6 @@
     "llmSettingsSaved": "LLM 设置已保存",
     "saveLlmSettingsFailed": "保存 LLM 设置失败: {{message}}",
     "dataSourceSettingsSaved": "数据源设置已保存",
-    "desktopCredentialRestarting": "凭据已加密，正在重启本地服务…",
     "saveDataSourceSettingsFailed": "保存数据源设置失败: {{message}}",
     "configured": "已配置",
     "keepCurrentKey": "留空以保留当前密钥",
@@ -772,8 +771,6 @@
       "equity_cn": "A 股",
       "equity_us": "美股",
       "equity_hk": "港股",
-      "equity_in": "印度股票",
-      "equity_kr": "韩国股票",
       "crypto": "加密货币",
       "futures": "期货"
     },
@@ -1096,6 +1093,7 @@
     "patch_skill": "更新自定义技能",
     "pattern": "识别图表形态",
     "portfolio_risk_xray": "透视组合风险",
+    "publish_workspace_research": "发布研究工作台结果",
     "propose_mandate_profiles": "推荐交易授权",
     "qveris_execute": "执行QVeris操作",
     "qveris_inspect": "检查QVeris操作",

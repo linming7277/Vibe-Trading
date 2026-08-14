@@ -31,9 +31,9 @@ describe("TOOL_LABELS", () => {
 
 describe("localizeToolName", () => {
   it("resolves the tools.<name> i18n key", () => {
-    i18n.addResource("en", "translation", "tools.localized_test_tool", "Localized tool");
+    i18n.addResource("zh-CN", "translation", "tools.localized_test_tool", "本地化工具");
 
-    expect(localizeToolName("localized_test_tool")).toBe("Localized tool");
+    expect(localizeToolName("localized_test_tool")).toBe("本地化工具");
   });
 
   it("returns fallback for unknown tools when fallback provided", () => {
@@ -45,6 +45,6 @@ describe("localizeToolName", () => {
   });
 
   it("uses TOOL_LABELS as the default before an explicit fallback", () => {
-    expect(localizeToolName("bash", "ignored")).toBe("Run command");
+    expect(localizeToolName("bash", "ignored")).toBe("运行命令");
   });
 });

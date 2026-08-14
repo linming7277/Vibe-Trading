@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Vibe-Trading API Server - RESTful API for finance research and backtesting.
+"""恒值投资 API 服务。
 
 Thin assembler: creates the FastAPI app, mounts middleware, registers route
 modules, and re-exports symbols for test compatibility.  All shared
@@ -161,8 +161,8 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="Vibe-Trading API",
-    description="Vibe-Trading API: natural-language finance research, backtesting, and swarm workflows",
+    title="恒值投资 API",
+    description="价值研究、公司分析、估值与投资组合工具",
     version=APP_VERSION,
     docs_url=None,  # docs/redoc/openapi re-registered behind require_auth
     redoc_url=None,  # in register_system_routes -- see the rationale there
@@ -248,37 +248,6 @@ register_swarm_routes(app)
 
 from src.api.swarm_routes import _get_swarm_runtime  # noqa: F401, E402
 
-# --- Live trading ---
-from src.api.live_routes import register_live_routes  # noqa: E402
-register_live_routes(app)
-
-from src.api.live_routes import (  # noqa: F401, E402
-    CommitMandateRequest,
-    LiveHaltRequest,
-    LiveAuthorizeRequest,
-    LiveRunnerControlRequest,
-    BrokerAuthState,
-    MandateLimits,
-    ActiveMandateState,
-    RunnerLivenessState,
-    LiveBrokerStatus,
-    LiveStatusResponse,
-    LiveRunnerUnavailable,
-    _runner_tasks,
-    _runner_factory,
-    _emit_live_event,
-    _fetch_broker_ceilings,
-    _known_live_brokers,
-    _oauth_token_present,
-    _active_mandate_state,
-    _runner_liveness_state,
-    _live_broker_adapter,
-    _build_live_runner,
-    _drive_runner,
-    _connector_verify_cache,
-    _check_connector_status,
-)
-
 # --- Alpha Zoo ---
 from src.api.alpha_routes import register_alpha_routes  # noqa: E402
 register_alpha_routes(app)
@@ -301,6 +270,18 @@ try_register_openbb_routes(app)
 
 from src.api.scheduled_routes import register_scheduled_routes  # noqa: E402
 register_scheduled_routes(app)
+
+# --- Structured research workspace (dashboard, committee, portfolio) ---
+from src.api.research_routes import register_research_routes  # noqa: E402
+register_research_routes(app)
+
+from src.api.strategy_routes import register_strategy_routes  # noqa: E402
+register_strategy_routes(app)
+from src.api.value_workspace_routes import register_value_workspace_routes  # noqa: E402
+register_value_workspace_routes(app, require_auth)
+
+from src.api.tdx_routes import register_tdx_routes  # noqa: E402
+register_tdx_routes(app)
 
 from src.api.scheduled_routes import (  # noqa: E402, F401
     CreateRunFromPlaybookRequest,
@@ -327,17 +308,35 @@ def serve_main(argv: list[str] | None = None) -> int:
     from starlette.exceptions import HTTPException as StarletteHTTPException
 
     class SPAStaticFiles(StaticFiles):
-        """Serve index.html for browser refreshes on client-side routes."""
+        """Serve SPA routes without disguising missing hashed assets as HTML."""
+
+        @staticmethod
+        def _with_cache_policy(response, requested_path: str):
+            normalized = requested_path.replace("\\", "/")
+            if normalized in {"", ".", "index.html"} or normalized.endswith("/index.html"):
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                response.headers["Pragma"] = "no-cache"
+            elif normalized.startswith("assets/"):
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return response
 
         async def get_response(self, path: str, scope: Dict[str, Any]):
             try:
-                return await super().get_response(path, scope)
+                response = await super().get_response(path, scope)
+                return self._with_cache_policy(response, path)
             except StarletteHTTPException as exc:
                 if exc.status_code != status.HTTP_404_NOT_FOUND:
                     raise
-                return await super().get_response("index.html", scope)
+                # A missing chunk, stylesheet, font, source map, or other file
+                # must remain a real 404. Returning index.html with status 200
+                # makes dynamic import failures opaque and defeats recovery.
+                requested = Path(path)
+                if path.replace("\\", "/").startswith("assets/") or requested.suffix:
+                    raise
+                response = await super().get_response("index.html", scope)
+                return self._with_cache_policy(response, "index.html")
 
-    parser = argparse.ArgumentParser(description="Vibe-Trading Server")
+    parser = argparse.ArgumentParser(description="恒值投资服务")
     parser.add_argument("--port", type=int, default=8000, help="Listen port (default 8000)")
     parser.add_argument("--host", default="127.0.0.1", help="Bind address")
     parser.add_argument("--dev", action="store_true", help="Dev mode: spawn Vite on :5173")
@@ -377,7 +376,7 @@ def serve_main(argv: list[str] | None = None) -> int:
         print("[warn] Run: cd frontend && npm run build")
 
     print("=" * 50)
-    print("  Vibe-Trading Server")
+    print("  恒值投资服务")
     print(f"  http://127.0.0.1:{args.port}")
     print("=" * 50)
 

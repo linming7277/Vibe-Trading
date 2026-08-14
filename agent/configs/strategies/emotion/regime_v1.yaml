@@ -1,0 +1,10 @@
+version: emotion-regime-v1.0.0
+minimum_history_days: 120
+standard_history_days: 252
+thresholds:
+  ice_max: 20
+  repair_min: 30
+  fermentation_min: 40
+  climax_min: 75
+  ebb_delta_3d: -12
+hysteresis: true

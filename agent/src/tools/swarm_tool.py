@@ -258,6 +258,16 @@ _PRESET_KEYWORDS: list[tuple[str, list[str], float]] = [
         0.9,
     ),
     (
+        "short_term_trading_committee",
+        [
+            r"short[- ]term\s+trading\s+committee",
+            r"emotion\s+committee",
+            "情绪委员会",
+            "短线交易委员会",
+        ],
+        0.95,
+    ),
+    (
         "investment_committee",
         [
             r"investment\s+committee",
@@ -652,6 +662,10 @@ def _build_variables(preset_name: str, prompt: str) -> dict[str, str]:
         "pairs_research_lab": {"market": market, "sector": _extract_sector(prompt)},
         "investment_committee": {"target": g, "market": market},
         "value_investing_committee": {"company": g, "market": market},
+        "short_term_trading_committee": {
+            "company": g, "market": market, "committee_id": "",
+            "signal_id": "", "engine_run_id": "",
+        },
         "macro_strategy_forum": {"market": market, "horizon": "quarterly"},
         "statistical_arbitrage_desk": {"market": market, "goal": g, "sector": _extract_sector(prompt)},
         "sentiment_intelligence_team": {"market": market, "timeframe": "daily"},

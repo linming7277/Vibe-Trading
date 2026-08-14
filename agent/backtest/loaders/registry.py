@@ -50,8 +50,6 @@ VALID_SOURCES: set[str] = {
     "tiingo",
     "fmp",
     "qveris",  # QVERIS-INTEGRATION
-    "india_broker",
-    "pykrx",
     "longbridge",
     "mt5",
     "local",
@@ -100,8 +98,6 @@ def _ensure_registered() -> None:
         "backtest.loaders.tiingo_loader",
         "backtest.loaders.fmp_loader",
         "backtest.loaders.qveris_loader",  # QVERIS-INTEGRATION
-        "backtest.loaders.india_broker_loader",
-        "backtest.loaders.pykrx_loader",
         "backtest.loaders.longbridge",
         "backtest.loaders.mt5_loader",
         "backtest.loaders.local_loader",
@@ -140,8 +136,6 @@ FALLBACK_CHAINS: dict[str, list[str]] = {
     # precedes the Yahoo-SDK family, which is blocked from mainland IPs;
     # tushare hk_daily is key-gated.
     "hk_equity": ["tencent", "eastmoney", "yahoo", "futu", "akshare", "yfinance", "tushare", "longbridge", "local"],
-    "india_equity": ["yahoo", "yfinance", "india_broker", "local"],
-    "kr_equity":   ["pykrx", "yahoo", "yfinance", "local"],
     # TSX (.TO) / TSX Venture (.V): direct Yahoo first, SDK fallback second.
     "ca_equity":   ["yahoo", "yfinance", "local"],
     # OKX first (native), then dedicated Binance, then generic CCXT / Yahoo.

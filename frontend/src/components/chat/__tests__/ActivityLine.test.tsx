@@ -6,22 +6,22 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, string | number>) => {
       const labels: Record<string, string> = {
-        "agent.activity.verbs.working": "Working",
-        "agent.activity.verbs.readingMarketData": "Reading the market data",
-        "agent.activity.verbs.writingStrategy": "Writing the strategy",
-        "agent.activity.verbs.runningBacktest": "Running the backtest",
-        "agent.activity.verbs.validatingNumbers": "Double-checking the numbers",
-        "agent.activity.done": "Done",
-        "agent.activity.failed": "Failed",
-        "agent.activity.stopped": "Stopped by you",
-        "agent.activity.continue": "Continue",
-        "agent.activity.reattach": "Re-attach",
+        "agent.activity.verbs.working": "正在处理",
+        "agent.activity.verbs.readingMarketData": "正在读取市场数据",
+        "agent.activity.verbs.writingStrategy": "正在编写策略",
+        "agent.activity.verbs.runningBacktest": "正在运行回测",
+        "agent.activity.verbs.validatingNumbers": "正在复核数据",
+        "agent.activity.done": "完成",
+        "agent.activity.failed": "失败",
+        "agent.activity.stopped": "已由你停止",
+        "agent.activity.continue": "继续",
+        "agent.activity.reattach": "重新连接",
       };
-      if (key === "agent.activity.steps") return `${values?.count} steps`;
+      if (key === "agent.activity.steps") return `${values?.count} 个步骤`;
       if (key === "agent.activity.timeout") {
-        return `Stopped waiting after ${values?.elapsed} — the run may still be finishing`;
+        return `等待 ${values?.elapsed} 后已停止——运行可能仍在后台完成`;
       }
-      if (key === "toolProgress.step") return `Step ${values?.step} · ${values?.tool}`;
+      if (key === "toolProgress.step") return `步骤 ${values?.step} · ${values?.tool}`;
       return labels[key] ?? key;
     },
   }),
@@ -55,7 +55,7 @@ describe("ActivityLine", () => {
     render(<ActivityLine activity={makeActivity()} />);
 
     expect(screen.getByText(
-      "Running the backtest · Run the backtest · 5s · 1 steps",
+      "正在运行回测 · 运行回测 · 5s · 1 个步骤",
     )).toBeInTheDocument();
   });
 
@@ -82,7 +82,7 @@ describe("ActivityLine", () => {
       state: "done",
       endedAt: 12_000,
     })} />);
-    expect(screen.getByText("Done · 1 steps · 7s")).toBeInTheDocument();
+    expect(screen.getByText("完成 · 1 个步骤 · 7s")).toBeInTheDocument();
   });
 
   it("auto-collapses 900ms after a terminal state", () => {
@@ -122,8 +122,8 @@ describe("ActivityLine", () => {
         onContinue={onContinue}
       />,
     );
-    expect(screen.getByText("Stopped by you · 1 steps · 3s")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByText("已由你停止 · 1 个步骤 · 3s")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "继续" }));
     expect(onContinue).toHaveBeenCalledOnce();
 
     rerender(
@@ -133,9 +133,9 @@ describe("ActivityLine", () => {
       />,
     );
     expect(screen.getByText(
-      "Stopped waiting after 5s — the run may still be finishing · 1 steps",
+      "等待 5s 后已停止——运行可能仍在后台完成 · 1 个步骤",
     )).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Re-attach" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新连接" }));
     expect(onReattach).toHaveBeenCalledOnce();
   });
 

@@ -13,6 +13,7 @@ from typing import Any
 from typing import TYPE_CHECKING
 
 from src.config.schema import ChannelsConfig
+from src.config.personal import SUPPORTED_CHANNELS
 
 if TYPE_CHECKING:
     from src.channels.base import BaseChannel
@@ -85,13 +86,13 @@ class ChannelAvailability:
 
 
 def discover_channel_names() -> list[str]:
-    """Return all built-in channel module names by scanning the package (zero imports)."""
+    """Return personal-edition channel modules (Feishu and Weixin only)."""
     import src.channels as pkg
 
     return [
         name
         for _, name, ispkg in pkgutil.iter_modules(pkg.__path__)
-        if name not in _INTERNAL and not ispkg
+        if name in SUPPORTED_CHANNELS and name not in _INTERNAL and not ispkg
     ]
 
 
@@ -202,7 +203,7 @@ def inspect_channels(config: Any | None = None) -> dict[str, dict[str, Any]]:
     """
     names = set(discover_channel_names())
     if config is not None:
-        names.update(_configured_channel_names(config))
+        names.update(_configured_channel_names(config) & SUPPORTED_CHANNELS)
 
     statuses: dict[str, dict[str, Any]] = {}
     for name in sorted(names):
@@ -250,6 +251,7 @@ def discover_enabled(
     those that match — skipping the heavy third-party SDK imports of
     unneeded channels.
     """
+    enabled_names = enabled_names & SUPPORTED_CHANNELS
     names = _names if _names is not None else discover_channel_names()
     result: dict[str, type[BaseChannel]] = {}
     for modname in names:
