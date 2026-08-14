@@ -7,7 +7,7 @@ rem Windows code page. User-facing Chinese text lives in the PowerShell UI.
 
 set "ROOT=%~dp0"
 set "LAUNCHER=%ROOT%launcher\windows\HengzhiLauncher.ps1"
-set "WORKBENCH_URL=http://127.0.0.1:5899/today"
+set "WORKBENCH_URL=http://127.0.0.1:5899/value"
 
 if not exist "%LAUNCHER%" (
   echo [ERROR] Launcher script was not found.

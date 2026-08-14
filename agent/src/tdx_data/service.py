@@ -453,6 +453,14 @@ class TdxDataService:
     def refresh_security(self, symbol: str) -> dict[str, Any]:
         code = symbol.strip().upper()
         base = self.client.call("get_stock_info", code, field_list=[]) or {}
+        identity = {"Code": code, "Name": base.get("Name", "")}
+        quotes = self.client.call("get_pricevol", [code]) or {}
+        quote = _quote_payload(identity, quotes.get(code, {}) if isinstance(quotes, dict) else {})
+        if identity["Name"]:
+            self.store.upsert_records("securities", [{"key": code, "name": identity["Name"], "payload": identity}])
+        # A zero/pre-open response must not replace the last usable quote.
+        if quote.get("price") is not None and quote.get("last_close") is not None:
+            self.store.upsert_records("quotes", [{"key": code, "name": identity["Name"], "payload": quote}])
         more = self.client.call("get_more_info", code, field_list=[]) or {}
         snapshot = self.client.call("get_market_snapshot", code, field_list=[]) or {}
         relations = self.client.call("get_relation", code) or []
@@ -468,7 +476,7 @@ class TdxDataService:
                 "fundamental", status="partial", item_count=cached,
                 message=f"已按需缓存 {cached} 只；全市场尚未更新", updated_at=utc_now(),
             )
-        payload = {"code": code, "base_finance": base, "extended": more, "snapshot": snapshot, "relations": relations, "dividends": dividends, "capital": capital, "microstructure": micro, "updated_at": utc_now()}
+        payload = {"code": code, "quote": quote, "base_finance": base, "extended": more, "snapshot": snapshot, "relations": relations, "dividends": dividends, "capital": capital, "microstructure": micro, "updated_at": utc_now()}
         self.store.upsert_records("security_details", [{"key": code, "name": base.get("Name", ""), "payload": payload}])
         return payload
 

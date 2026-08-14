@@ -3,7 +3,7 @@
 This is a lightweight Windows service controller, not an Electron desktop app.
 
 - Backend: `http://127.0.0.1:8899`
-- Frontend Vite: `http://127.0.0.1:5899/today`
+- Frontend Vite: `http://127.0.0.1:5899/value`
 - Runtime state and logs: `.launcher/`
 
 Double-click `Hengzhi-Launcher.cmd` in the repository root. Run

@@ -21,14 +21,15 @@ from src.tdx_data.service import get_tdx_service
 
 from .store import ValueWorkspaceStore, now
 from .technical import calculate_technical
+from .valuation import DEFAULT_ENTRY_MARGIN, OVERVALUED_MARGIN, calculate_valuation
 
 
 PROFILE_FORMULA_VERSION = "value-profile-v1.0.0"
 RESEARCH_TEMPLATE_VERSION = "value-company-research-v1.0.0"
 V2_WORKBENCH_FORMULA_VERSION = "value-workbench-v2.2.0"
-UNIVERSE_RULE_VERSION = "value-research-universe-v1.0.0"
-SIGNAL_RULE_VERSION = "value-monitor-rules-v1.0.0"
-COMPANY_ANALYSIS_VERSION = "value-company-panorama-v1.0.0"
+UNIVERSE_RULE_VERSION = "value-research-universe-v2.0.0"
+SIGNAL_RULE_VERSION = "value-monitor-rules-v2.0.0"
+COMPANY_ANALYSIS_VERSION = "value-company-panorama-v2.0.0"
 CANDIDATE_LIMITS = {5, 10, 20, 50}
 RISK_THRESHOLDS = {
     "revenue_yoy": -20.0, "net_profit_yoy": -20.0,
@@ -338,21 +339,29 @@ class ValueWorkspaceService:
                 "component_scores": normalized[index], "quality_flags": [] if result.score is not None else ["数据不足"],
             })
         leaders.sort(key=lambda item: (item["base_score"] is None, -(item["base_score"] or 0), item["symbol"]))
-        for rank, item in enumerate(leaders[:20], 1):
+        for rank, item in enumerate(leaders, 1):
             item["rank"] = rank
             if rank == 1 and item["base_score"] is not None:
                 item["leader_type"] = "综合龙头"
-        return leaders[:20]
+        return leaders
 
     def ensure_track_leaders(self, run_id: str, track_id: str) -> list[dict[str, Any]]:
         existing = self.store.list_leaders(run_id, track_id)
-        if existing:
+        # Older workbench snapshots were capped at 20 leaders per track.  A
+        # global pool must not inherit that hidden cap; a shorter snapshot is
+        # complete, while an exact 20-row legacy snapshot is refreshed below.
+        if existing and len(existing) != 20:
             return existing
         tracks = {item["track_id"]: item for item in self.store.list_tracks(run_id)}
         track = tracks.get(track_id)
         if not track:
             raise KeyError("track snapshot not found")
         leaders = self._score_track_leaders(track_id)
+        if not leaders and existing:
+            # Preserve an older reproducible snapshot if the live membership
+            # source is temporarily unavailable; callers still get a visible
+            # partial result instead of an empty candidate track.
+            return existing
         # Replacing the complete run keeps snapshot writes atomic.
         all_tracks = self.store.list_tracks(run_id)
         for item in all_tracks:
@@ -377,35 +386,66 @@ class ValueWorkspaceService:
         tracks = [item for item in self.store.list_tracks(run_id) if int(item["rank"]) <= candidate_limit]
         if not tracks:
             raise ValueError("strategy run has no materialized candidate tracks")
-        members: list[dict[str, Any]] = []
+        candidates: list[dict[str, Any]] = []
         for track in tracks:
             leaders = [
                 item for item in self.ensure_track_leaders(run_id, track["track_id"])
                 if item.get("base_score") is not None and float(item.get("coverage") or 0) > 0
-            ][:leader_limit]
+            ]
             for leader in leaders:
-                members.append({
+                candidates.append({
                     "track_id": track["track_id"], "track_name": track["track_name"],
                     "track_rank": int(track["rank"]), "symbol": leader["symbol"], "name": leader["name"],
                     "leader_rank": int(leader["rank"]), "leader_type": leader["leader_type"],
                     "leader_score": leader.get("base_score"), "leader_coverage": float(leader.get("coverage") or 0),
-                    "inclusion_reason": f"候选赛道第{track['rank']}名 · 行业内第{leader['rank']}名",
                 })
-        if not members:
+        if not candidates:
             raise ValueError("candidate tracks have no valid leaders")
+        # The candidate-track setting controls capacity only.  Do not reserve
+        # five names for every track: every scored company competes globally.
+        candidates.sort(key=lambda item: (
+            item["leader_score"] is None, -float(item["leader_score"] or 0),
+            -float(item["leader_coverage"] or 0), item["track_rank"], item["leader_rank"], item["symbol"],
+        ))
+        capacity = candidate_limit * leader_limit
+        selected_symbols: list[str] = []
+        seen_symbols: set[str] = set()
+        for candidate in candidates:
+            symbol = str(candidate["symbol"])
+            if symbol in seen_symbols:
+                continue
+            seen_symbols.add(symbol)
+            selected_symbols.append(symbol)
+            if len(selected_symbols) == capacity:
+                break
+        selected_rank = {symbol: index for index, symbol in enumerate(selected_symbols, 1)}
+        members = [
+            {
+                **candidate,
+                "inclusion_reason": f"候选范围综合评分第{selected_rank[candidate['symbol']]}名 · 赛道第{candidate['track_rank']}名 · 行业内第{candidate['leader_rank']}名",
+            }
+            for candidate in candidates
+            if candidate["symbol"] in selected_rank
+        ]
         key = ":".join((run_id, str(candidate_limit), str(leader_limit), UNIVERSE_RULE_VERSION))
-        return self.store.create_universe(
+        universe, created = self.store.create_universe(
             idempotency_key=key, run_id=run_id,
             profile_id=str(run.get("profile_id") or "profile_value_line_v2"),
             candidate_limit=candidate_limit, leader_limit=leader_limit,
             data_as_of=str(run["as_of"]), formula_version=str(run["formula_version"]), members=members,
         )
+        self.store.ensure_research_monitors(universe["id"], self._universe_companies(universe))
+        universe = self.store.get_universe(universe["id"]) or universe
+        return universe, created
 
     @staticmethod
     def _universe_companies(universe: dict[str, Any]) -> list[dict[str, Any]]:
         companies = []
         for company in universe.get("companies", []):
-            memberships = sorted(company.get("memberships") or [], key=lambda item: (item["track_rank"], item["leader_rank"]))
+            memberships = sorted(company.get("memberships") or [], key=lambda item: (
+                item.get("leader_score") is None, -float(item.get("leader_score") or 0),
+                -float(item.get("leader_coverage") or 0), item["track_rank"], item["leader_rank"],
+            ))
             if not memberships:
                 continue
             companies.append({
@@ -444,6 +484,16 @@ class ValueWorkspaceService:
         jobs = [job for job in operation["jobs"] if job["status"] == "queued"]
         if not jobs:
             return operation
+
+        history_refresh_error = ""
+        history = ValueMarketHistoryService()
+        try:
+            try:
+                history.refresh([job["symbol"] for job in jobs], as_of=operation["as_of"], count=250)
+            except Exception as exc:
+                history_refresh_error = str(exc)
+        finally:
+            history.client.close()
 
         finance_refresh_error = ""
         finance = FinancialHistoryService()
@@ -490,11 +540,12 @@ class ValueWorkspaceService:
         else:
             failed = sum(job["status"] == "failed" for job in final.get("jobs", []))
             completed = sum(job["status"] in {"completed", "partial"} for job in final.get("jobs", []))
-            status = "failed" if failed == final.get("total") else "partial" if failed or finance_refresh_error else "completed"
+            refresh_errors = "；".join(item for item in (history_refresh_error, finance_refresh_error) if item)
+            status = "failed" if failed == final.get("total") else "partial" if failed or refresh_errors else "completed"
             coverage = completed / int(final.get("total") or 1)
             self.store.update_incremental_run(
                 run_id, status=status, completed=completed, failed=failed, coverage=coverage,
-                message=finance_refresh_error[:1000], completed_at=now(),
+                message=refresh_errors[:1000], completed_at=now(),
             )
             if final.get("run_kind") == "bootstrap":
                 self.store.update_universe_status(final["universe_id"], "ready" if completed else "partial")
@@ -551,7 +602,14 @@ class ValueWorkspaceService:
         if not universe:
             raise KeyError("research universe not found")
         memberships = [item for item in universe["members"] if item["symbol"] == symbol]
-        overview = get_tdx_service().security_overview(symbol, include_related=False, include_history=False)
+        tdx = get_tdx_service()
+        try:
+            if hasattr(tdx, "refresh_security"):
+                tdx.refresh_security(symbol)
+        except Exception:
+            # A single vendor read must not destroy the last successful cache.
+            pass
+        overview = tdx.security_overview(symbol, include_related=False, include_history=False)
         if not overview:
             raise ValueError("通达信公司事实数据不可用")
         finance = FinancialHistoryService()
@@ -639,6 +697,63 @@ class ValueWorkspaceService:
             "sources": [item[1] for item in evidence_payloads], "evidence_ids": evidence_ids,
             "dossier_id": dossier_id, "report_id": report_id,
         })
+        primary_track = sorted(memberships, key=lambda item: (item["track_rank"], item["leader_rank"]))[0]["track_id"] if memberships else ""
+        try:
+            peer_detail = tdx.sector_detail(primary_track) if primary_track else {}
+            peers = list((peer_detail or {}).get("members") or [])
+        except Exception:
+            peers = []
+        prior_valuation = self.store.latest_valuation(universe_id, symbol)
+        history = [
+            item for item in self.store.valuation_history(universe_id, symbol)
+            if str(item.get("data_as_of") or "") < as_of
+        ]
+        valuation_input = calculate_valuation(
+            universe_id=universe_id, symbol=symbol, data_as_of=as_of,
+            payload=payload, peers=peers, history=history,
+        )
+        valuation, _ = self.store.save_valuation(valuation_input)
+        data_status = "stale" if cache.get("stale") else "fresh" if checks["quote"] else "unavailable"
+        if data_status == "fresh" and missing:
+            data_status = "partial"
+        technical_status = str(technical.get("status") or "unavailable")
+        self.store.update_research_monitor(
+            universe_id, symbol, data_status=data_status,
+            research_status="ready" if snapshot["status"] == "ready" else "review_required",
+            valuation_status=valuation["status"], technical_status=technical_status,
+            last_snapshot_id=snapshot["id"], last_valuation_id=valuation["id"],
+            last_checked_at=now(),
+        )
+        company_name = next(
+            (item.get("name") or symbol for item in universe.get("companies", []) if item["symbol"] == symbol),
+            symbol,
+        )
+        if not prior_valuation or prior_valuation.get("source_hash") != valuation.get("source_hash"):
+            self.store.add_research_event(
+                universe_id=universe_id, symbol=symbol,
+                event_key=f"{universe_id}:{symbol}:valuation:{valuation['id']}", event_type="valuation_update",
+                severity="info", title=f"{company_name} · 估值已更新",
+                message="新的独立估值快照已生成，需人工复核后才可用于决策监控。",
+                payload={"symbol": symbol, "valuation_id": valuation["id"], "data_as_of": as_of,
+                         "safety_margin": valuation.get("safety_margin"), "formula_version": valuation.get("formula_version")},
+            )
+        if cache.get("stale") or not checks["quote"]:
+            self.store.add_research_event(
+                universe_id=universe_id, symbol=symbol,
+                event_key=f"{universe_id}:{symbol}:data:{snapshot['source_hash']}", event_type="data_stale",
+                severity="warning", title=f"{symbol} · 行情待更新",
+                message="报价缺失或缓存过期；买卖结论已暂停，其他已完成研究仍保留。",
+                payload={"symbol": symbol, "snapshot_id": snapshot["id"], "data_as_of": as_of},
+            )
+        previous_latest = dict(((previous or {}).get("payload") or {}).get("financial_latest") or {})
+        if latest_financial and latest_financial.get("announcement_date") != previous_latest.get("announcement_date"):
+            self.store.add_research_event(
+                universe_id=universe_id, symbol=symbol,
+                event_key=f"{universe_id}:{symbol}:finance:{latest_financial.get('announcement_date')}", event_type="financial_update",
+                severity="info", title=f"{symbol} · 财务披露已更新",
+                message="发现新的专业财务披露，基本面、风险和估值覆盖需要复核。",
+                payload={"symbol": symbol, "announcement_date": latest_financial.get("announcement_date"), "data_as_of": as_of},
+            )
         return snapshot
 
     def run_batch(self, batch_id: str) -> dict[str, Any]:
@@ -744,6 +859,9 @@ class ValueWorkspaceService:
         snapshot = self.store.latest_snapshot(universe_id, symbol)
         if not company or not snapshot:
             raise ValueError("company must finish bootstrap before monitoring")
+        valuation = self.store.latest_valuation(universe_id, symbol)
+        if not valuation or valuation.get("review_status") != "manual_confirmed":
+            raise ValueError("请先人工确认最新估值快照，再升级为决策监控")
         memberships = sorted(company["memberships"], key=lambda item: (item["track_rank"], item["leader_rank"]))
         primary_track = memberships[0]["track_id"]
         batch, _ = self.store.create_batch(
@@ -973,7 +1091,7 @@ class ValueWorkspaceService:
             self._dimension(
                 "risk", "风控", status=stale_status or "partial", coverage=risk_input_coverage,
                 summary=risk_summary, metrics=risk_metrics, risks=[*risk_facts, *technical_risks],
-                facts=[f"当前人工状态：{monitor.get('position_state', 'watching')}" if monitor else "尚未加入人工监控池"],
+                facts=[f"当前人工状态：{monitor.get('position_state', 'watching')}" if monitor else "已纳入研究监控，尚未升级为决策监控"],
                 missing_fields=risk_missing, sources=["Value deterministic risk rules"], data_as_of=snapshot_as_of,
             ),
         ]
@@ -988,21 +1106,31 @@ class ValueWorkspaceService:
         universe = self.store.get_universe(universe_id)
         if not universe:
             raise KeyError("research universe not found")
+        # Backfill universes frozen before schema v10. This only creates local
+        # monitoring metadata; it never performs vendor reads on a page request.
+        self.store.ensure_research_monitors(universe_id, self._universe_companies(universe))
         macro_store = ValueDataStore(self.store.db_path)
         try:
             macro = macro_store.get_macro_snapshot(universe.get("data_as_of"))
         finally:
             macro_store.close()
         monitors = {item["symbol"]: item for item in self.store.list_monitors() if item.get("universe_id") == universe_id}
+        research_monitors = {item["symbol"]: item for item in self.store.list_research_monitors(universe_id)}
+        valuations = {item["symbol"]: item for item in self.store.list_latest_valuations(universe_id)}
         items: list[dict[str, Any]] = []
         for company in universe.get("companies", []):
             symbol = company["symbol"]
             snapshot = self.store.latest_snapshot(universe_id, symbol)
             monitor = monitors.get(symbol)
+            research_monitor = research_monitors.get(symbol)
+            valuation = valuations.get(symbol)
             if not snapshot:
                 items.append({
                     "symbol": symbol, "name": company["name"], "memberships": company.get("memberships", []),
                     "current_state": "not_archived", "research_state": "missing", "signal_state": "not_monitored",
+                    "data_status": "unavailable", "valuation_status": "unavailable", "technical_status": "unavailable",
+                    "monitor_status": research_monitor.get("status", "research_watching") if research_monitor else "research_watching",
+                    "decision_status": "watching", "is_priority": bool(research_monitor and research_monitor.get("is_priority")),
                     "model_state": "not_configured", "conclusion": "尚未生成公司资料快照。",
                     "next_action": "等待首次建档或重试失败任务。", "data_as_of": None, "snapshot_version": None,
                     "completeness": 0.0, "missing_fields": ["snapshot"], "metrics": {},
@@ -1038,7 +1166,7 @@ class ValueWorkspaceService:
                 supporting_facts.append(f"最近披露净利润同比增长 {profit_yoy:.1f}%")
             if dividend is not None and dividend > 0:
                 supporting_facts.append(f"当前股息率数据为 {dividend:.2f}%")
-            signal_state = str(monitor.get("signal_state") or "not_monitored") if monitor else "not_monitored"
+            signal_state = str(monitor.get("signal_state") or "watching") if monitor else "watching"
             if stale:
                 current_state = "stale"
                 conclusion = "资料已过期，当前分析仅供复核，不能确认入场或退出。"
@@ -1047,7 +1175,7 @@ class ValueWorkspaceService:
                 current_state = "data_insufficient"
                 conclusion = "基础档案已生成，但关键资料不完整，当前不能确认入场或退出。"
                 next_action = "补齐缺失资料；已有行情和估值仍可查看。"
-            elif signal_state not in {"not_monitored", "watching"}:
+            elif signal_state != "watching":
                 current_state = signal_state
                 conclusion = "确定性监控规则已触发，需要人工复核。"
                 next_action = "打开监控事件，核对规则输入、证据和失效条件。"
@@ -1056,36 +1184,90 @@ class ValueWorkspaceService:
                 conclusion = "资料完整且监控规则未触发，继续观察。"
                 next_action = "等待下一交易日增量更新。"
             else:
-                current_state = "ready_for_monitoring"
-                conclusion = "基础资料可用于人工设置入场、风险与退出条件。"
-                next_action = "人工确认后加入监控池。"
+                current_state = "research_watching"
+                conclusion = "公司已进入全量研究监控；系统持续更新资料、风险、技术与估值，但不会自动产生买卖候选。"
+                next_action = "复核估值快照；重点公司可在人工确认后升级为决策监控。"
             raw_diff = dict(snapshot.get("diff") or {})
             changes = [] if raw_diff.get("initial") else list(raw_diff)[:12]
             dimensions = self._analysis_dimensions(
                 payload, list(company.get("memberships") or []), monitor, macro,
                 snapshot_as_of=snapshot["data_as_of"], stale=stale, risk_facts=list(dict.fromkeys(risk_facts)),
             )
+            margin = _number((valuation or {}).get("safety_margin"))
+            valuation_summary = "估值快照尚未生成。"
+            if valuation:
+                valuation_summary = (
+                    f"安全边际 {margin:.1f}%；合理价值区间 {valuation.get('fair_value_low') or '—'}–{valuation.get('fair_value_high') or '—'}。"
+                    if margin is not None else "可比估值已运行，安全边际仍缺少完整输入。"
+                )
+            dimensions.insert(-1, self._dimension(
+                "valuation", "估值与安全边际",
+                status=str((valuation or {}).get("status") or "unavailable"),
+                coverage=float((valuation or {}).get("coverage") or 0), summary=valuation_summary,
+                metrics={
+                    "current_price": (valuation or {}).get("current_price"),
+                    "peer_pe_median": (valuation or {}).get("peer_pe_median"),
+                    "peer_pb_median": (valuation or {}).get("peer_pb_median"),
+                    "safety_margin": (valuation or {}).get("safety_margin"),
+                    "fair_value_low": (valuation or {}).get("fair_value_low"),
+                    "fair_value_high": (valuation or {}).get("fair_value_high"),
+                }, missing_fields=list((valuation or {}).get("missing_fields") or ["valuation_snapshot"]),
+                sources=list((valuation or {}).get("sources") or []), data_as_of=(valuation or {}).get("data_as_of"),
+            ))
+            derived_data_status = "stale" if stale else "partial" if missing else "fresh"
+            data_status = str((research_monitor or {}).get("data_status") or "")
+            if data_status in {"", "unavailable"}:
+                data_status = derived_data_status
+            derived_technical_status = str(dict(payload.get("technical") or {}).get("status") or "unavailable")
+            technical_status = str((research_monitor or {}).get("technical_status") or "")
+            if technical_status in {"", "unavailable"}:
+                technical_status = derived_technical_status
+            derived_valuation_status = str((valuation or {}).get("status") or "unavailable")
+            valuation_status = str((research_monitor or {}).get("valuation_status") or "")
+            if valuation_status in {"", "unavailable"}:
+                valuation_status = derived_valuation_status
             items.append({
                 "symbol": symbol, "name": company["name"], "memberships": company.get("memberships", []),
-                "current_state": current_state, "research_state": snapshot["status"],
+                "current_state": current_state,
+                "research_state": (
+                    snapshot["status"] if str((research_monitor or {}).get("research_status") or "") in {"", "not_archived"}
+                    else str((research_monitor or {}).get("research_status"))
+                ),
                 "signal_state": signal_state, "model_state": "not_configured",
+                "data_status": data_status, "valuation_status": valuation_status,
+                "technical_status": technical_status,
+                "monitor_status": "decision_watching" if monitor else str((research_monitor or {}).get("status") or "research_watching"),
+                "decision_status": signal_state, "is_priority": bool((research_monitor or {}).get("is_priority")),
                 "conclusion": conclusion, "next_action": next_action,
                 "data_as_of": snapshot["data_as_of"], "snapshot_version": snapshot["version"],
                 "completeness": float(snapshot.get("completeness") or 0), "missing_fields": missing,
                 "metrics": {"price": price, "pe_ttm": pe, "pb_mrq": pb, "dividend_yield": dividend,
+                            "safety_margin": (valuation or {}).get("safety_margin"),
+                            "fair_value_low": (valuation or {}).get("fair_value_low"),
+                            "fair_value_high": (valuation or {}).get("fair_value_high"),
                             "revenue_yoy": revenue_yoy, "net_profit_yoy": profit_yoy, "roe": roe},
                 "supporting_facts": supporting_facts, "risk_facts": list(dict.fromkeys(risk_facts)),
                 "changes": changes, "monitor_id": monitor.get("id") if monitor else None,
+                "research_monitor_id": (research_monitor or {}).get("id"), "valuation": valuation,
                 "position_state": monitor.get("position_state") if monitor else None,
                 "analysis_version": COMPANY_ANALYSIS_VERSION, "dimensions": dimensions,
             })
+        items.sort(key=lambda item: (
+            not any(_number(member.get("leader_score")) is not None for member in item.get("memberships", [])),
+            -max((_number(member.get("leader_score")) or 0 for member in item.get("memberships", [])), default=0),
+            -max((_number(member.get("leader_coverage")) or 0 for member in item.get("memberships", [])), default=0),
+            min((int(member.get("track_rank") or 10_000) for member in item.get("memberships", [])), default=10_000),
+            item["symbol"],
+        ))
         state_counts: dict[str, int] = {}
         for item in items:
             state_counts[item["current_state"]] = state_counts.get(item["current_state"], 0) + 1
         return {
             "universe_id": universe_id, "universe_status": universe["status"], "data_as_of": universe["data_as_of"],
             "total": len(items), "state_counts": state_counts,
-            "monitored": sum(bool(item.get("monitor_id")) for item in items),
+            "monitored": sum(bool(item.get("research_monitor_id")) for item in items),
+            "research_monitored": sum(bool(item.get("research_monitor_id")) for item in items),
+            "decision_monitored": sum(bool(item.get("monitor_id")) for item in items),
             "model_state": "not_configured", "analysis_version": COMPANY_ANALYSIS_VERSION, "items": items,
         }
 
@@ -1151,35 +1333,68 @@ class ValueWorkspaceService:
             risk_reasons = self._risk_reasons(payload)
             entry_checks = self._entry_checks(monitor.get("conditions") or {}, payload)
             exit_checks = self._exit_checks(monitor.get("conditions") or {}, payload)
+            valuation = self.store.latest_valuation(monitor["universe_id"], monitor["symbol"])
+            technical = dict(payload.get("technical") or {})
+            technical_metrics = dict(technical.get("metrics") or {})
+            trend = str(technical.get("trend") or "")
+            safety_margin = _number((valuation or {}).get("safety_margin"))
+            valuation_confirmed = bool(valuation and valuation.get("review_status") == "manual_confirmed")
+            technical_allowed = (
+                technical.get("status") in {"ready", "partial"}
+                and trend not in {"空头排列", "中期偏弱"}
+                and (_number(technical_metrics.get("volatility_20d")) or 0) <= 50
+                and (_number(technical_metrics.get("max_drawdown_120d")) or 0) > -25
+                and (_number(technical_metrics.get("rsi_14")) or 0) <= 75
+            )
+            system_entry_checks = [
+                ("基础面未触发风险规则", not risk_reasons),
+                ("估值已人工确认", valuation_confirmed),
+                (f"安全边际 ≥ {DEFAULT_ENTRY_MARGIN:g}%", safety_margin is not None and safety_margin >= DEFAULT_ENTRY_MARGIN),
+                ("技术与风险时机允许", technical_allowed),
+            ]
+            overvalued = safety_margin is not None and safety_margin <= OVERVALUED_MARGIN
+            severe_technical_risk = (
+                (_number(technical_metrics.get("max_drawdown_120d")) or 0) <= -25
+                or (trend in {"空头排列", "中期偏弱"} and (_number(technical_metrics.get("return_20d")) or 0) <= -10)
+            )
             thesis_invalidated = bool(monitor.get("thesis_invalidated"))
             reasons: list[str] = []
             if thesis_invalidated:
                 signal_state, reasons = "thesis_invalidated", ["用户确认投资逻辑已经失效"]
-            elif "professional_finance" in missing or "quote" in missing:
-                signal_state, reasons = "data_insufficient", [f"缺少关键数据：{'、'.join(missing)}"]
             elif stale:
                 signal_state, reasons = "stale", ["通达信行情或财务缓存已过期"]
-            elif monitor.get("position_state") == "holding" and any(result for _, result in exit_checks):
+            elif "professional_finance" in missing or "quote" in missing:
+                signal_state, reasons = "data_insufficient", [f"缺少关键数据：{'、'.join(missing)}"]
+            elif monitor.get("position_state") == "holding" and (any(result for _, result in exit_checks) or overvalued or severe_technical_risk):
                 signal_state = "exit_candidate"
                 reasons = [label for label, result in exit_checks if result]
+                if overvalued:
+                    reasons.append(f"安全边际 {safety_margin:.1f}% ≤ {OVERVALUED_MARGIN:g}%，估值明显透支")
+                if severe_technical_risk:
+                    reasons.append("技术风险或回撤已超过系统复核上限")
             elif monitor.get("position_state") == "holding" and risk_reasons:
                 signal_state, reasons = "holding_review", risk_reasons
-            elif monitor.get("position_state") == "watching" and entry_checks and all(result for _, result in entry_checks):
+            elif monitor.get("position_state") == "watching" and all(result for _, result in system_entry_checks) and all(result for _, result in entry_checks):
                 signal_state = "entry_candidate"
-                reasons = [label for label, _ in entry_checks]
+                reasons = [label for label, _ in system_entry_checks] + [label for label, _ in entry_checks]
             else:
                 signal_state = "watching"
-                reasons = ["当前未满足方向性条件"]
+                reasons = [label for label, result in system_entry_checks if not result]
+                reasons += [label for label, result in entry_checks if not result]
+                reasons = reasons or ["当前未满足方向性条件"]
             inputs = {
                 "position_state": monitor.get("position_state"),
                 "quote": payload.get("quote"), "fundamental": payload.get("fundamental"),
                 "financial_latest": payload.get("financial_latest"),
                 "financial_previous": payload.get("financial_previous"),
+                "valuation": valuation, "technical": technical,
+                "system_entry_checks": system_entry_checks,
                 "entry_checks": entry_checks, "exit_checks": exit_checks,
             }
             previous = self.store.latest_signal_evaluation(monitor["id"])
             input_hash = _stable_hash({
-                "snapshot": snapshot["source_hash"], "conditions": monitor.get("conditions"),
+                "snapshot": snapshot["source_hash"], "valuation": (valuation or {}).get("source_hash"),
+                "conditions": monitor.get("conditions"),
                 "position_state": monitor.get("position_state"), "thesis_invalidated": thesis_invalidated,
                 "signal_state": signal_state, "reasons": reasons,
             })
@@ -1188,9 +1403,13 @@ class ValueWorkspaceService:
                 "signal_state": signal_state, "rule_version": SIGNAL_RULE_VERSION,
                 "input_hash": input_hash, "rules": {
                     "risk_preset": "balanced", "risk_thresholds": RISK_THRESHOLDS,
-                    "entry_mode": "all", "exit_mode": "any",
+                    "entry_mode": "four_gates_and_personal_overlays", "exit_mode": "any",
+                    "entry_safety_margin": DEFAULT_ENTRY_MARGIN, "overvalued_margin": OVERVALUED_MARGIN,
                 }, "inputs": inputs, "reasons": reasons, "missing_fields": missing,
             })
+            self.store.update_research_monitor(
+                monitor["universe_id"], monitor["symbol"], decision_status=signal_state,
+            )
             changed = not previous or previous.get("signal_state") != signal_state or previous.get("reasons") != reasons
             latest_matching_event = next((item for item in self.store.list_events(500) if item.get("monitor_id") == monitor["id"] and item.get("event_type") == signal_state), None)
             closed_reappeared = bool(latest_matching_event and latest_matching_event.get("status") == "closed")

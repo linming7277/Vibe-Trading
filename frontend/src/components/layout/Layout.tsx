@@ -108,7 +108,7 @@ export function Layout() {
         collapsed ? (mobileOpen ? "w-[248px] md:w-[68px]" : "w-[68px]") : "w-[248px]",
       )} aria-label="恒值投资侧边栏">
         <div className="flex h-16 items-center gap-2 border-b px-4">
-          <Link to="/today" className="flex min-w-0 items-center gap-2" aria-label="恒值投资">
+          <Link to="/value" className="flex min-w-0 items-center gap-2" aria-label="恒值投资">
             <BrandMark className="h-8 w-8 shrink-0" />
             {(!collapsed || mobileOpen) ? <div className="min-w-0"><div className="truncate text-sm font-semibold">恒值投资</div><div className="text-[10px] tracking-wider text-muted-foreground">RESEARCH DESK</div></div> : null}
           </Link>

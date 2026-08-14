@@ -31,7 +31,7 @@ powershell -ExecutionPolicy Bypass -File launcher/windows/HengzhiLauncher.ps1 -A
 powershell -ExecutionPolicy Bypass -File launcher/windows/HengzhiLauncher.ps1 -Action status
 ```
 
-- 工作台：`http://127.0.0.1:5899/today`
+- 工作台：`http://127.0.0.1:5899/value`
 - 数据中心：`http://127.0.0.1:5899/data`
 - 后端 API：`http://127.0.0.1:8899`
 

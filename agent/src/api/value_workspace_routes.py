@@ -48,6 +48,11 @@ class MonitorPatch(BaseModel):
     thesis_invalidated: bool | None = None
 
 
+class ResearchMonitorPatch(BaseModel):
+    status: Literal["research_watching", "paused"] | None = None
+    is_priority: bool | None = None
+
+
 class UniversePayload(BaseModel):
     run_id: str
     candidate_limit: Literal[5, 10, 20, 50] = 20
@@ -232,6 +237,66 @@ def register_value_workspace_routes(app: FastAPI, require_auth: AuthDep) -> None
             raise HTTPException(404, str(exc)) from exc
         finally:
             service.close()
+
+    @app.get("/strategy/value/research-monitors", dependencies=[Depends(require_auth)])
+    async def list_research_monitors(universe_id: str | None = Query(default=None)):
+        store = ValueWorkspaceStore()
+        try:
+            return {"items": store.list_research_monitors(universe_id)}
+        finally:
+            store.close()
+
+    @app.patch("/strategy/value/research-monitors/{monitor_id}", dependencies=[Depends(require_auth)])
+    async def patch_research_monitor(monitor_id: str, payload: ResearchMonitorPatch):
+        store = ValueWorkspaceStore()
+        try:
+            monitor = store.get_research_monitor(monitor_id)
+            if not monitor:
+                raise HTTPException(404, "research monitor not found")
+            fields = payload.model_dump(exclude_none=True)
+            return store.update_research_monitor(monitor["universe_id"], monitor["symbol"], **fields)
+        finally:
+            store.close()
+
+    @app.get("/strategy/value/valuations", dependencies=[Depends(require_auth)])
+    async def list_company_valuations(
+        universe_id: str = Query(...), queue: str = Query(default="all"), limit: int = Query(default=500, ge=1, le=1000),
+    ):
+        service = ValueWorkspaceService()
+        try:
+            items = service.universe_analysis(universe_id)["items"]
+            if queue == "priority":
+                items = [item for item in items if item.get("is_priority")]
+            elif queue == "entry":
+                items = [item for item in items if item.get("decision_status") == "entry_candidate"]
+            elif queue == "review_exit":
+                items = [item for item in items if item.get("decision_status") in {"holding_review", "exit_candidate", "thesis_invalidated"}]
+            return {"universe_id": universe_id, "queue": queue, "total": len(items), "items": items[:limit]}
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        finally:
+            service.close()
+
+    @app.get("/strategy/value/valuations/{symbol}", dependencies=[Depends(require_auth)])
+    async def get_company_valuation(symbol: str, universe_id: str = Query(...)):
+        store = ValueWorkspaceStore()
+        try:
+            value = store.latest_valuation(universe_id, symbol.upper())
+            if not value:
+                raise HTTPException(404, "valuation snapshot not found")
+            return value
+        finally:
+            store.close()
+
+    @app.post("/strategy/value/valuations/{valuation_id}/confirm", dependencies=[Depends(require_auth)])
+    async def confirm_company_valuation(valuation_id: str):
+        store = ValueWorkspaceStore()
+        try:
+            return store.confirm_valuation(valuation_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        finally:
+            store.close()
 
     @app.post("/strategy/value/research-universes/{universe_id}/bootstrap", dependencies=[Depends(require_auth)])
     async def bootstrap_research_universe(

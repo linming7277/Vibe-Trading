@@ -35,6 +35,8 @@ MODULE_LABELS = {
 }
 SECTOR_DATASET = "value_sector_scores_v2"
 LEADER_DATASET = "value_leader_scores_v2"
+# The candidate-track choice controls pool capacity, not a per-track quota.
+# For example, the top 20 tracks produce one global top-100 leader pool.
 TOTAL_LEADER_POOL_PER_TRACK = 5
 INDUSTRY_DATASET = "value_industries"
 
@@ -677,22 +679,20 @@ class ValueLineService:
                 for row in self.cache.list_records(SECTOR_DATASET, category=target, limit=500)["items"]
             }
             # A total leader pool is not a second copy of the A-share universe.
-            # Keep only researchable top leaders from every candidate track;
-            # individual track views still expose the complete in-track ranking.
+            # Candidate-track count determines its capacity, but does not give
+            # every candidate track a five-company quota.  All scored members
+            # of the selected tracks compete on one leader-score ranking.
             items = [
                 {**row, "candidate_sector_rank": sector_ranks.get(str(row.get("sector_code") or ""), 10_000)}
                 for row in items
                 if row.get("score") is not None
-                and int(row.get("rank") or 1) <= TOTAL_LEADER_POOL_PER_TRACK
                 and (candidate_track_limit is None or sector_ranks.get(str(row.get("sector_code") or ""), 10_000) <= candidate_track_limit)
             ]
-            # Leader scores are percentile ranks inside a track.  A total pool
-            # must preserve the chosen track's priority before comparing its
-            # leaders, rather than pretending cross-track percentiles are one
-            # global valuation score.
+            # This is a cross-track research queue.  Sector rank is context
+            # and a stable tie-breaker; it is never a primary ordering rule.
             items.sort(key=lambda row: (
-                row["candidate_sector_rank"], row.get("rank") or 10_000,
-                row.get("score") is None, -(row.get("score") or 0), row.get("symbol") or "",
+                row.get("score") is None, -(row.get("score") or 0), -float(row.get("coverage") or 0),
+                row["candidate_sector_rank"], row.get("rank") or 10_000, row.get("symbol") or "",
             ))
             # Be defensive if a future membership source assigns a company to
             # more than one track: retain its highest-priority appearance only.
@@ -705,15 +705,18 @@ class ValueLineService:
                 if symbol:
                     seen_symbols.add(symbol)
                 unique_items.append(row)
-            items = unique_items
+            pool_capacity = candidate_track_limit * TOTAL_LEADER_POOL_PER_TRACK if candidate_track_limit else None
+            items = unique_items[:pool_capacity] if pool_capacity else unique_items
         return {
             "as_of": target, "sector_code": sector_code, "items": items, "total": len(items),
             "formula_version": LEADER_VERSION,
             "pool_rule": {
-                "per_track_limit": TOTAL_LEADER_POOL_PER_TRACK,
+                "leaders_per_candidate_track": TOTAL_LEADER_POOL_PER_TRACK,
+                "pool_capacity": candidate_track_limit * TOTAL_LEADER_POOL_PER_TRACK if candidate_track_limit else None,
                 "candidate_track_limit": candidate_track_limit,
                 "scored_only": True,
                 "deduplicated_by_symbol": True,
+                "ordering": "leader_score_desc_global_capacity",
             },
         }
 

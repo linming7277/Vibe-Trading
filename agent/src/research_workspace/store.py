@@ -81,7 +81,7 @@ class ResearchWorkspaceStore:
     only contains queryable product state and references to those artifacts.
     """
 
-    SCHEMA_VERSION = 9
+    SCHEMA_VERSION = 10
 
     def __init__(self, db_path: Path | None = None, *, seed: bool = False) -> None:
         self.db_path = Path(db_path or (get_runtime_root() / "research.db"))
@@ -511,6 +511,72 @@ class ResearchWorkspaceStore:
                     retry_minutes INTEGER NOT NULL DEFAULT 20, next_run_at TEXT,
                     last_run_id TEXT, last_status TEXT, last_error TEXT NOT NULL DEFAULT '',
                     lock_owner TEXT, lock_until TEXT, updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS value_company_research_monitors (
+                    id TEXT PRIMARY KEY, universe_id TEXT NOT NULL, symbol TEXT NOT NULL,
+                    name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'research_watching',
+                    is_priority INTEGER NOT NULL DEFAULT 0,
+                    data_status TEXT NOT NULL DEFAULT 'unavailable',
+                    research_status TEXT NOT NULL DEFAULT 'not_archived',
+                    valuation_status TEXT NOT NULL DEFAULT 'unavailable',
+                    technical_status TEXT NOT NULL DEFAULT 'unavailable',
+                    decision_status TEXT NOT NULL DEFAULT 'watching',
+                    last_snapshot_id TEXT, last_valuation_id TEXT, last_checked_at TEXT,
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    UNIQUE(universe_id,symbol),
+                    FOREIGN KEY(universe_id) REFERENCES value_research_universes(id) ON DELETE CASCADE,
+                    FOREIGN KEY(last_snapshot_id) REFERENCES company_research_snapshots(id) ON DELETE SET NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_company_research_monitors_universe
+                    ON value_company_research_monitors(universe_id,status,symbol);
+                CREATE TABLE IF NOT EXISTS company_valuation_snapshots (
+                    id TEXT PRIMARY KEY, universe_id TEXT NOT NULL, symbol TEXT NOT NULL,
+                    version INTEGER NOT NULL, status TEXT NOT NULL,
+                    review_status TEXT NOT NULL DEFAULT 'automatic_screen',
+                    data_as_of TEXT NOT NULL, coverage REAL NOT NULL, source_hash TEXT NOT NULL,
+                    current_price REAL, pe_ttm REAL, pb_mrq REAL, dividend_yield REAL,
+                    peer_pe_median REAL, peer_pb_median REAL,
+                    pe_percentile REAL, pb_percentile REAL, safety_margin REAL,
+                    fair_value_low REAL, fair_value_high REAL,
+                    watch_price_low REAL, watch_price_high REAL,
+                    comparable_json TEXT NOT NULL, dcf_json TEXT NOT NULL,
+                    missing_fields_json TEXT NOT NULL, sources_json TEXT NOT NULL,
+                    formula_version TEXT NOT NULL, previous_snapshot_id TEXT,
+                    confirmed_at TEXT, created_at TEXT NOT NULL,
+                    UNIQUE(universe_id,symbol,source_hash),
+                    FOREIGN KEY(universe_id) REFERENCES value_research_universes(id) ON DELETE CASCADE,
+                    FOREIGN KEY(previous_snapshot_id) REFERENCES company_valuation_snapshots(id) ON DELETE SET NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_company_valuation_latest
+                    ON company_valuation_snapshots(universe_id,symbol,version DESC);
+                CREATE TABLE IF NOT EXISTS value_research_events (
+                    id TEXT PRIMARY KEY,
+                    universe_id TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    event_key TEXT NOT NULL UNIQUE,
+                    event_type TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    triggered_at TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'open',
+                    acknowledgement_note TEXT NOT NULL DEFAULT '',
+                    acknowledged_at TEXT,
+                    resolved_at TEXT,
+                    FOREIGN KEY(universe_id) REFERENCES value_research_universes(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_value_research_events_queue
+                    ON value_research_events(status,event_type,triggered_at DESC);
+                CREATE TABLE IF NOT EXISTS value_research_event_deliveries (
+                    id TEXT PRIMARY KEY,
+                    event_id TEXT NOT NULL,
+                    channel TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    error TEXT NOT NULL DEFAULT '',
+                    attempted_at TEXT NOT NULL,
+                    UNIQUE(event_id,channel),
+                    FOREIGN KEY(event_id) REFERENCES value_research_events(id) ON DELETE CASCADE
                 );
                 """
             )

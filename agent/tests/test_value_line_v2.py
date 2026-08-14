@@ -144,7 +144,7 @@ def test_value_service_lists_all_v2_leaders_when_sector_is_omitted(tmp_path: Pat
         service.close()
 
 
-def test_total_leader_pool_prioritizes_candidate_track_before_in_track_rank(tmp_path: Path) -> None:
+def test_total_leader_pool_ranks_candidate_leaders_by_score(tmp_path: Path) -> None:
     cache = TdxDataStore(tmp_path / "tdx.db")
     data_store = ValueDataStore(tmp_path / "research.db")
     cache.upsert_records("value_sector_scores_v2", [
@@ -158,8 +158,8 @@ def test_total_leader_pool_prioritizes_candidate_track_before_in_track_rank(tmp_
     service = ValueLineService(cache=cache, data_store=data_store)
     try:
         result = service.leaders(as_of="2026-08-13")
-        assert [item["symbol"] for item in result["items"]] == ["600000.SH", "000001.SZ"]
-        assert result["items"][0]["candidate_sector_rank"] == 1
+        assert [item["symbol"] for item in result["items"]] == ["000001.SZ", "600000.SH"]
+        assert result["items"][0]["candidate_sector_rank"] == 2
         narrowed = service.leaders(as_of="2026-08-13", candidate_track_limit=1)
         assert [item["symbol"] for item in narrowed["items"]] == ["600000.SH"]
         assert narrowed["pool_rule"]["candidate_track_limit"] == 1
@@ -167,7 +167,7 @@ def test_total_leader_pool_prioritizes_candidate_track_before_in_track_rank(tmp_
         service.close()
 
 
-def test_total_leader_pool_keeps_only_scored_top_five_per_track(tmp_path: Path) -> None:
+def test_total_leader_pool_uses_global_capacity_not_per_track_quota(tmp_path: Path) -> None:
     cache = TdxDataStore(tmp_path / "tdx.db")
     data_store = ValueDataStore(tmp_path / "research.db")
     cache.upsert_records("value_sector_scores_v2", [
@@ -182,11 +182,13 @@ def test_total_leader_pool_keeps_only_scored_top_five_per_track(tmp_path: Path) 
     ])
     service = ValueLineService(cache=cache, data_store=data_store)
     try:
-        result = service.leaders(as_of="2026-08-13")
-        assert [item["rank"] for item in result["items"]] == [1, 2, 3, 5]
+        result = service.leaders(as_of="2026-08-13", candidate_track_limit=1)
+        # Rank 6 enters because the pool takes the best five *overall* rather
+        # than stopping after a sector's first five ranked companies.
+        assert [item["rank"] for item in result["items"]] == [1, 2, 3, 5, 6]
         assert result["pool_rule"] == {
-            "per_track_limit": 5, "candidate_track_limit": None,
-            "scored_only": True, "deduplicated_by_symbol": True,
+            "leaders_per_candidate_track": 5, "pool_capacity": 5, "candidate_track_limit": 1,
+            "scored_only": True, "deduplicated_by_symbol": True, "ordering": "leader_score_desc_global_capacity",
         }
     finally:
         service.close()

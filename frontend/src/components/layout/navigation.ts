@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Activity, BarChart3, Bot, Database, FlaskConical, Gauge, Scale, Settings } from "lucide-react";
+import { Activity, BarChart3, Bot, Database, FlaskConical, Scale, Settings } from "lucide-react";
 
 export interface SecondaryNavigationItem {
   to: string;
@@ -8,7 +8,7 @@ export interface SecondaryNavigationItem {
 }
 
 export interface PrimaryNavigationItem {
-  id: "today" | "market" | "value" | "emotion" | "simulation" | "ai";
+  id: "market" | "value" | "emotion" | "simulation" | "ai";
   to: string;
   label: string;
   icon: LucideIcon;
@@ -24,7 +24,6 @@ export interface UtilityNavigationItem {
 }
 
 export const PRIMARY_NAVIGATION: PrimaryNavigationItem[] = [
-  { id: "today", to: "/today", label: "今日总览", icon: Gauge, matches: ["/today"] },
   {
     id: "market", to: "/market/overview", label: "市场行情", icon: BarChart3,
     matches: ["/market"],
@@ -39,10 +38,10 @@ export const PRIMARY_NAVIGATION: PrimaryNavigationItem[] = [
     matches: ["/value", "/company"],
     secondary: [
       { to: "/value", label: "价值龙头" },
-      { to: "/value/research", label: "研究档案" },
-      { to: "/value/valuation", label: "估值与买点" },
+      { to: "/value/research", label: "公司研究" },
+      { to: "/value/valuation", label: "估值与买卖点" },
       { to: "/value/plans", label: "投委与计划" },
-      { to: "/value/monitor", label: "持续监控" },
+      { to: "/value/monitor", label: "监控事件" },
     ],
   },
   {

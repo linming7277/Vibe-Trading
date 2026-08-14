@@ -8,6 +8,7 @@ import pytest
 from src.strategy_engines.store import StrategyEngineStore
 from src.value_workspace.service import ValueWorkspaceService
 from src.value_workspace.store import ValueWorkspaceStore
+from src.value_workspace.valuation import calculate_valuation
 
 
 class FakeTdx:
@@ -227,6 +228,39 @@ def test_incremental_progress_is_persisted_while_other_jobs_are_queued(stores):
     assert live["failed"] == 0
     assert live["coverage"] == .5
     assert [job["status"] for job in live["jobs"]] == ["partial", "queued"]
+
+
+def test_company_valuation_snapshot_is_deterministic_and_requires_no_fake_dcf(stores):
+    value, engine = stores
+    universe, _ = _test_incremental_universe(value, engine)
+    value.ensure_research_monitors(universe["id"], universe["companies"])
+    result = calculate_valuation(
+        universe_id=universe["id"], symbol="000001.SZ", data_as_of="2026-08-14",
+        payload={
+            "quote": {"price": 10},
+            "fundamental": {"pe_ttm": 10, "pb_mrq": 1, "dividend_yield": 3},
+            "financial_latest": {"operating_cash_flow": 100},
+        },
+        peers=[{"pe_ttm": 20, "pb_mrq": 2}, {"pe_ttm": 18, "pb_mrq": 1.8}],
+        history=[{"pe_ttm": index + 1, "pb_mrq": 0.5 + index / 10} for index in range(20)],
+    )
+    assert result["status"] == "ready"
+    assert result["safety_margin"] > 80
+    assert result["dcf"]["status"] == "unavailable"
+    first, created = value.save_valuation(result)
+    repeated, repeated_created = value.save_valuation(result)
+    assert created is True and repeated_created is False and repeated["id"] == first["id"]
+    confirmed = value.confirm_valuation(first["id"])
+    assert confirmed["review_status"] == "manual_confirmed"
+    monitor = value.update_research_monitor(universe["id"], "000001.SZ", last_valuation_id=first["id"])
+    assert monitor["status"] == "research_watching"
+    event = value.add_research_event(
+        universe_id=universe["id"], symbol="000001.SZ", event_key="valuation:test",
+        event_type="valuation_update", severity="info", title="估值更新", message="需要复核", payload={"data_as_of": "2026-08-14"},
+    )
+    listed = value.list_events()
+    assert listed[0]["id"] == event["id"] and listed[0]["scope"] == "research"
+    assert value.acknowledge_event(event["id"], status="closed")["status"] == "closed"
 
 
 def test_company_snapshot_timeout_fails_only_that_job_and_finishes_operation(stores, monkeypatch):

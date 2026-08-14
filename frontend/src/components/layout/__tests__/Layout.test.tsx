@@ -15,7 +15,7 @@ vi.mock("@/stores/agent", () => ({
     selector({ sseStatus: "connected", sseRetryAttempt: 0 }),
 }));
 
-function renderLayout(path = "/today") {
+function renderLayout(path = "/value") {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
@@ -40,17 +40,16 @@ describe("双策略 Layout", () => {
     expect(screen.getByRole("complementary", { name: "恒值投资侧边栏" })).toBeInTheDocument();
     const primary = screen.getByRole("navigation", { name: "主导航" });
     const utility = screen.getByRole("navigation", { name: "系统导航" });
-    expect(within(primary).getAllByRole("link")).toHaveLength(6);
+    expect(within(primary).getAllByRole("link")).toHaveLength(5);
     expect(within(utility).getAllByRole("link")).toHaveLength(2);
-    expect(within(primary).getByRole("link", { name: "今日总览" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "恒值投资" })).toHaveAttribute("href", "/today");
+    expect(within(primary).getByRole("link", { name: "价值投资" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "恒值投资" })).toHaveAttribute("href", "/value");
     expect(screen.getByRole("textbox", { name: "搜索证券" })).toBeInTheDocument();
     expect(screen.getByRole("main")).toHaveAttribute("id", "main");
     expect(screen.getByText("跳到主要内容")).toHaveAttribute("href", "#main");
   });
 
   it.each([
-    ["今日总览", "/today"],
     ["市场行情", "/market/overview"],
     ["价值投资", "/value"],
     ["情绪交易", "/emotion/temperature"],
@@ -113,13 +112,13 @@ describe("双策略 Layout", () => {
   });
 
   it("does not request sessions on business pages", () => {
-    renderLayout("/today");
+    renderLayout("/value");
     expect(apiMock.listSessions).not.toHaveBeenCalled();
     expect(screen.queryByText("最近会话")).not.toBeInTheDocument();
   });
 
   it("supports market switching without exposing a language selector", () => {
-    renderLayout();
+    renderLayout("/market/overview");
     fireEvent.click(screen.getByRole("button", { name: "港股" }));
     expect(window.localStorage.getItem("hengzhi-market")).toBe("HK");
     expect(screen.queryByRole("button", { name: "语言" })).not.toBeInTheDocument();

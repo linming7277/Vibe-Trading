@@ -41,7 +41,7 @@ const redirect = (to: string) => <Navigate to={to} replace />;
 export const router = createBrowserRouter([{
   element: <Layout />,
   children: [
-    { path: "/", element: redirect("/today") },
+    { path: "/", element: redirect("/value") },
     { path: "/today", element: wrap(Today) },
 
     { path: "/value", element: wrap(ValueStrategy), children: [
@@ -57,6 +57,7 @@ export const router = createBrowserRouter([{
     { path: "/value/leaders", element: redirect("/value?focus=leaders") },
     { path: "/value/company", element: redirect("/value/research") },
     { path: "/value/timing", element: redirect("/value/monitor") },
+    { path: "/company", element: redirect("/value/research") },
     { path: "/company/:market/:symbol", element: wrap(CompanyResearch) },
 
     { path: "/emotion/temperature", element: wrap(EmotionStrategy) },
@@ -128,6 +129,6 @@ export const router = createBrowserRouter([{
     { path: "/alpha-zoo/compare", element: redirect("/models/factors/compare") },
     { path: "/alpha-zoo/:alphaId", element: wrap(AlphaZoo) },
     { path: "/correlation", element: redirect("/models/correlation") },
-    { path: "*", element: redirect("/today") },
+    { path: "*", element: redirect("/value") },
   ],
 }]);

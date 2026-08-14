@@ -33,13 +33,13 @@ def test_sqlite_bootstrap_is_idempotent_and_market_taxonomies_stay_native(tmp_pa
             "HK": "恒生",
             "US": "GICS",
         }
-        assert second._conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0] == "9"
+        assert second._conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0] == "10"
         tables = {
             row[0]
             for row in second._conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert {"engine_runs", "strategy_signals", "decision_chain_runs", "structured_committee_decisions"} <= tables
-        assert [row[0] for row in second._conn.execute("SELECT version FROM schema_migrations ORDER BY version")] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        assert [row[0] for row in second._conn.execute("SELECT version FROM schema_migrations ORDER BY version")] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     finally:
         second.close()
 

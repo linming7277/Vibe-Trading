@@ -337,7 +337,7 @@ function Show-LauncherWindow {
     $openButton.Location = New-Object System.Drawing.Point(406, 286)
     $openButton.Size = New-Object System.Drawing.Size(112, 36)
     $openButton.FlatStyle = "Flat"
-    $openButton.Add_Click({ Start-Process "http://127.0.0.1:5899/today" })
+    $openButton.Add_Click({ Start-Process "http://127.0.0.1:5899/value" })
     $form.Controls.Add($openButton)
 
     $logsButton = New-Object System.Windows.Forms.Button

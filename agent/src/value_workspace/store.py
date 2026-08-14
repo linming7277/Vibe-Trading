@@ -52,6 +52,7 @@ class ValueWorkspaceStore:
         "diff_json": "diff", "missing_fields_json": "missing_fields",
         "sources_json": "sources", "evidence_ids_json": "evidence_ids",
         "rules_json": "rules", "inputs_json": "inputs", "reasons_json": "reasons",
+        "comparable_json": "comparable", "dcf_json": "dcf",
     }
 
     def __init__(self, db_path: Path | None = None) -> None:
@@ -206,7 +207,7 @@ class ValueWorkspaceStore:
                     item[public] = json.loads(value or "{}")
                 except json.JSONDecodeError:
                     item[public] = {}
-        for field in ("is_default", "is_builtin", "cancel_requested", "enabled", "thesis_invalidated"):
+        for field in ("is_default", "is_builtin", "cancel_requested", "enabled", "thesis_invalidated", "is_priority"):
             if field in item:
                 item[field] = bool(item[field])
         return item
@@ -410,6 +411,142 @@ class ValueWorkspaceStore:
         if cursor.rowcount != 1:
             raise KeyError("research universe not found")
         self._conn.commit()
+
+    def ensure_research_monitors(self, universe_id: str, companies: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        timestamp = now()
+        with self._lock:
+            self._conn.executemany(
+                """INSERT OR IGNORE INTO value_company_research_monitors(
+                       id,universe_id,symbol,name,status,is_priority,data_status,research_status,
+                       valuation_status,technical_status,decision_status,created_at,updated_at
+                   ) VALUES(?,?,?,?, 'research_watching',0,'unavailable','not_archived',
+                            'unavailable','unavailable','watching',?,?)""",
+                [(new_id("researchmon"), universe_id, item["symbol"], item.get("name") or item["symbol"], timestamp, timestamp)
+                 for item in companies],
+            )
+            self._conn.commit()
+        return self.list_research_monitors(universe_id)
+
+    def list_research_monitors(self, universe_id: str | None = None) -> list[dict[str, Any]]:
+        if universe_id:
+            rows = self._conn.execute(
+                "SELECT * FROM value_company_research_monitors WHERE universe_id=? ORDER BY is_priority DESC,symbol",
+                (universe_id,),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM value_company_research_monitors ORDER BY updated_at DESC",
+            ).fetchall()
+        return [self.row(row) or {} for row in rows]
+
+    def update_research_monitor(self, universe_id: str, symbol: str, **fields: Any) -> dict[str, Any]:
+        allowed = {
+            "status", "is_priority", "data_status", "research_status", "valuation_status",
+            "technical_status", "decision_status", "last_snapshot_id", "last_valuation_id",
+            "last_checked_at",
+        }
+        values = {key: int(value) if key == "is_priority" else value for key, value in fields.items() if key in allowed}
+        values["updated_at"] = now()
+        cursor = self._conn.execute(
+            f"UPDATE value_company_research_monitors SET {','.join(f'{key}=?' for key in values)} WHERE universe_id=? AND symbol=?",
+            (*values.values(), universe_id, symbol),
+        )
+        if cursor.rowcount != 1:
+            raise KeyError("research monitor not found")
+        self._conn.commit()
+        row = self._conn.execute(
+            "SELECT * FROM value_company_research_monitors WHERE universe_id=? AND symbol=?",
+            (universe_id, symbol),
+        ).fetchone()
+        return self.row(row) or {}
+
+    def latest_valuation(self, universe_id: str, symbol: str) -> dict[str, Any] | None:
+        return self.row(self._conn.execute(
+            """SELECT * FROM company_valuation_snapshots
+               WHERE universe_id=? AND symbol=? ORDER BY version DESC LIMIT 1""",
+            (universe_id, symbol),
+        ).fetchone())
+
+    def valuation_history(self, universe_id: str, symbol: str, limit: int = 500) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            """SELECT * FROM company_valuation_snapshots
+               WHERE universe_id=? AND symbol=? ORDER BY version DESC LIMIT ?""",
+            (universe_id, symbol, limit),
+        ).fetchall()
+        return [self.row(row) or {} for row in rows]
+
+    def list_latest_valuations(self, universe_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            """SELECT value.* FROM company_valuation_snapshots value
+               JOIN (SELECT symbol,MAX(version) AS version FROM company_valuation_snapshots
+                     WHERE universe_id=? GROUP BY symbol) latest
+                 ON latest.symbol=value.symbol AND latest.version=value.version
+               WHERE value.universe_id=? ORDER BY value.symbol""",
+            (universe_id, universe_id),
+        ).fetchall()
+        return [self.row(row) or {} for row in rows]
+
+    def save_valuation(self, value: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        existing = self._conn.execute(
+            """SELECT * FROM company_valuation_snapshots
+               WHERE universe_id=? AND symbol=? AND source_hash=?""",
+            (value["universe_id"], value["symbol"], value["source_hash"]),
+        ).fetchone()
+        if existing:
+            return self.row(existing) or {}, False
+        previous = self.latest_valuation(value["universe_id"], value["symbol"])
+        version = int(previous["version"] if previous else 0) + 1
+        valuation_id, timestamp = new_id("valuation"), now()
+        scalar_fields = (
+            "current_price", "pe_ttm", "pb_mrq", "dividend_yield", "peer_pe_median",
+            "peer_pb_median", "pe_percentile", "pb_percentile", "safety_margin",
+            "fair_value_low", "fair_value_high", "watch_price_low", "watch_price_high",
+        )
+        self._conn.execute(
+            """INSERT INTO company_valuation_snapshots(
+                   id,universe_id,symbol,version,status,review_status,data_as_of,coverage,source_hash,
+                   current_price,pe_ttm,pb_mrq,dividend_yield,peer_pe_median,peer_pb_median,
+                   pe_percentile,pb_percentile,safety_margin,fair_value_low,fair_value_high,
+                   watch_price_low,watch_price_high,comparable_json,dcf_json,missing_fields_json,
+                   sources_json,formula_version,previous_snapshot_id,confirmed_at,created_at
+               ) VALUES(?,?,?,?,?,'automatic_screen',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?)""",
+            (
+                valuation_id, value["universe_id"], value["symbol"], version, value["status"],
+                value["data_as_of"], value["coverage"], value["source_hash"],
+                *(value.get(field) for field in scalar_fields),
+                json.dumps(value.get("comparable", {}), ensure_ascii=False, sort_keys=True),
+                json.dumps(value.get("dcf", {}), ensure_ascii=False, sort_keys=True),
+                json.dumps(value.get("missing_fields", []), ensure_ascii=False),
+                json.dumps(value.get("sources", []), ensure_ascii=False), value["formula_version"],
+                previous.get("id") if previous else None, timestamp,
+            ),
+        )
+        self._conn.commit()
+        return self.latest_valuation(value["universe_id"], value["symbol"]) or {}, True
+
+    def confirm_valuation(self, valuation_id: str) -> dict[str, Any]:
+        timestamp = now()
+        cursor = self._conn.execute(
+            """UPDATE company_valuation_snapshots
+               SET review_status='manual_confirmed',confirmed_at=? WHERE id=?""",
+            (timestamp, valuation_id),
+        )
+        if cursor.rowcount != 1:
+            raise KeyError("valuation snapshot not found")
+        self._conn.commit()
+        return self.row(self._conn.execute(
+            "SELECT * FROM company_valuation_snapshots WHERE id=?", (valuation_id,),
+        ).fetchone()) or {}
+
+    def get_valuation(self, valuation_id: str) -> dict[str, Any] | None:
+        return self.row(self._conn.execute(
+            "SELECT * FROM company_valuation_snapshots WHERE id=?", (valuation_id,),
+        ).fetchone())
+
+    def get_research_monitor(self, monitor_id: str) -> dict[str, Any] | None:
+        return self.row(self._conn.execute(
+            "SELECT * FROM value_company_research_monitors WHERE id=?", (monitor_id,),
+        ).fetchone())
 
     def create_incremental_run(
         self, *, universe_id: str, run_kind: str, trigger_kind: str, as_of: str,
@@ -632,15 +769,25 @@ class ValueWorkspaceStore:
         monitors = [self.row(row) or {} for row in self._conn.execute(
             "SELECT * FROM value_entry_monitors WHERE symbol=? ORDER BY created_at DESC", (symbol,),
         ).fetchall()]
+        research_monitors = [self.row(row) or {} for row in self._conn.execute(
+            "SELECT * FROM value_company_research_monitors WHERE symbol=? ORDER BY created_at DESC", (symbol,),
+        ).fetchall()]
+        valuations = [self.row(row) or {} for row in self._conn.execute(
+            "SELECT * FROM company_valuation_snapshots WHERE symbol=? ORDER BY created_at DESC", (symbol,),
+        ).fetchall()]
         events: list[dict[str, Any]] = []
         for monitor in monitors:
             rows = self._conn.execute(
                 "SELECT * FROM value_monitor_events WHERE monitor_id=? ORDER BY triggered_at DESC", (monitor["id"],),
             ).fetchall()
             events.extend(self.row(row) or {} for row in rows)
+        events.extend(self.row(row) or {} for row in self._conn.execute(
+            "SELECT * FROM value_research_events WHERE symbol=? ORDER BY triggered_at DESC", (symbol,),
+        ).fetchall())
         return {
             "symbol": symbol, "memberships": memberships, "snapshots": snapshots,
-            "evidence": evidence, "monitors": monitors,
+            "evidence": evidence, "monitors": monitors, "research_monitors": research_monitors,
+            "valuations": valuations,
             "events": sorted(events, key=lambda item: item.get("triggered_at") or "", reverse=True),
         }
 
@@ -847,6 +994,35 @@ class ValueWorkspaceStore:
         self._conn.commit()
         return self.get_monitor(monitor_id) or {}
 
+    def add_research_event(
+        self, *, universe_id: str, symbol: str, event_key: str, event_type: str,
+        severity: str, title: str, message: str, payload: dict[str, Any], channels: list[str] | None = None,
+    ) -> dict[str, Any]:
+        existing = self._conn.execute("SELECT * FROM value_research_events WHERE event_key=?", (event_key,)).fetchone()
+        if existing:
+            return self.row(existing) or {}
+        event_id, timestamp = new_id("researchevent"), now()
+        self._conn.execute(
+            """INSERT INTO value_research_events(
+                   id,universe_id,symbol,event_key,event_type,severity,title,message,payload_json,
+                   triggered_at,status,acknowledgement_note,acknowledged_at,resolved_at
+               ) VALUES(?,?,?,?,?,?,?,?,?,?,'open','',NULL,NULL)""",
+            (event_id, universe_id, symbol, event_key, event_type, severity, title, message,
+             json.dumps(payload, ensure_ascii=False), timestamp),
+        )
+        requested = set(channels or ["in_app"])
+        for channel in ("in_app", "feishu", "weixin"):
+            status = "sent" if channel == "in_app" else "pending" if channel in requested else "skipped"
+            self._conn.execute(
+                "INSERT INTO value_research_event_deliveries VALUES(?,?,?,?,?,?)",
+                (new_id("researchdelivery"), event_id, channel, status, "", timestamp),
+            )
+        self._conn.commit()
+        event = self.row(self._conn.execute("SELECT * FROM value_research_events WHERE id=?", (event_id,)).fetchone()) or {}
+        event["scope"] = "research"
+        event["monitor_id"] = ""
+        return event
+
     def add_event(self, *, monitor_id: str, event_key: str, event_type: str, severity: str, title: str, message: str, payload: dict[str, Any], channels: list[str]) -> dict[str, Any]:
         existing = self._conn.execute("SELECT * FROM value_monitor_events WHERE event_key=?", (event_key,)).fetchone()
         if existing:
@@ -882,8 +1058,18 @@ class ValueWorkspaceStore:
             f"SELECT * FROM value_monitor_events {where} ORDER BY triggered_at DESC LIMIT ?", (*args, limit),
         ).fetchall()]
         for event in events:
+            event["scope"] = "decision"
             event["deliveries"] = [dict(value) for value in self._conn.execute("SELECT * FROM notification_deliveries WHERE event_id=? ORDER BY channel", (event["id"],)).fetchall()]
-        return events
+        research_events = [self.row(value) or {} for value in self._conn.execute(
+            f"SELECT * FROM value_research_events {where} ORDER BY triggered_at DESC LIMIT ?", (*args, limit),
+        ).fetchall()]
+        for event in research_events:
+            event["scope"] = "research"
+            event["monitor_id"] = ""
+            event["deliveries"] = [dict(value) for value in self._conn.execute(
+                "SELECT * FROM value_research_event_deliveries WHERE event_id=? ORDER BY channel", (event["id"],),
+            ).fetchall()]
+        return sorted([*events, *research_events], key=lambda item: item.get("triggered_at") or "", reverse=True)[:limit]
 
     def acknowledge_event(self, event_id: str, *, status: str = "acknowledged", note: str = "") -> dict[str, Any]:
         if status not in {"acknowledged", "closed"}:
@@ -894,9 +1080,27 @@ class ValueWorkspaceStore:
                WHERE id=?""",
             (status, timestamp, note[:2000], timestamp if status == "closed" else None, event_id),
         )
+        research = False
+        if cursor.rowcount != 1:
+            cursor = self._conn.execute(
+                """UPDATE value_research_events SET status=?,acknowledged_at=?,acknowledgement_note=?,resolved_at=?
+                   WHERE id=?""",
+                (status, timestamp, note[:2000], timestamp if status == "closed" else None, event_id),
+            )
+            research = cursor.rowcount == 1
         if cursor.rowcount != 1:
             raise KeyError("monitor event not found")
         self._conn.commit()
+        if research:
+            event = self.row(self._conn.execute(
+                "SELECT * FROM value_research_events WHERE id=?", (event_id,),
+            ).fetchone()) or {}
+            event["scope"] = "research"
+            event["monitor_id"] = ""
+            event["deliveries"] = [dict(value) for value in self._conn.execute(
+                "SELECT * FROM value_research_event_deliveries WHERE event_id=? ORDER BY channel", (event_id,),
+            ).fetchall()]
+            return event
         event = self.row(self._conn.execute(
             "SELECT * FROM value_monitor_events WHERE id=?", (event_id,),
         ).fetchone()) or {}

@@ -45,7 +45,7 @@ def workspace(tmp_path: Path):
         value.close()
 
 
-def test_universe_freezes_top_tracks_top_five_and_keeps_all_memberships(workspace):
+def test_universe_uses_global_score_capacity_and_keeps_all_memberships(workspace):
     value, _, run = workspace
     service = ValueWorkspaceService(value)
     universe, created = service.create_research_universe(run["id"], 5)
@@ -53,11 +53,14 @@ def test_universe_freezes_top_tracks_top_five_and_keeps_all_memberships(workspac
     assert created is True and repeated_created is False
     assert repeated["id"] == universe["id"]
     assert universe["track_count"] == 5
-    assert universe["membership_count"] == 25
-    assert universe["company_count"] == 21
+    # Five candidate tracks create capacity for 25 unique companies.  A
+    # company ranked sixth inside a track can enter when its global score is
+    # stronger than alternatives; there is no per-track five-company quota.
+    assert universe["company_count"] == 25
+    assert universe["membership_count"] == 29
     shared = next(item for item in universe["companies"] if item["symbol"] == "000001.SZ")
     assert len(shared["memberships"]) == 5
-    assert max(item["leader_rank"] for item in universe["members"]) == 5
+    assert max(item["leader_rank"] for item in universe["members"]) == 6
 
 
 def test_snapshot_evidence_and_signal_events_are_idempotent(workspace):
@@ -73,8 +76,9 @@ def test_snapshot_evidence_and_signal_events_are_idempotent(workspace):
     assert created is True and repeated_created is False and first_evidence["id"] == repeated_evidence["id"]
     snapshot_payload = {
         "quote": {"price": 10}, "fundamental": {"pe_ttm": 8, "pb_mrq": 1, "dividend_yield": 4},
-        "financial_latest": {"revenue_yoy": -30, "net_profit": 10, "operating_cash_flow": -1},
+        "financial_latest": {"revenue_yoy": 5, "net_profit_yoy": 6, "net_profit": 10, "operating_cash_flow": 11},
         "financial_previous": {}, "cache": {"stale": False},
+        "technical": {"status": "ready", "coverage": 1, "trend": "区间震荡", "metrics": {"volatility_20d": 20, "max_drawdown_120d": -8, "rsi_14": 50, "return_20d": 2}, "facts": [], "risks": [], "missing_fields": [], "sources": ["tdx"], "data_as_of": "2026-08-14"},
     }
     snapshot, snapshot_created = value.save_snapshot({
         "universe_id": universe["id"], "symbol": "000001.SZ", "data_as_of": "2026-08-14",
@@ -87,6 +91,15 @@ def test_snapshot_evidence_and_signal_events_are_idempotent(workspace):
         "diff": {}, "missing_fields": [], "sources": ["tdx"], "evidence_ids": [first_evidence["id"]],
     })
     assert snapshot_created is True and repeated_snapshot_created is False and snapshot["id"] == repeated_snapshot["id"]
+    valuation, _ = value.save_valuation({
+        "universe_id": universe["id"], "symbol": "000001.SZ", "data_as_of": "2026-08-14",
+        "status": "ready", "coverage": 1, "source_hash": "valuation-hash", "current_price": 10,
+        "pe_ttm": 8, "pb_mrq": 1, "dividend_yield": 4, "peer_pe_median": 10,
+        "peer_pb_median": 1.2, "safety_margin": 20, "fair_value_low": 11, "fair_value_high": 13,
+        "comparable": {"status": "ready"}, "dcf": {"status": "unavailable"}, "missing_fields": [],
+        "sources": ["tdx"], "formula_version": "test-valuation-v1",
+    })
+    value.confirm_valuation(valuation["id"])
     monitor = service.create_universe_monitor(
         universe_id=universe["id"], symbol="000001.SZ", conditions={"max_pe": 10, "exit_price": 9},
         channels=["in_app", "feishu", "weixin"], position_state="watching",
@@ -95,22 +108,24 @@ def test_snapshot_evidence_and_signal_events_are_idempotent(workspace):
     service.evaluate_signal_rules(universe_id=universe["id"], as_of="2026-08-14")
     evaluations = value.list_signal_evaluations(symbol="000001.SZ")
     assert len(evaluations) == 1
-    assert evaluations[0]["signal_state"] == "entry_candidate"  # watching ignores risk and exit rules
+    assert evaluations[0]["signal_state"] == "entry_candidate"
     analysis = service.universe_analysis(universe["id"])
     company_analysis = next(item for item in analysis["items"] if item["symbol"] == "000001.SZ")
-    assert analysis["total"] == 21
+    assert analysis["total"] == 25
+    analysis_scores = [max(float(member["leader_score"]) for member in item["memberships"]) for item in analysis["items"]]
+    assert analysis_scores == sorted(analysis_scores, reverse=True)
     assert analysis["state_counts"]["entry_candidate"] == 1
-    assert analysis["state_counts"]["not_archived"] == 20
+    assert analysis["state_counts"]["not_archived"] == 24
     assert company_analysis["model_state"] == "not_configured"
     assert company_analysis["metrics"]["pe_ttm"] == 8
-    assert company_analysis["risk_facts"] == ["营收同比 -30.0% ≤ -20%", "公司盈利但经营现金流为负"]
-    assert company_analysis["analysis_version"] == "value-company-panorama-v1.0.0"
+    assert company_analysis["risk_facts"] == []
+    assert company_analysis["analysis_version"] == "value-company-panorama-v2.0.0"
     dimensions = {item["key"]: item for item in company_analysis["dimensions"]}
-    assert set(dimensions) == {"fundamental", "financial", "technical", "capital", "macro", "risk"}
-    assert dimensions["technical"]["status"] == "unavailable"
+    assert set(dimensions) == {"fundamental", "financial", "technical", "capital", "macro", "valuation", "risk"}
+    assert dimensions["technical"]["status"] == "ready"
     assert dimensions["capital"]["status"] == "unavailable"
     assert "公司宏观敏感度映射" in dimensions["macro"]["missing_fields"]
-    assert dimensions["risk"]["metrics"]["已识别风险数"] == 2
+    assert dimensions["risk"]["metrics"]["已识别风险数"] == 0
     assert service.company_archive("000001.SZ")["analysis"]["current_state"] == "entry_candidate"
     assert len(value.list_events()) == 1
     value.acknowledge_event(value.list_events()[0]["id"], status="closed")
