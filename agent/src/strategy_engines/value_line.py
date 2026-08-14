@@ -35,6 +35,7 @@ MODULE_LABELS = {
 }
 SECTOR_DATASET = "value_sector_scores_v2"
 LEADER_DATASET = "value_leader_scores_v2"
+TOTAL_LEADER_POOL_PER_TRACK = 5
 INDUSTRY_DATASET = "value_industries"
 
 
@@ -666,7 +667,14 @@ class ValueLineService:
                 str(row["payload"].get("sector_code") or ""): int(row["payload"].get("rank") or 10_000)
                 for row in self.cache.list_records(SECTOR_DATASET, category=target, limit=500)["items"]
             }
-            items = [{**row, "candidate_sector_rank": sector_ranks.get(str(row.get("sector_code") or ""), 10_000)} for row in items]
+            # A total leader pool is not a second copy of the A-share universe.
+            # Keep only researchable top leaders from every candidate track;
+            # individual track views still expose the complete in-track ranking.
+            items = [
+                {**row, "candidate_sector_rank": sector_ranks.get(str(row.get("sector_code") or ""), 10_000)}
+                for row in items
+                if row.get("score") is not None and int(row.get("rank") or 1) <= TOTAL_LEADER_POOL_PER_TRACK
+            ]
             # Leader scores are percentile ranks inside a track.  A total pool
             # must preserve the chosen track's priority before comparing its
             # leaders, rather than pretending cross-track percentiles are one
@@ -675,7 +683,27 @@ class ValueLineService:
                 row["candidate_sector_rank"], row.get("rank") or 10_000,
                 row.get("score") is None, -(row.get("score") or 0), row.get("symbol") or "",
             ))
-        return {"as_of": target, "sector_code": sector_code, "items": items, "total": len(items), "formula_version": LEADER_VERSION}
+            # Be defensive if a future membership source assigns a company to
+            # more than one track: retain its highest-priority appearance only.
+            unique_items: list[dict[str, Any]] = []
+            seen_symbols: set[str] = set()
+            for row in items:
+                symbol = str(row.get("symbol") or "")
+                if symbol and symbol in seen_symbols:
+                    continue
+                if symbol:
+                    seen_symbols.add(symbol)
+                unique_items.append(row)
+            items = unique_items
+        return {
+            "as_of": target, "sector_code": sector_code, "items": items, "total": len(items),
+            "formula_version": LEADER_VERSION,
+            "pool_rule": None if sector_code else {
+                "per_track_limit": TOTAL_LEADER_POOL_PER_TRACK,
+                "scored_only": True,
+                "deduplicated_by_symbol": True,
+            },
+        }
 
 
 _service: ValueLineService | None = None

@@ -164,6 +164,30 @@ def test_total_leader_pool_prioritizes_candidate_track_before_in_track_rank(tmp_
         service.close()
 
 
+def test_total_leader_pool_keeps_only_scored_top_five_per_track(tmp_path: Path) -> None:
+    cache = TdxDataStore(tmp_path / "tdx.db")
+    data_store = ValueDataStore(tmp_path / "research.db")
+    cache.upsert_records("value_sector_scores_v2", [
+        {"key": "2026-08-13:881001.SH", "category": "2026-08-13", "payload": {"sector_code": "881001.SH", "rank": 1}},
+    ])
+    cache.upsert_records("value_leader_scores_v2", [
+        {"key": f"2026-08-13:881001.SH:{rank}", "category": "2026-08-13:881001.SH", "payload": {
+            "data_as_of": "2026-08-13", "sector_code": "881001.SH", "symbol": f"00000{rank}.SZ",
+            "rank": rank, "score": None if rank == 4 else float(100 - rank),
+        }}
+        for rank in range(1, 8)
+    ])
+    service = ValueLineService(cache=cache, data_store=data_store)
+    try:
+        result = service.leaders(as_of="2026-08-13")
+        assert [item["rank"] for item in result["items"]] == [1, 2, 3, 5]
+        assert result["pool_rule"] == {
+            "per_track_limit": 5, "scored_only": True, "deduplicated_by_symbol": True,
+        }
+    finally:
+        service.close()
+
+
 def test_sector_v2_uses_company_research_candidate_dimensions_not_context() -> None:
     components = {
         "momentum": 60.0, "earnings_momentum": 60.0, "valuation": 60.0,
