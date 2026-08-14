@@ -14,6 +14,7 @@ from src.research_workspace.store import ResearchWorkspaceStore
 from src.strategy_engines.common.normalization import cross_sectional_percentiles
 from src.strategy_engines.common.scoring import weighted_score
 from src.strategy_engines.store import StrategyEngineStore
+from src.strategy_engines.value_data_store import ValueDataStore
 from src.tdx_data.financial_history import FinancialHistoryService
 from src.tdx_data.service import get_tdx_service
 
@@ -25,6 +26,7 @@ RESEARCH_TEMPLATE_VERSION = "value-company-research-v1.0.0"
 V2_WORKBENCH_FORMULA_VERSION = "value-workbench-v2.2.0"
 UNIVERSE_RULE_VERSION = "value-research-universe-v1.0.0"
 SIGNAL_RULE_VERSION = "value-monitor-rules-v1.0.0"
+COMPANY_ANALYSIS_VERSION = "value-company-panorama-v1.0.0"
 CANDIDATE_LIMITS = {5, 10, 20, 50}
 RISK_THRESHOLDS = {
     "revenue_yoy": -20.0, "net_profit_yoy": -20.0,
@@ -782,6 +784,156 @@ class ValueWorkspaceService:
     def _analysis_metric(payload: dict[str, Any], section: str, key: str) -> float | None:
         return _number(dict(payload.get(section) or {}).get(key))
 
+    @staticmethod
+    def _dimension(
+        key: str,
+        label: str,
+        *,
+        status: str,
+        coverage: float,
+        summary: str,
+        metrics: dict[str, Any] | None = None,
+        facts: list[str] | None = None,
+        risks: list[str] | None = None,
+        missing_fields: list[str] | None = None,
+        sources: list[str] | None = None,
+        data_as_of: str | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "key": key, "label": label, "status": status,
+            "coverage": round(max(0.0, min(float(coverage), 1.0)), 4),
+            "summary": summary, "metrics": metrics or {}, "facts": facts or [], "risks": risks or [],
+            "missing_fields": missing_fields or [], "sources": sources or [], "data_as_of": data_as_of,
+        }
+
+    def _analysis_dimensions(
+        self,
+        payload: dict[str, Any],
+        memberships: list[dict[str, Any]],
+        monitor: dict[str, Any] | None,
+        macro: dict[str, Any] | None,
+        *,
+        snapshot_as_of: str,
+        stale: bool,
+        risk_facts: list[str],
+    ) -> list[dict[str, Any]]:
+        """Expose six auditable research dimensions without inventing unavailable scores."""
+        quote = dict(payload.get("quote") or {})
+        fundamental = dict(payload.get("fundamental") or {})
+        latest = dict(payload.get("financial_latest") or {})
+
+        main_business = str(fundamental.get("main_business") or "").strip()
+        market_cap = _number(fundamental.get("market_cap") or fundamental.get("total_market_cap"))
+        leader_score = _number(memberships[0].get("leader_score")) if memberships else None
+        basic_metrics = {
+            "总市值": market_cap, "龙头评分": leader_score,
+            "PE(TTM)": _number(fundamental.get("pe_ttm")), "PB(MRQ)": _number(fundamental.get("pb_mrq")),
+            "股息率": _number(fundamental.get("dividend_yield")),
+        }
+        basic_available = sum(value is not None for value in basic_metrics.values()) + bool(main_business) + bool(memberships)
+        basic_facts = []
+        if memberships:
+            basic_facts.append("进入 " + "、".join(dict.fromkeys(str(item["track_name"]) for item in memberships)) + " 龙头池")
+        if main_business:
+            basic_facts.append(f"主营业务：{main_business[:120]}")
+        basic_missing = [name for name, present in (("主营业务", bool(main_business)), ("赛道归属", bool(memberships)), ("总市值", market_cap is not None)) if not present]
+        basic_status = "ready" if basic_available >= 5 else "partial" if basic_available else "unavailable"
+
+        financial_metric_keys = (
+            ("营收同比", "revenue_yoy"), ("净利润同比", "net_profit_yoy"), ("ROE", "roe"),
+            ("毛利率", "gross_margin"), ("净利率", "net_margin"), ("负债率", "debt_ratio"),
+            ("经营现金流", "operating_cash_flow"), ("现金转化率", "cash_conversion"),
+        )
+        financial_metrics = {label: _number(latest.get(key)) for label, key in financial_metric_keys}
+        financial_count = sum(value is not None for value in financial_metrics.values())
+        financial_facts = []
+        for label in ("营收同比", "净利润同比", "ROE", "经营现金流"):
+            value = financial_metrics[label]
+            if value is not None:
+                financial_facts.append(f"{label} {value:.2f}")
+        financial_status = "ready" if financial_count >= 6 else "partial" if financial_count else "unavailable"
+
+        technical_metrics = {
+            "最新价": _number(quote.get("price")), "当日涨跌幅": _number(quote.get("change_pct")),
+            "换手率": _number(fundamental.get("turnover_rate")), "Beta": _number(fundamental.get("beta")),
+        }
+        technical_count = sum(value is not None for value in technical_metrics.values())
+        technical_missing = ["日线历史", "均线趋势", "相对强弱", "量价结构", "波动与回撤", "支撑阻力"]
+        technical_summary = "已有当日行情快照，但历史技术指标尚未进入公司档案，不能据此判断趋势或入场点。" if technical_count else "尚未取得可用于公司技术分析的行情输入。"
+
+        capital_metrics = {
+            "成交额(万元)": _number(quote.get("amount_10k")), "成交量(手)": _number(quote.get("volume_lots")),
+            "换手率": _number(fundamental.get("turnover_rate")),
+        }
+        capital_count = sum(value is not None for value in capital_metrics.values())
+        capital_summary = "当前仅有成交活跃度，尚无个股主力、北向和机构持仓数据，不能判断资金方向。" if capital_count else "个股资金分析输入尚未接入。"
+
+        macro_axes = dict((macro or {}).get("axes") or {})
+        macro_metrics = {
+            {"growth": "增长", "inflation": "通胀", "liquidity": "流动性", "credit": "信用", "financial_conditions": "金融条件"}.get(key, key): value
+            for key, value in macro_axes.items()
+        }
+        macro_coverage = float((macro or {}).get("series_coverage") or (macro or {}).get("coverage") or 0)
+        macro_regime = str((macro or {}).get("regime") or "未知")
+        macro_missing = list((macro or {}).get("missing_fields") or [])
+        macro_missing.append("公司宏观敏感度映射")
+        macro_summary = (
+            f"当前宏观状态为{macro_regime}；五维环境可作为赛道背景，但尚未映射到该公司的收入、成本和估值敏感度。"
+            if macro else "宏观快照尚不可用，无法判断公司所处环境。"
+        )
+
+        beta = _number(fundamental.get("beta"))
+        debt_ratio = _number(latest.get("debt_ratio"))
+        risk_metrics = {"Beta": beta, "负债率": debt_ratio, "已识别风险数": len(risk_facts)}
+        risk_missing = ["历史波动与最大回撤", "组合集中度与相关性", "事件风险", "仓位与止损预算"]
+        if monitor is None:
+            risk_missing.append("人工进出场监控条件")
+        risk_summary = "已执行财务硬风险与数据新鲜度检查；完整的市场、组合和事件风险模型尚未接入。"
+        financial_risks = [
+            item for item in risk_facts
+            if not item.startswith("缺少关键资料") and "行情或财务缓存已过期" not in item
+        ]
+
+        stale_status = "stale" if stale else None
+        return [
+            self._dimension(
+                "fundamental", "基本面", status=stale_status or basic_status, coverage=basic_available / 7,
+                summary="已建立赛道归属、主营、规模和估值事实，护城河与竞争格局仍待深度研究。",
+                metrics=basic_metrics, facts=basic_facts, missing_fields=basic_missing + ["护城河", "竞争格局", "管理层与治理事件"],
+                sources=["TongDaXin", "Value research universe"], data_as_of=snapshot_as_of,
+            ),
+            self._dimension(
+                "financial", "财务", status=stale_status or financial_status, coverage=financial_count / len(financial_metric_keys),
+                summary="基于最近可得年度 PIT 财务数据检查增长、盈利、现金流和偿债质量。",
+                metrics=financial_metrics, facts=financial_facts, risks=financial_risks,
+                missing_fields=[] if financial_count == len(financial_metric_keys) else ["部分财务质量指标"],
+                sources=["TongDaXin professional finance / TQ"], data_as_of=str(latest.get("announcement_date") or snapshot_as_of)[:10],
+            ),
+            self._dimension(
+                "technical", "技术面", status=stale_status or ("partial" if technical_count else "unavailable"), coverage=technical_count / 10,
+                summary=technical_summary, metrics=technical_metrics, missing_fields=technical_missing,
+                sources=["TongDaXin quote snapshot"] if technical_count else [], data_as_of=snapshot_as_of,
+            ),
+            self._dimension(
+                "capital", "资金面", status=stale_status or ("partial" if capital_count else "unavailable"), coverage=capital_count / 6,
+                summary=capital_summary, metrics=capital_metrics,
+                missing_fields=["个股主力净流入", "大单分布", "北向持仓变化", "机构持仓变化", "筹码结构"],
+                sources=["TongDaXin quote snapshot"] if capital_count else [], data_as_of=snapshot_as_of,
+            ),
+            self._dimension(
+                "macro", "宏观", status="partial" if macro else "unavailable", coverage=macro_coverage,
+                summary=macro_summary, metrics=macro_metrics,
+                facts=[f"宏观状态：{macro_regime}"] if macro else [], risks=[f"缺失宏观项：{'、'.join(macro_missing[:-1])}"] if len(macro_missing) > 1 else [],
+                missing_fields=macro_missing, sources=list((macro or {}).get("sources") or []), data_as_of=(macro or {}).get("as_of"),
+            ),
+            self._dimension(
+                "risk", "风控", status=stale_status or "partial", coverage=(2 + bool(monitor)) / 7,
+                summary=risk_summary, metrics=risk_metrics, risks=risk_facts,
+                facts=[f"当前人工状态：{monitor.get('position_state', 'watching')}" if monitor else "尚未加入人工监控池"],
+                missing_fields=risk_missing, sources=["Value deterministic risk rules"], data_as_of=snapshot_as_of,
+            ),
+        ]
+
     def universe_analysis(self, universe_id: str) -> dict[str, Any]:
         """Build an honest, visible state for every company in a research universe.
 
@@ -792,6 +944,11 @@ class ValueWorkspaceService:
         universe = self.store.get_universe(universe_id)
         if not universe:
             raise KeyError("research universe not found")
+        macro_store = ValueDataStore(self.store.db_path)
+        try:
+            macro = macro_store.get_macro_snapshot(universe.get("data_as_of"))
+        finally:
+            macro_store.close()
         monitors = {item["symbol"]: item for item in self.store.list_monitors() if item.get("universe_id") == universe_id}
         items: list[dict[str, Any]] = []
         for company in universe.get("companies", []):
@@ -806,6 +963,9 @@ class ValueWorkspaceService:
                     "next_action": "等待首次建档或重试失败任务。", "data_as_of": None, "snapshot_version": None,
                     "completeness": 0.0, "missing_fields": ["snapshot"], "metrics": {},
                     "supporting_facts": [], "risk_facts": ["缺少公司资料快照"], "changes": [],
+                    "analysis_version": COMPANY_ANALYSIS_VERSION,
+                    "dimensions": [self._dimension(key, label, status="unavailable", coverage=0, summary="尚未生成公司资料快照。", missing_fields=["snapshot"])
+                                   for key, label in (("fundamental", "基本面"), ("financial", "财务"), ("technical", "技术面"), ("capital", "资金面"), ("macro", "宏观"), ("risk", "风控"))],
                 })
                 continue
             payload = dict(snapshot.get("payload") or {})
@@ -857,6 +1017,10 @@ class ValueWorkspaceService:
                 next_action = "人工确认后加入监控池。"
             raw_diff = dict(snapshot.get("diff") or {})
             changes = [] if raw_diff.get("initial") else list(raw_diff)[:12]
+            dimensions = self._analysis_dimensions(
+                payload, list(company.get("memberships") or []), monitor, macro,
+                snapshot_as_of=snapshot["data_as_of"], stale=stale, risk_facts=list(dict.fromkeys(risk_facts)),
+            )
             items.append({
                 "symbol": symbol, "name": company["name"], "memberships": company.get("memberships", []),
                 "current_state": current_state, "research_state": snapshot["status"],
@@ -869,6 +1033,7 @@ class ValueWorkspaceService:
                 "supporting_facts": supporting_facts, "risk_facts": list(dict.fromkeys(risk_facts)),
                 "changes": changes, "monitor_id": monitor.get("id") if monitor else None,
                 "position_state": monitor.get("position_state") if monitor else None,
+                "analysis_version": COMPANY_ANALYSIS_VERSION, "dimensions": dimensions,
             })
         state_counts: dict[str, int] = {}
         for item in items:
@@ -877,7 +1042,7 @@ class ValueWorkspaceService:
             "universe_id": universe_id, "universe_status": universe["status"], "data_as_of": universe["data_as_of"],
             "total": len(items), "state_counts": state_counts,
             "monitored": sum(bool(item.get("monitor_id")) for item in items),
-            "model_state": "not_configured", "items": items,
+            "model_state": "not_configured", "analysis_version": COMPANY_ANALYSIS_VERSION, "items": items,
         }
 
     def company_archive(self, symbol: str) -> dict[str, Any]:

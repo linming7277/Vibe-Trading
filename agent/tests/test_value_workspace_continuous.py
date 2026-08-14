@@ -104,6 +104,14 @@ def test_snapshot_evidence_and_signal_events_are_idempotent(workspace):
     assert company_analysis["model_state"] == "not_configured"
     assert company_analysis["metrics"]["pe_ttm"] == 8
     assert company_analysis["risk_facts"] == ["营收同比 -30.0% ≤ -20%", "公司盈利但经营现金流为负"]
+    assert company_analysis["analysis_version"] == "value-company-panorama-v1.0.0"
+    dimensions = {item["key"]: item for item in company_analysis["dimensions"]}
+    assert set(dimensions) == {"fundamental", "financial", "technical", "capital", "macro", "risk"}
+    assert dimensions["technical"]["status"] == "partial"
+    assert "日线历史" in dimensions["technical"]["missing_fields"]
+    assert dimensions["capital"]["status"] == "unavailable"
+    assert "公司宏观敏感度映射" in dimensions["macro"]["missing_fields"]
+    assert dimensions["risk"]["metrics"]["已识别风险数"] == 2
     assert service.company_archive("000001.SZ")["analysis"]["current_state"] == "entry_candidate"
     assert len(value.list_events()) == 1
     value.acknowledge_event(value.list_events()[0]["id"], status="closed")
