@@ -107,7 +107,7 @@ function scoreLevel(value?: number | null) {
 }
 function sectorVerdict(sector?: ValueSectorScore) {
   if (!sector || sector.score == null || sector.coverage < .8) return "证据不足";
-  if (sector.rank <= 15 && Number(sector.macro_fit || 0) >= 55) return "优先研究";
+  if (sector.rank <= 15) return "优先看龙头";
   if (sector.rank <= 40) return "值得跟踪";
   if (sector.rank <= 80) return "中性观察";
   return "暂缓研究";
@@ -154,9 +154,9 @@ export function ValueResearchWorkspace() {
 
   const profileId = params.get("profile") || "";
   const defaultTrackId = useMemo(() => {
-    const macroFirst = [...(workbench?.sector_scores || [])]
-      .sort((left, right) => (left.macro_rank || 999) - (right.macro_rank || 999))[0]?.sector_code;
-    return macroFirst || workbench?.tracks[0]?.track_id || "";
+    const candidateFirst = [...(workbench?.sector_scores || [])]
+      .sort((left, right) => left.rank - right.rank)[0]?.sector_code;
+    return candidateFirst || workbench?.tracks[0]?.track_id || "";
   }, [workbench?.sector_scores, workbench?.tracks]);
   const selectedTrackId = params.get("track") || defaultTrackId;
   const tracks = workbench?.tracks || [];
@@ -301,7 +301,7 @@ export function ValueOverview() {
   const context = useValueWorkspace();
   const [params] = useSearchParams();
   const [query, setQuery] = useState("");
-  const [rankView, setRankView] = useState<"macro" | "overall">("macro");
+  const [rankView, setRankView] = useState<"macro" | "overall">("overall");
   const [activeGroup, setActiveGroup] = useState("全部");
   const groups = useMemo(() => {
     const grouped = new Map<string, ValueSectorScore[]>();
@@ -312,8 +312,8 @@ export function ValueOverview() {
     return [...grouped.entries()].map(([name, sectors]) => {
       const valid = sectors.filter((item) => item.macro_fit != null);
       const macroScore = valid.length ? valid.reduce((sum, item) => sum + Number(item.macro_fit), 0) / valid.length : null;
-      return { name, sectors, macroScore };
-    }).sort((left, right) => Number(right.macroScore || 0) - Number(left.macroScore || 0));
+      return { name, sectors, macroScore, candidateRank: Math.min(...sectors.map((item) => item.rank)) };
+    }).sort((left, right) => left.candidateRank - right.candidateRank);
   }, [context.workbench?.sector_scores]);
   const filteredSectors = useMemo(() => {
     const needle = query.toLowerCase();
@@ -381,15 +381,15 @@ function MacroStatusBar() {
   </details>;
 }
 
-function IndustryGroupPane({ groups, activeGroup, onSelect }: { groups: Array<{ name: string; sectors: ValueSectorScore[]; macroScore: number | null }>; activeGroup: string; onSelect: (group: string) => void }) {
+function IndustryGroupPane({ groups, activeGroup, onSelect }: { groups: Array<{ name: string; sectors: ValueSectorScore[]; macroScore: number | null; candidateRank: number }>; activeGroup: string; onSelect: (group: string) => void }) {
   const total = groups.reduce((sum, group) => sum + group.sectors.length, 0);
-  return <section className="border-b xl:flex xl:min-h-0 xl:flex-col xl:border-b-0 xl:border-r"><header className="shrink-0 border-b p-4"><div className="text-xs font-semibold tracking-wide text-primary">第一步</div><div className="mt-1 text-base font-semibold">选择产业方向</div><div className="mt-1 text-sm text-muted-foreground">按宏观适配排序</div></header><div className="grid grid-cols-2 gap-1.5 p-2 sm:grid-cols-3 xl:min-h-0 xl:flex-1 xl:grid-cols-none xl:space-y-1 xl:overflow-y-auto">{[{ name: "全部", sectors: Array(total), macroScore: null }, ...groups].map((group, index) => <button key={group.name} onClick={() => onSelect(group.name)} className={cn("w-full rounded-lg px-3 py-3 text-left transition hover:bg-muted", activeGroup === group.name && "bg-primary text-primary-foreground hover:bg-primary")}><div className="flex items-center justify-between gap-2"><span className="truncate text-[15px] font-medium">{group.name}</span>{group.macroScore != null ? <span className="text-xs font-medium">{scoreLevel(group.macroScore)}</span> : null}</div><div className={cn("mt-1 text-xs text-muted-foreground", activeGroup === group.name && "text-primary-foreground/70")}>{group.name === "全部" ? `${total} 个赛道` : `第 ${index} 位 · ${group.sectors.length} 个 · 指数 ${score(group.macroScore)}`}</div></button>)}</div></section>;
+  return <section className="border-b xl:flex xl:min-h-0 xl:flex-col xl:border-b-0 xl:border-r"><header className="shrink-0 border-b p-4"><div className="text-xs font-semibold tracking-wide text-primary">第一步</div><div className="mt-1 text-base font-semibold">选择产业方向</div><div className="mt-1 text-sm text-muted-foreground">按产业归类；宏观只作背景参考</div></header><div className="grid grid-cols-2 gap-1.5 p-2 sm:grid-cols-3 xl:min-h-0 xl:flex-1 xl:grid-cols-none xl:space-y-1 xl:overflow-y-auto">{[{ name: "全部", sectors: Array(total), macroScore: null, candidateRank: 1 }, ...groups].map((group) => <button key={group.name} onClick={() => onSelect(group.name)} className={cn("w-full rounded-lg px-3 py-3 text-left transition hover:bg-muted", activeGroup === group.name && "bg-primary text-primary-foreground hover:bg-primary")}><div className="flex items-center justify-between gap-2"><span className="truncate text-[15px] font-medium">{group.name}</span>{group.macroScore != null ? <span className="text-xs font-medium">宏观 {score(group.macroScore)}</span> : null}</div><div className={cn("mt-1 text-xs text-muted-foreground", activeGroup === group.name && "text-primary-foreground/70")}>{group.name === "全部" ? `${total} 个赛道` : `${group.sectors.length} 个 · 最佳候选 #${group.candidateRank}`}</div></button>)}</div></section>;
 }
 
 function TrackPane({ sectors, query, setQuery, rankView, setRankView }: { sectors: ValueSectorScore[]; query: string; setQuery: (value: string) => void; rankView: "macro" | "overall"; setRankView: (value: "macro" | "overall") => void }) {
   const { selectedTrackId, selectTrack, workbench } = useValueWorkspace();
   const detail = workbench?.sector_scores?.find((item) => item.sector_code === selectedTrackId);
-  return <section id="value-tracks" className="min-w-0 border-b xl:flex xl:min-h-0 xl:flex-col xl:border-b-0 xl:border-r"><header className="shrink-0 border-b p-4"><div className="flex items-baseline justify-between"><div><div className="text-xs font-semibold tracking-wide text-primary">第二步</div><div className="mt-1 text-base font-semibold">选择细分赛道</div></div><span className="text-sm text-muted-foreground">{sectors.length} 个</span></div><div className="mt-3 grid grid-cols-2 rounded-lg bg-muted p-1 text-sm"><button onClick={() => setRankView("macro")} className={cn("rounded-md px-2 py-2", rankView === "macro" && "bg-background font-medium shadow-sm")}>宏观适配</button><button onClick={() => setRankView("overall")} className={cn("rounded-md px-2 py-2", rankView === "overall" && "bg-background font-medium shadow-sm")}>综合价值</button></div><label className="relative mt-2 block"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索细分赛道" className="h-10 w-full rounded-md border bg-background pl-9 pr-2 text-sm" /></label></header><div className="min-h-0 flex-1 divide-y overflow-y-auto">{sectors.map((sector) => { const activeScore = rankView === "macro" ? sector.macro_fit : sector.score; return <button key={sector.sector_code} onClick={() => selectTrack(sector.sector_code)} className={cn("grid w-full grid-cols-[32px_1fr_86px] items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/60", sector.sector_code === selectedTrackId && "bg-primary/10")}><span className="font-mono text-sm text-muted-foreground">{rankView === "macro" ? sector.macro_rank : sector.rank}</span><span className="min-w-0"><span className="block truncate text-[15px] font-medium">{sector.sector_name}</span><span className="block truncate text-xs text-muted-foreground">宏观 {sector.macro_rank} · 综合 {sector.rank}</span></span><span className="text-right"><span className="block text-xs font-medium">{scoreLevel(activeScore)}</span><span className="block font-mono text-xs text-muted-foreground">指数 {score(activeScore)}</span></span></button>; })}{!sectors.length ? <Empty label="没有符合条件的赛道" /> : null}</div><SectorJudgement detail={detail} /></section>;
+  return <section id="value-tracks" className="min-w-0 border-b xl:flex xl:min-h-0 xl:flex-col xl:border-b-0 xl:border-r"><header className="shrink-0 border-b p-4"><div className="flex items-baseline justify-between"><div><div className="text-xs font-semibold tracking-wide text-primary">第二步</div><div className="mt-1 text-base font-semibold">候选赛道池</div></div><span className="text-sm text-muted-foreground">{sectors.length} 个</span></div><div className="mt-2 text-xs text-muted-foreground">排序用于展开龙头研究；宏观仅作背景观察。</div><div className="mt-3 grid grid-cols-2 rounded-lg bg-muted p-1 text-sm"><button onClick={() => setRankView("overall")} className={cn("rounded-md px-2 py-2", rankView === "overall" && "bg-background font-medium shadow-sm")}>候选池排序</button><button onClick={() => setRankView("macro")} className={cn("rounded-md px-2 py-2", rankView === "macro" && "bg-background font-medium shadow-sm")}>宏观观察</button></div><label className="relative mt-2 block"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索细分赛道" className="h-10 w-full rounded-md border bg-background pl-9 pr-2 text-sm" /></label></header><div className="min-h-0 flex-1 divide-y overflow-y-auto">{sectors.map((sector) => { const activeScore = rankView === "macro" ? sector.macro_fit : sector.score; return <button key={sector.sector_code} onClick={() => selectTrack(sector.sector_code)} className={cn("grid w-full grid-cols-[32px_1fr_86px] items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/60", sector.sector_code === selectedTrackId && "bg-primary/10")}><span className="font-mono text-sm text-muted-foreground">{rankView === "macro" ? sector.macro_rank : sector.rank}</span><span className="min-w-0"><span className="block truncate text-[15px] font-medium">{sector.sector_name}</span><span className="block truncate text-xs text-muted-foreground">候选 {sector.rank} · 宏观观察 {sector.macro_rank}</span></span><span className="text-right"><span className="block text-xs font-medium">{scoreLevel(activeScore)}</span><span className="block font-mono text-xs text-muted-foreground">指数 {score(activeScore)}</span></span></button>; })}{!sectors.length ? <Empty label="没有符合条件的赛道" /> : null}</div><SectorJudgement detail={detail} /></section>;
 }
 
 function SectorJudgement({ detail }: { detail?: ValueSectorScore }) {

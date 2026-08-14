@@ -23,7 +23,7 @@ from .macro_data import MacroDataService
 from .policy_data import PolicyDataService
 from .value.leader_score_v2 import FORMULA_VERSION as LEADER_VERSION, WEIGHTS as LEADER_WEIGHTS, calculate as leader_calculate
 from .value.macro_sector_v2 import FORMULA_VERSION as MATRIX_VERSION, describe as macro_sector_profile
-from .value.sector_score_v2 import FORMULA_VERSION as SECTOR_VERSION, WEIGHTS as SECTOR_WEIGHTS, calculate as sector_calculate
+from .value.sector_score_v2 import CONTEXT_FIELDS as SECTOR_CONTEXT_FIELDS, FORMULA_VERSION as SECTOR_VERSION, WEIGHTS as SECTOR_WEIGHTS, calculate as sector_calculate
 from .value_data_store import ValueDataStore, now
 from .value_market_history import BENCHMARK, ValueMarketHistoryService
 
@@ -380,7 +380,6 @@ class ValueLineService:
         sector_results: list[dict[str, Any]] = []
         for index, meta in enumerate(sector_meta):
             components = {name: weighted_score(normalized[index], weights, minimum_coverage=.50).score for name, weights in component_specs.items()}
-            components.update({"macro_fit": meta["macro_fit"], "policy_fit": meta["policy_fit"]})
             result = sector_calculate(components)
             effective_score = result.score if meta["member_coverage"] >= .80 else None
             effective_status = result.status if meta["member_coverage"] >= .80 else "insufficient_data"
@@ -396,6 +395,13 @@ class ValueLineService:
                 "raw_features": sector_raw[index], "normalized_features": normalized[index], "component_scores": components,
                 "components": _component_details(components, components, SECTOR_WEIGHTS, result),
                 "missing_fields": missing, "formula_version": SECTOR_VERSION, "matrix_version": MATRIX_VERSION,
+                "ranking_basis": list(SECTOR_WEIGHTS),
+                "context_fields": {
+                    "macro_fit": meta["macro_fit"],
+                    "policy_fit": meta["policy_fit"],
+                    "available": [name for name in SECTOR_CONTEXT_FIELDS if meta.get(name) is not None],
+                    "missing": [name for name in SECTOR_CONTEXT_FIELDS if meta.get(name) is None],
+                },
                 "data_as_of": as_of, "sources": ["TongDaXin", "AKShare", "国家统计局", "中国人民银行"],
                 "provenance_key": provenance,
             })

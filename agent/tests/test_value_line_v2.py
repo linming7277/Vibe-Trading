@@ -144,16 +144,16 @@ def test_value_service_lists_all_v2_leaders_when_sector_is_omitted(tmp_path: Pat
         service.close()
 
 
-def test_sector_v2_requires_macro_and_six_dimensions() -> None:
+def test_sector_v2_uses_company_research_candidate_dimensions_not_context() -> None:
     components = {
         "momentum": 60.0, "earnings_momentum": 60.0, "valuation": 60.0,
         "capital_flow_proxy": 60.0, "macro_fit": None, "policy_fit": None,
         "risk_quality": 60.0,
     }
-    assert sector_score(components).status == "macro_pending"
-    components["macro_fit"] = 60.0
     assert sector_score(components).status == "ready"
     components["risk_quality"] = None
+    assert sector_score(components).status == "ready"
+    components["valuation"] = None
     assert sector_score(components).status == "insufficient_data"
 
 
