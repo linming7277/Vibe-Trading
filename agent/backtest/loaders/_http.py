@@ -26,6 +26,11 @@ from typing import Any
 
 import requests
 
+try:  # Optional: curl's browser TLS fingerprint is more proxy-compatible on Windows.
+    from curl_cffi import requests as curl_requests
+except Exception:  # pragma: no cover - optional dependency/provider fallback
+    curl_requests = None
+
 from backtest.loaders.base import positive_env_float
 
 logger = logging.getLogger(__name__)
@@ -41,6 +46,42 @@ DEFAULT_USER_AGENT = (
 # minimum interval, so parallel callers de-synchronize instead of all firing
 # the instant the interval elapses.
 _JITTER_MAX_S = 0.4
+
+# Proxies occasionally close an idle TLS tunnel or return a transient gateway
+# error. A small, bounded retry keeps one bad hop from turning into a missing
+# market/financial snapshot while avoiding an unbounded request loop.
+_RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+_DEFAULT_HTTP_RETRIES = 2
+
+
+def _curl_fallback_get(
+    url: str,
+    *,
+    params: dict[str, Any] | None,
+    headers: dict[str, str],
+    timeout: float,
+) -> Any | None:
+    """Try a browser-fingerprint transport after a proxy TLS failure.
+
+    Some Windows desktop proxies accept curl/Chrome TLS fingerprints but close
+    Python's urllib3 handshake. This is deliberately a fallback; normal
+    requests behavior and proxy/NO_PROXY selection remain unchanged.
+    """
+    if curl_requests is None:
+        return None
+    try:
+        proxy_map = requests.utils.get_environ_proxies(url)
+        proxy = proxy_map.get("https") or proxy_map.get("http")
+        kwargs: dict[str, Any] = {
+            "params": params, "headers": headers, "timeout": timeout,
+            "impersonate": "chrome",
+        }
+        if proxy:
+            kwargs["proxy"] = proxy
+        return curl_requests.get(url, **kwargs)
+    except Exception as exc:  # noqa: BLE001 - fallback must not mask original error
+        logger.debug("curl fallback failed for %s: %s", url, exc)
+        return None
 
 
 class HostThrottle:
@@ -168,9 +209,60 @@ def throttled_get(
     merged_headers = {"User-Agent": DEFAULT_USER_AGENT}
     if headers:
         merged_headers.update(headers)
-    _THROTTLE.wait(host_key, min_interval)
-    session = _session_for(host_key)
-    return session.get(url, params=params, headers=merged_headers, timeout=timeout)
+    last_error: Exception | None = None
+    for attempt in range(_DEFAULT_HTTP_RETRIES + 1):
+        _THROTTLE.wait(host_key, min_interval)
+        session = _session_for(host_key)
+        try:
+            # ``requests.Session`` does not consistently re-read the Windows
+            # system proxy for every request.  Resolve it explicitly (including
+            # NO_PROXY) so a desktop proxy is actually used by provider calls,
+            # while local URLs remain direct.
+            session.proxies = requests.utils.get_environ_proxies(url)
+            response = session.get(
+                url, params=params, headers=merged_headers, timeout=timeout
+            )
+            if response.status_code not in _RETRYABLE_STATUS_CODES or attempt >= _DEFAULT_HTTP_RETRIES:
+                return response
+            last_error = requests.HTTPError(
+                f"transient HTTP {response.status_code} from {url}", response=response
+            )
+            logger.warning(
+                "transient HTTP %s from %s (attempt %d/%d); retrying",
+                response.status_code, url, attempt + 1, _DEFAULT_HTTP_RETRIES + 1,
+            )
+            fallback = _curl_fallback_get(
+                url, params=params, headers=merged_headers, timeout=timeout
+            )
+            if fallback is not None and fallback.status_code not in _RETRYABLE_STATUS_CODES:
+                logger.info("curl browser transport recovered %s", url)
+                return fallback
+        except requests.RequestException as exc:
+            last_error = exc
+            if attempt >= _DEFAULT_HTTP_RETRIES:
+                raise
+            logger.warning(
+                "transient request failure from %s (attempt %d/%d): %s; retrying",
+                url, attempt + 1, _DEFAULT_HTTP_RETRIES + 1, exc,
+            )
+            fallback = _curl_fallback_get(
+                url, params=params, headers=merged_headers, timeout=timeout
+            )
+            if fallback is not None and fallback.status_code not in _RETRYABLE_STATUS_CODES:
+                logger.info("curl browser transport recovered %s", url)
+                return fallback
+        # Do not immediately reuse a proxy connection that just failed. The
+        # next call gets a fresh session/connection pool.
+        with _SESSIONS_LOCK:
+            stale = _SESSIONS.pop(host_key, None)
+        if stale is not None:
+            try:
+                stale.close()
+            except Exception:
+                pass
+        time.sleep(min(0.5 * (2**attempt), 2.0) + random.uniform(0.0, 0.2))
+    assert last_error is not None
+    raise last_error
 
 
 def throttled_get_json(

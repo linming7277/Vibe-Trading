@@ -38,6 +38,10 @@ _SEARCH_URL = "https://searchapi.eastmoney.com/api/suggest/get"
 _HOST_KEY = "eastmoney"
 _MIN_INTERVAL_ENV = "VIBE_TRADING_EASTMONEY_MIN_INTERVAL"
 _DEFAULT_MIN_INTERVAL = 1.0
+# Eastmoney/proxy gateways intermittently close requests carrying the old
+# 1,000,000-row hint. Daily A/H history from 2015 to today is well below this
+# bound; callers can still page through a longer intraday range if needed.
+_MAX_KLINE_ROWS = 5000
 
 # Eastmoney kline period codes (``klt``) keyed by our interval labels.
 KLT_BY_INTERVAL: dict[str, int] = {
@@ -303,7 +307,7 @@ def fetch_kline(
             "fields1": _FIELDS1,
             "fields2": _FIELDS2,
             "rev": "1",
-            "lmt": "1000000",
+            "lmt": str(_MAX_KLINE_ROWS),
         },
     )
 

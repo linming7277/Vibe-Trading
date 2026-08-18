@@ -35,13 +35,13 @@ describe("双策略 Layout", () => {
     window.localStorage.clear();
   });
 
-  it("shows six business entries, two system entries, search and main landmark", () => {
+  it("shows six business entries, three system entries, search and main landmark", () => {
     renderLayout();
     expect(screen.getByRole("complementary", { name: "恒值投资侧边栏" })).toBeInTheDocument();
     const primary = screen.getByRole("navigation", { name: "主导航" });
     const utility = screen.getByRole("navigation", { name: "系统导航" });
-    expect(within(primary).getAllByRole("link")).toHaveLength(5);
-    expect(within(utility).getAllByRole("link")).toHaveLength(2);
+    expect(within(primary).getAllByRole("link")).toHaveLength(6);
+    expect(within(utility).getAllByRole("link")).toHaveLength(3);
     expect(within(primary).getByRole("link", { name: "价值投资" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "恒值投资" })).toHaveAttribute("href", "/value");
     expect(screen.getByRole("textbox", { name: "搜索证券" })).toBeInTheDocument();
@@ -53,6 +53,7 @@ describe("双策略 Layout", () => {
     ["市场行情", "/market/overview"],
     ["价值投资", "/value"],
     ["情绪交易", "/emotion/temperature"],
+    ["全球策略", "/global"],
     ["模拟验证", "/simulation/accounts"],
     ["AI 研究", "/ai/agent"],
   ])("uses the expected default route for %s", (label, href) => {
@@ -63,8 +64,9 @@ describe("双策略 Layout", () => {
   it.each([
     ["/market/ranks", "市场行情", "市场行情二级导航", "行情榜单"],
     ["/market/sectors", "市场行情", "市场行情二级导航", "板块行情"],
-    ["/value", "价值投资", "价值投资二级导航", "价值龙头"],
+    ["/value", "价值投资", "价值投资二级导航", "行业龙头"],
     ["/emotion/swing", "情绪交易", "情绪交易二级导航", "波段候选"],
+    ["/global", "全球策略", "全球策略二级导航", "全球全景"],
     ["/simulation/compare", "模拟验证", "模拟验证二级导航", "归因对比"],
     ["/ai/reports", "AI 研究", "AI 研究二级导航", "研究报告"],
   ])("maps %s to its primary and secondary navigation", (path, primaryLabel, secondaryLabel, tabLabel) => {
@@ -93,8 +95,17 @@ describe("双策略 Layout", () => {
     const utility = screen.getByRole("navigation", { name: "系统导航" });
     expect(within(utility).getByRole("link", { name: "数据与模型" })).toHaveAttribute("aria-current", "page");
     expect(within(utility).getByRole("link", { name: "设置" })).toHaveAttribute("href", "/settings");
+    expect(within(utility).getByRole("link", { name: "研究员设置" })).toHaveAttribute("href", "/settings/researchers");
     expect(screen.getAllByRole("link", { name: "设置" })).toHaveLength(1);
     expect(within(screen.getByRole("navigation", { name: "数据与模型二级导航" })).getAllByRole("link")).toHaveLength(6);
+  });
+
+  it("moves researcher settings out of AI tabs and into the system navigation", () => {
+    renderLayout("/settings/researchers");
+    const utility = screen.getByRole("navigation", { name: "系统导航" });
+    expect(within(utility).getByRole("link", { name: "研究员设置" })).toHaveAttribute("aria-current", "page");
+    expect(within(utility).getByRole("link", { name: "设置" })).not.toHaveAttribute("aria-current");
+    expect(screen.queryByRole("navigation", { name: "AI 研究二级导航" })).not.toBeInTheDocument();
   });
 
   it("preserves accessible labels and the saved preference when collapsed", () => {

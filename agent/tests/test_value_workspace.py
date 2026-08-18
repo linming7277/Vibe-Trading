@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from src.strategy_engines.store import StrategyEngineStore
+from src.strategy_engines.value.leader_score_v2 import FORMULA_VERSION as LEADER_FORMULA_VERSION
 from src.value_workspace.service import ValueWorkspaceService
 from src.value_workspace.store import ValueWorkspaceStore
 from src.value_workspace.valuation import calculate_valuation
@@ -50,7 +51,7 @@ class FakeValueLine:
         }
 
     def leaders(self, track_id: str, as_of: str):
-        return {"items": [{"symbol": f"{track_id[-3:]}001.SZ", "name": "Leader", "rank": 1, "score": 81.0, "coverage": 1.0, "component_scores": {"industry_position": 90, "profitability": 80}}]}
+        return {"items": [{"symbol": f"{track_id[-3:]}001.SZ", "name": "Leader", "rank": 1, "score": 81.0, "coverage": 1.0, "formula_version": LEADER_FORMULA_VERSION, "as_of": as_of, "component_scores": {"industry_position": 90, "profitability": 80}}]}
 
     def macro(self, as_of: str | None = None):
         return {"as_of": as_of, "status": "ready", "regime": "Recovery", "axes": {"growth": 70}}

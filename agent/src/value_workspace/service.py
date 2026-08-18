@@ -16,6 +16,7 @@ from src.strategy_engines.common.scoring import weighted_score
 from src.strategy_engines.store import StrategyEngineStore
 from src.strategy_engines.value_data_store import ValueDataStore
 from src.strategy_engines.value_market_history import BENCHMARK, ValueMarketHistoryService
+from src.strategy_engines.value.leader_score_v2 import FORMULA_VERSION as LEADER_FORMULA_VERSION
 from src.tdx_data.financial_history import FinancialHistoryService
 from src.tdx_data.service import get_tdx_service
 
@@ -27,10 +28,16 @@ from .valuation import DEFAULT_ENTRY_MARGIN, OVERVALUED_MARGIN, calculate_valuat
 PROFILE_FORMULA_VERSION = "value-profile-v1.0.0"
 RESEARCH_TEMPLATE_VERSION = "value-company-research-v1.0.0"
 V2_WORKBENCH_FORMULA_VERSION = "value-workbench-v2.2.0"
-UNIVERSE_RULE_VERSION = "value-research-universe-v2.0.0"
+# A Research Universe is an AI research pool, never a buy list or a
+# cross-industry company-quality ranking.  Sector Score selects industries;
+# Leader Score orders companies only *within* one 881 industry.
+UNIVERSE_RULE_VERSION = "value-research-universe-v3.0.0"
+LEVEL3_LEADER_UNIVERSE_RULE_VERSION = "value-level3-leader-universe-v1.0.0"
 SIGNAL_RULE_VERSION = "value-monitor-rules-v2.0.0"
 COMPANY_ANALYSIS_VERSION = "value-company-panorama-v2.0.0"
 CANDIDATE_LIMITS = {5, 10, 20, 50}
+MIN_LISTED_TRADING_DAYS = 20
+MAX_MARKET_DATA_STALENESS_TRADING_DAYS = 5
 RISK_THRESHOLDS = {
     "revenue_yoy": -20.0, "net_profit_yoy": -20.0,
     "roe_drop_pp": 3.0, "debt_ratio_rise_pp": 5.0,
@@ -299,10 +306,14 @@ class ValueWorkspaceService:
                 "base_score": _number(row.get("score")), "coverage": float(row.get("coverage") or 0),
                 "rank": int(row.get("rank") or index), "component_scores": scores,
                 "quality_flags": list(row.get("missing_fields") or []),
+                "formula_version": str(row.get("formula_version") or ""),
+                "data_as_of": str(row.get("as_of") or as_of),
+                "metric_applicability_notes": [],
             })
         return [item for item in leaders if item["symbol"]]
 
     def _score_track_leaders(self, track_id: str) -> list[dict[str, Any]]:
+        """LEGACY ONLY: never call from the V1 Research Universe path."""
         detail = get_tdx_service().sector_detail(track_id)
         members = [] if not detail else [
             row for row in detail.get("members", [])
@@ -345,31 +356,63 @@ class ValueWorkspaceService:
                 item["leader_type"] = "综合龙头"
         return leaders
 
-    def ensure_track_leaders(self, run_id: str, track_id: str) -> list[dict[str, Any]]:
+    def ensure_track_leaders(self, run_id: str, track_id: str, *, expected_as_of: str | None = None) -> list[dict[str, Any]]:
         existing = self.store.list_leaders(run_id, track_id)
-        # Older workbench snapshots were capped at 20 leaders per track.  A
-        # global pool must not inherit that hidden cap; a shorter snapshot is
-        # complete, while an exact 20-row legacy snapshot is refreshed below.
-        if existing and len(existing) != 20:
-            return existing
-        tracks = {item["track_id"]: item for item in self.store.list_tracks(run_id)}
-        track = tracks.get(track_id)
-        if not track:
-            raise KeyError("track snapshot not found")
-        leaders = self._score_track_leaders(track_id)
-        if not leaders and existing:
-            # Preserve an older reproducible snapshot if the live membership
-            # source is temporarily unavailable; callers still get a visible
-            # partial result instead of an empty candidate track.
-            return existing
-        # Replacing the complete run keeps snapshot writes atomic.
-        all_tracks = self.store.list_tracks(run_id)
-        for item in all_tracks:
-            item["leaders"] = self.store.list_leaders(run_id, item["track_id"])
-            if item["track_id"] == track_id:
-                item["leaders"] = leaders
-        self.store.replace_tracks(run_id, track["profile_id"], all_tracks)
-        return self.store.list_leaders(run_id, track_id)
+        if not existing:
+            raise ValueError("LEGACY_INCOMPATIBLE: missing Value Leader V2 snapshot; rematerialize V2")
+        invalid = [item for item in existing if (
+            item.get("formula_version") != LEADER_FORMULA_VERSION
+            or not item.get("data_as_of")
+            or (expected_as_of is not None and str(item.get("data_as_of")) != expected_as_of)
+            or not item.get("rank") or item.get("base_score") is None
+        )]
+        if invalid:
+            raise ValueError("LEGACY_INCOMPATIBLE: Research Universe requires value-leader-v2.0.0; rematerialize V2")
+        return existing
+
+    @staticmethod
+    def _metric_applicability_notes(track_name: str) -> list[str]:
+        if any(token in track_name for token in ("银行", "保险", "证券")):
+            return ["FINANCIAL_SECTOR_METRIC_CAUTION"]
+        return []
+
+    def _research_eligibility_context(self, symbols: list[str], as_of: str) -> tuple[dict[str, list[dict[str, Any]]], dict[str, bool], list[Any]]:
+        histories = ValueMarketHistoryService().read_symbols(symbols, as_of=as_of, count=60)
+        annual_available = {symbol: False for symbol in symbols}
+        tdx = get_tdx_service()
+        store = getattr(tdx, "store", None)
+        if store is not None:
+            for symbol in symbols:
+                for item in store.list_records("financial_history", category=symbol, limit=100)["items"]:
+                    row = item.get("payload") or {}
+                    if row.get("period_type") == "annual" and str(row.get("announcement_date") or "9999-12-31") <= as_of and any(
+                        row.get(key) is not None for key in ("revenue", "net_profit", "roe")
+                    ):
+                        annual_available[symbol] = True
+                        break
+        dates = sorted({row.get("data_as_of") or row.get("trade_date") for values in histories.values() for row in values if row.get("data_as_of") or row.get("trade_date")})
+        return histories, annual_available, dates
+
+    @staticmethod
+    def _is_research_eligible(
+        *, symbol: str, name: str, histories: dict[str, list[dict[str, Any]]], annual_available: dict[str, bool], market_dates: list[Any],
+    ) -> list[str]:
+        reasons: list[str] = []
+        if "ST" in name.upper() or "退" in name:
+            reasons.append("ST_OR_DELISTING")
+        rows = [row for row in histories.get(symbol, []) if _number(row.get("close")) and float(row["close"]) > 0]
+        if rows and len(rows) < MIN_LISTED_TRADING_DAYS:
+            reasons.append("LISTED_TOO_RECENTLY")
+        if not rows:
+            reasons.append("MARKET_DATA_STALE")
+        elif market_dates:
+            last = max(str(row.get("data_as_of") or row.get("trade_date")) for row in rows)
+            missed = sum(str(day) > last for day in market_dates)
+            if missed > MAX_MARKET_DATA_STALENESS_TRADING_DAYS:
+                reasons.append("MARKET_DATA_STALE")
+        if not annual_available.get(symbol, False):
+            reasons.append("INSUFFICIENT_FINANCIAL_HISTORY")
+        return reasons
 
     def create_research_universe(self, run_id: str, candidate_limit: int, leader_limit: int = 5) -> tuple[dict[str, Any], bool]:
         if candidate_limit not in CANDIDATE_LIMITS:
@@ -387,56 +430,119 @@ class ValueWorkspaceService:
         if not tracks:
             raise ValueError("strategy run has no materialized candidate tracks")
         candidates: list[dict[str, Any]] = []
+        exclusions: list[dict[str, Any]] = []
+        all_leaders: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for track in tracks:
-            leaders = [
-                item for item in self.ensure_track_leaders(run_id, track["track_id"])
-                if item.get("base_score") is not None and float(item.get("coverage") or 0) > 0
-            ]
-            for leader in leaders:
-                candidates.append({
-                    "track_id": track["track_id"], "track_name": track["track_name"],
-                    "track_rank": int(track["rank"]), "symbol": leader["symbol"], "name": leader["name"],
-                    "leader_rank": int(leader["rank"]), "leader_type": leader["leader_type"],
-                    "leader_score": leader.get("base_score"), "leader_coverage": float(leader.get("coverage") or 0),
-                })
+            leaders = self.ensure_track_leaders(run_id, track["track_id"], expected_as_of=str(run["as_of"]))
+            for leader in leaders[:leader_limit]:
+                all_leaders.append((track, leader))
+        histories, annual_available, market_dates = self._research_eligibility_context(
+            [str(leader["symbol"]) for _, leader in all_leaders], str(run["as_of"]),
+        )
+        for track, leader in all_leaders:
+            if leader.get("base_score") is None or float(leader.get("coverage") or 0) <= 0:
+                reasons = ["INSUFFICIENT_LEADER_COVERAGE"]
+            else:
+                reasons = self._is_research_eligible(
+                    symbol=str(leader["symbol"]), name=str(leader["name"]), histories=histories,
+                    annual_available=annual_available, market_dates=market_dates,
+                )
+            if reasons:
+                exclusions.append({"track_id": track["track_id"], "track_name": track["track_name"], "track_rank": int(track["rank"]),
+                                   "symbol": leader["symbol"], "name": leader["name"], "leader_rank": int(leader["rank"]), "reasons": reasons})
+                continue
+            for note in self._metric_applicability_notes(str(track["track_name"])):
+                if note not in leader.get("metric_applicability_notes", []):
+                    leader["metric_applicability_notes"] = [*leader.get("metric_applicability_notes", []), note]
+            # Each candidate industry independently contributes at most Top M.
+            # Do not globally rank Leader Scores: they are industry percentiles.
+            candidates.append({
+                "track_id": track["track_id"], "track_name": track["track_name"],
+                "track_rank": int(track["rank"]), "symbol": leader["symbol"], "name": leader["name"],
+                "leader_rank": int(leader["rank"]), "leader_type": leader["leader_type"],
+                "leader_score": leader.get("base_score"), "leader_coverage": float(leader.get("coverage") or 0),
+                "sector_score": track.get("base_score"), "leader_formula_version": leader.get("formula_version"),
+                "eligibility_status": "eligible", "eligibility_reasons": [],
+                "metric_applicability_notes": leader.get("metric_applicability_notes", []),
+            })
         if not candidates:
             raise ValueError("candidate tracks have no valid leaders")
-        # The candidate-track setting controls capacity only.  Do not reserve
-        # five names for every track: every scored company competes globally.
-        candidates.sort(key=lambda item: (
-            item["leader_score"] is None, -float(item["leader_score"] or 0),
-            -float(item["leader_coverage"] or 0), item["track_rank"], item["leader_rank"], item["symbol"],
-        ))
-        capacity = candidate_limit * leader_limit
-        selected_symbols: list[str] = []
-        seen_symbols: set[str] = set()
-        for candidate in candidates:
-            symbol = str(candidate["symbol"])
-            if symbol in seen_symbols:
-                continue
-            seen_symbols.add(symbol)
-            selected_symbols.append(symbol)
-            if len(selected_symbols) == capacity:
-                break
-        selected_rank = {symbol: index for index, symbol in enumerate(selected_symbols, 1)}
-        members = [
-            {
-                **candidate,
-                "inclusion_reason": f"候选范围综合评分第{selected_rank[candidate['symbol']]}名 · 赛道第{candidate['track_rank']}名 · 行业内第{candidate['leader_rank']}名",
-            }
-            for candidate in candidates
-            if candidate["symbol"] in selected_rank
-        ]
+        members = [{**candidate, "inclusion_reason": f"赛道第{candidate['track_rank']}名（{candidate['sector_score'] or '—'}） · 行业内 Leader 第{candidate['leader_rank']}名 · 通过研究资格过滤"} for candidate in candidates]
         key = ":".join((run_id, str(candidate_limit), str(leader_limit), UNIVERSE_RULE_VERSION))
         universe, created = self.store.create_universe(
             idempotency_key=key, run_id=run_id,
             profile_id=str(run.get("profile_id") or "profile_value_line_v2"),
             candidate_limit=candidate_limit, leader_limit=leader_limit,
             data_as_of=str(run["as_of"]), formula_version=str(run["formula_version"]), members=members,
+            eligibility_exclusions=exclusions,
         )
         self.store.ensure_research_monitors(universe["id"], self._universe_companies(universe))
         universe = self.store.get_universe(universe["id"]) or universe
         return universe, created
+
+    def create_level3_leader_research_universe(self, *, as_of: str | None = None, leader_limit: int = 2) -> tuple[dict[str, Any], bool]:
+        """Freeze the same terminal-industry leader pool shown on /value.
+
+        This is intentionally separate from the macro-selected Value V2 universe:
+        terminal-industry Leader scores are only comparable inside their own
+        industry, but every eligible leader still needs an initial research
+        archive.  The resulting universe is therefore an archive/monitoring
+        container, not a cross-industry buy ranking.
+        """
+        if leader_limit != 2:
+            raise ValueError("leader_limit must match the industry leader page (2)")
+        from src.level3_leaders.service import get_level3_leader_service
+
+        snapshot = get_level3_leader_service().get_all_level3_top_leaders(as_of=as_of, limit=leader_limit)
+        if snapshot.get("snapshot_status") != "ready":
+            raise ValueError("三级行业龙头快照尚未生成")
+        snapshot_as_of = str(snapshot.get("as_of") or as_of or "")
+        if not snapshot_as_of:
+            raise ValueError("三级行业龙头快照缺少数据日期")
+        rows = [leader for leaders in dict(snapshot.get("items") or {}).values() for leader in leaders]
+        if not rows:
+            raise ValueError("三级行业龙头快照没有可建档公司")
+        rows.sort(key=lambda item: (str(item.get("level3_code") or ""), int(item.get("leader_rank") or 0), str(item.get("stock_code") or "")))
+
+        profile = self.store.get_profile(None)
+        if not profile:
+            raise ValueError("尚未配置价值计算方案")
+        symbols = sorted({str(item["stock_code"]) for item in rows})
+        formula_version = str(next((item.get("leader_formula_version") for item in rows if item.get("leader_formula_version")), "level3-leader-v1"))
+        engine = StrategyEngineStore(self.store.db_path)
+        try:
+            run, run_created = engine.create_or_get_run(
+                idempotency_key=f"value-level3-leader-universe:{snapshot_as_of}:top{leader_limit}:{formula_version}",
+                strategy_line="value", market="CN", as_of=snapshot_as_of, symbols=symbols,
+                formula_version=formula_version, profile_id=str(profile["id"]), profile_version=int(profile.get("version") or 1),
+            )
+            if run_created:
+                engine.finish_run(run["id"], status="completed", source_status="ready", message="通达信三级行业龙头研究池快照")
+        finally:
+            engine.close()
+
+        industry_codes = sorted({str(item["level3_code"]) for item in rows})
+        industry_rank = {code: index + 1 for index, code in enumerate(industry_codes)}
+        members = [{
+            "track_id": str(item["level3_code"]), "track_name": str(item["level3_name"]),
+            "track_rank": industry_rank[str(item["level3_code"])],
+            "symbol": str(item["stock_code"]), "name": str(item["stock_name"]),
+            "leader_rank": int(item["leader_rank"]), "leader_type": "三级行业龙头",
+            "leader_score": _number(item.get("leader_score")), "leader_coverage": float(item.get("coverage") or 0),
+            "sector_score": None, "leader_formula_version": str(item.get("leader_formula_version") or formula_version),
+            "eligibility_status": str(item.get("eligibility_status") or "eligible"),
+            "eligibility_reasons": list(item.get("eligibility_reasons") or []),
+            "metric_applicability_notes": list(item.get("metric_applicability_notes") or []),
+            "inclusion_reason": f"通达信三级行业 {item['level3_name']} · 行业内龙头第 {item['leader_rank']} 名 · 与行业龙头页同源",
+        } for item in rows]
+        key = f"level3:{snapshot_as_of}:top{leader_limit}:{formula_version}:{LEVEL3_LEADER_UNIVERSE_RULE_VERSION}"
+        universe, created = self.store.create_universe(
+            idempotency_key=key, run_id=str(run["id"]), profile_id=str(profile["id"]),
+            candidate_limit=len(industry_codes), leader_limit=leader_limit, data_as_of=snapshot_as_of,
+            formula_version=formula_version, members=members,
+        )
+        self.store.ensure_research_monitors(universe["id"], self._universe_companies(universe))
+        return self.store.get_universe(universe["id"]) or universe, created
 
     @staticmethod
     def _universe_companies(universe: dict[str, Any]) -> list[dict[str, Any]]:

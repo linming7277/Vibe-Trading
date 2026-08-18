@@ -120,6 +120,12 @@ _OPENAI_CODEX_CAPABILITIES = ProviderCapabilities(
 
 _PROVIDERS: dict[str, ProviderCapabilities] = {
     "openai": ProviderCapabilities("openai", "OPENAI_API_KEY", "OPENAI_BASE_URL"),
+    # Volcengine Ark exposes an OpenAI-compatible wire protocol but uses a
+    # non-standard API root. Keep the OpenAI credential namespace while
+    # preserving Ark's catalog default when no explicit URL is saved.
+    "volcengine": ProviderCapabilities(
+        "volcengine", "OPENAI_API_KEY", "OPENAI_BASE_URL"
+    ),
     "anthropic": ProviderCapabilities(
         "anthropic",
         "ANTHROPIC_API_KEY",
@@ -293,6 +299,8 @@ def _provider_default_base_url(provider_name: str) -> str:
 def get_llm_credentials(
     provider: str | None,
     model: str | None,
+    *,
+    allow_openai_fallback: bool = True,
 ) -> dict[str, str]:
     """Resolve API key, base URL, and model from provider/model env vars.
 
@@ -303,6 +311,9 @@ def get_llm_credentials(
     Args:
         provider: Configured provider name (e.g. ``"openrouter"``).
         model: Configured model name (e.g. ``"deepseek/deepseek-v4-pro"``).
+        allow_openai_fallback: Preserve the legacy ``OPENAI_*`` alias
+            fallback. Explicit per-agent Provider selection disables this so
+            ambient OpenAI settings cannot redirect another Provider.
 
     Returns:
         Dict with ``"provider"``, ``"api_key"``, ``"base_url"``, ``"model"``
@@ -321,11 +332,9 @@ def get_llm_credentials(
     key_env, base_env = caps.api_key_env, caps.base_url_env
 
     if key_env is not None:
-        api_key = os.getenv(  # noqa: env-gate
-            key_env, ""
-        ) or os.getenv(  # noqa: env-gate — dynamic provider key fallback
-            "OPENAI_API_KEY", ""
-        )
+        api_key = os.getenv(key_env, "")  # noqa: env-gate
+        if not api_key and allow_openai_fallback:
+            api_key = os.getenv("OPENAI_API_KEY", "")  # noqa: env-gate
     else:
         api_key = (
             os.getenv("OPENAI_API_KEY", "")  # noqa: env-gate — ollama default key
@@ -338,11 +347,13 @@ def get_llm_credentials(
             if base_env
             else ""
         )
-        or os.getenv(  # noqa: env-gate — dynamic provider URL chain
-            "OPENAI_BASE_URL", ""
-        )
-        or os.getenv(  # noqa: env-gate — dynamic provider URL chain
-            "OPENAI_API_BASE", ""
+        or (
+            (
+                os.getenv("OPENAI_BASE_URL", "")  # noqa: env-gate
+                or os.getenv("OPENAI_API_BASE", "")  # noqa: env-gate
+            )
+            if allow_openai_fallback
+            else ""
         )
         or _provider_default_base_url(caps.name)
     )

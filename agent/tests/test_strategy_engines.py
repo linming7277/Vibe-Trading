@@ -60,6 +60,27 @@ def test_normalization_and_missing_policy_are_deterministic() -> None:
     assert result.score is None
 
 
+def test_cross_sectional_percentiles_keep_ties_equal_and_constant_neutral() -> None:
+    constant = cross_sectional_percentiles(
+        [{"value": 0.0}, {"value": 0.0}, {"value": 0.0}, {"value": 0.0}], {"value": True},
+    )
+    assert [row["value"] for row in constant] == [50.0, 50.0, 50.0, 50.0]
+
+    ascending = cross_sectional_percentiles(
+        [{"value": 10.0}, {"value": 10.0}, {"value": 20.0}, {"value": 30.0}], {"value": True},
+    )
+    assert ascending[0]["value"] == ascending[1]["value"] == pytest.approx(16.6667)
+    assert ascending[2]["value"] == pytest.approx(66.6667)
+    assert ascending[3]["value"] == 100.0
+
+    descending = cross_sectional_percentiles(
+        [{"value": 10.0}, {"value": None}, {"value": 10.0}, {"value": 20.0}], {"value": False},
+    )
+    assert descending[0]["value"] == descending[2]["value"] == 75.0
+    assert descending[1]["value"] is None
+    assert descending[3]["value"] == 0.0
+
+
 def test_empty_strategy_inputs_finish_as_insufficient_data(tmp_path: Path) -> None:
     store = StrategyEngineStore(tmp_path / "research.db")
     service = StrategyEngineService(store)

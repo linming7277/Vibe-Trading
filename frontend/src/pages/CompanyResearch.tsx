@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { AlertTriangle, ArrowLeft, ArrowRight, FilePlus2, Loader2, RefreshCw, Scale } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ChevronRight, FilePlus2, Loader2, RefreshCw, Scale } from "lucide-react";
 import { toast } from "sonner";
 import { api, type CompanyDossier, type MarketCode, type PriceBar, type TdxSecurityOverview } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -8,9 +8,15 @@ import { CandlestickChart } from "@/components/charts/CandlestickChart";
 import { EmptyState, LoadingState, MetricCard, PageHeader, SourceBadge, WorkspacePage, formatNumber } from "@/components/workspace/WorkspaceUI";
 import { DecisionFlow } from "@/components/workspace/DecisionFlow";
 import { useDecisionFlow } from "@/hooks/useDecisionFlow";
+import { inferReturnLabel, safeInternalPath } from "@/lib/routeContext";
+import { FinancialAnalysisContent } from "@/pages/FinancialAnalysis";
 
-const TABS = ["概览", "行情K线", "财务估值", "题材板块", "分红股本", "资金结构", "研究结论"] as const;
+const TABS = ["概览", "行情K线", "财务与估值", "题材板块", "分红股本", "资金结构", "研究结论"] as const;
 type Tab = typeof TABS[number];
+const TAB_KEYS: Record<Tab, string> = { 概览: "overview", 行情K线: "kline", 财务与估值: "financial", 题材板块: "sectors", 分红股本: "capital", 资金结构: "microstructure", 研究结论: "research" };
+function tabFromQuery(value: string | null): Tab {
+  return TABS.find((item) => item === value || TAB_KEYS[item] === value) || "概览";
+}
 type Dict = Record<string, unknown>;
 function pct(value: unknown) { const n = Number(value); return Number.isFinite(n) ? `${n > 0 ? "+" : ""}${n.toFixed(2)}%` : "—"; }
 function asDict(value: unknown): Dict { return value && typeof value === "object" && !Array.isArray(value) ? value as Dict : {}; }
@@ -25,14 +31,13 @@ export function CompanyResearch() {
 
 function TdxCompany({ symbol }: { symbol: string }) {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const { flow, selectLeader, update: updateFlow } = useDecisionFlow();
   const [data, setData] = useState<TdxSecurityOverview | null>(null);
   const [dossier, setDossier] = useState<CompanyDossier | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<"refresh" | "kline" | "research" | "committee" | null>(null);
-  const requestedTab = params.get("tab") as Tab | null;
-  const [tab, setTab] = useState<Tab>(TABS.includes(requestedTab as Tab) ? requestedTab as Tab : "概览");
+  const tab = tabFromQuery(params.get("tab"));
   const [period, setPeriod] = useState("1d");
   const [dividendType, setDividendType] = useState("front");
   const load = useCallback(async () => {
@@ -46,24 +51,25 @@ function TdxCompany({ symbol }: { symbol: string }) {
 
   const refresh = async () => { setRunning("refresh"); try { await api.refreshTdxSecurity(symbol); await load(); toast.success("单股行情与财务快照已更新"); } catch (reason) { toast.error(reason instanceof Error ? reason.message : "单股更新失败"); } finally { setRunning(null); } };
   const refreshKline = async () => { setRunning("kline"); try { await api.getTdxKline({ symbol, period, count: 500, dividend_type: dividendType }); await load(); toast.success("K线缓存已更新"); } catch (reason) { toast.error(reason instanceof Error ? reason.message : "K线更新失败"); } finally { setRunning(null); } };
-  const research = async () => { setRunning("research"); try { const result = await api.researchCompany("CN", symbol); setDossier(result.dossier); setTab("研究结论"); updateFlow({ research_report_id: result.report?.id, research_completed_at: new Date().toISOString() }); toast.success("深度研究底稿已生成，可继续形成买卖点"); } catch (reason) { toast.error(reason instanceof Error ? reason.message : "研究失败"); } finally { setRunning(null); } };
+  const selectTab = (nextTab: Tab) => setParams((current) => { const next = new URLSearchParams(current); next.set("tab", TAB_KEYS[nextTab]); return next; });
+  const research = async () => { setRunning("research"); try { const result = await api.researchCompany("CN", symbol); setDossier(result.dossier); selectTab("研究结论"); updateFlow({ research_report_id: result.report?.id, research_completed_at: new Date().toISOString() }); toast.success("深度研究底稿已生成，可继续形成买卖点"); } catch (reason) { toast.error(reason instanceof Error ? reason.message : "研究失败"); } finally { setRunning(null); } };
   const committee = async () => { setRunning("committee"); try { const result = await api.createCommittee({ market: "CN", symbol, company_name: data?.name || dossier?.name || symbol }); navigate(`/committee/${result.id}`); } catch (reason) { toast.error(reason instanceof Error ? reason.message : "启动投委会失败"); } finally { setRunning(null); } };
   const createPlan = () => navigate(`/signals?new=1&market=CN&symbol=${encodeURIComponent(symbol)}&name=${encodeURIComponent(data?.name || dossier?.name || symbol)}&flow=1`);
 
-  if (loading) return <WorkspacePage><CompanyBackLink /><LoadingState label="正在读取通达信缓存…" /></WorkspacePage>;
-  if (!data) return <WorkspacePage><CompanyBackLink /><EmptyState title="未找到A股证券" body="请先在数据中心更新实时行情；公司详情不会自动触发全市场财务更新。" /></WorkspacePage>;
+  if (loading) return <WorkspacePage><CompanyNavigation symbol={symbol} /><LoadingState label="正在读取通达信缓存…" /></WorkspacePage>;
+  if (!data) return <WorkspacePage><CompanyNavigation symbol={symbol} /><EmptyState title="未找到A股证券" body="请先在数据中心更新实时行情；公司详情不会自动触发全市场财务更新。" /></WorkspacePage>;
   const quote = asDict(data.quote);
   const finance = asDict(data.fundamental);
   const detail = asDict(data.detail);
   const snapshot = asDict(detail.snapshot);
   const extended = asDict(detail.extended);
-  return <WorkspacePage><CompanyBackLink /><DecisionFlow current={4} />
-    <PageHeader eyebrow={`A-SHARE / ${data.code}`} title={`${data.name} · 深度研究`} description={`${flow.sector_name ? `上游行业：${flow.sector_name} · ` : ""}${data.source} · 数据时间（北京时间）${new Date(data.as_of).toLocaleString("zh-CN", { hour12: false })}`} actions={<><button onClick={() => void refresh()} disabled={Boolean(running)} className="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm font-medium"><RefreshCw className={cn("h-4 w-4", running === "refresh" && "animate-spin")} />刷新单股</button><button onClick={() => void research()} disabled={Boolean(running)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">{running === "research" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}生成深度研究</button><button onClick={() => void committee()} disabled={Boolean(running)} className="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm font-medium">{running === "committee" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scale className="h-4 w-4" />}投委会复核</button></>} />
+  return <WorkspacePage><CompanyNavigation symbol={symbol} companyName={data.name} /><DecisionFlow current={4} />
+    <PageHeader eyebrow={`A-SHARE / ${data.code}`} title={`${data.name} · 公司研究`} description={`${params.get("sector_name") || flow.sector_name ? `所属研究行业：${params.get("sector_name") || flow.sector_name} · ` : ""}${data.source} · 数据时间（北京时间）${new Date(data.as_of).toLocaleString("zh-CN", { hour12: false })}`} actions={<><button onClick={() => void refresh()} disabled={Boolean(running)} className="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm font-medium"><RefreshCw className={cn("h-4 w-4", running === "refresh" && "animate-spin")} />刷新单股</button><button onClick={() => void research()} disabled={Boolean(running)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">{running === "research" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}生成深度研究</button><button onClick={() => void committee()} disabled={Boolean(running)} className="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm font-medium">{running === "committee" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scale className="h-4 w-4" />}投委会复核</button></>} />
     {data.cache?.stale ? <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 p-3 text-sm text-warning"><AlertTriangle className="h-4 w-4" />行情缓存已超过15分钟</div> : null}
-    <div className="overflow-x-auto"><div className="inline-flex min-w-max rounded-lg border bg-card p-1">{TABS.map((item) => <button key={item} onClick={() => setTab(item)} className={cn("rounded-md px-4 py-2 text-sm", tab === item ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>{item}</button>)}</div></div>
+    <div className="overflow-x-auto"><div role="tablist" aria-label="公司详情内容" className="inline-flex min-w-max rounded-lg border bg-card p-1">{TABS.map((item) => <button role="tab" aria-selected={tab === item} key={item} onClick={() => selectTab(item)} className={cn("rounded-md px-4 py-2 text-sm", tab === item ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>{item}</button>)}</div></div>
     {tab === "概览" ? <OverviewTab quote={quote} finance={finance} snapshot={snapshot} /> : null}
     {tab === "行情K线" ? <KlineTab data={data} symbol={symbol} period={period} setPeriod={setPeriod} dividendType={dividendType} setDividendType={setDividendType} refresh={() => void refreshKline()} loading={running === "kline"} /> : null}
-    {tab === "财务估值" ? <FinanceTab finance={finance} professional={data.professional_finance_available} /> : null}
+    {tab === "财务与估值" ? <FinancialAnalysisContent stockCode={symbol} asOf={params.get("as_of") || undefined} /> : null}
     {tab === "题材板块" ? <SectorsTab sectors={data.sectors} /> : null}
     {tab === "分红股本" ? <DividendTab detail={detail} /> : null}
     {tab === "资金结构" ? <MicroTab snapshot={snapshot} extended={extended} detail={detail} /> : null}
@@ -82,11 +88,6 @@ function KlineTab({ data, symbol, period, setPeriod, dividendType, setDividendTy
   return <section className="rounded-xl border bg-card p-5 shadow-sm"><div className="flex flex-wrap items-center gap-2 border-b pb-4"><span className="text-xs text-muted-foreground">周期</span>{[["1d", "日线"], ["1w", "周线"], ["1m", "月线"], ["5m", "5分钟"], ["15m", "15分钟"], ["30m", "30分钟"], ["60m", "60分钟"]].map(([key, label]) => <button key={key} onClick={() => setPeriod(key)} className={cn("rounded-full px-3 py-1 text-xs", period === key ? "bg-foreground text-background" : "bg-muted text-muted-foreground")}>{label}</button>)}<span className="ml-3 text-xs text-muted-foreground">复权</span>{[["front", "前复权"], ["back", "后复权"], ["none", "不复权"]].map(([key, label]) => <button key={key} onClick={() => setDividendType(key)} className={cn("rounded-full px-3 py-1 text-xs", dividendType === key ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary")}>{label}</button>)}<button onClick={refresh} disabled={loading} className="ml-auto inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />更新当前K线</button></div>{bars.length ? <div className="pt-4"><CandlestickChart data={bars} height={520} /></div> : <div className="py-20 text-center text-sm text-muted-foreground">暂无该周期K线</div>}</section>;
 }
 
-function FinanceTab({ finance, professional }: { finance: Dict; professional: boolean }) {
-  const groups = [{ title: "资产负债", rows: [["总资产", finance.total_assets_10k], ["净资产", finance.net_assets_10k], ["总股本", finance.total_shares_10k], ["流通股本", finance.float_shares_10k]] }, { title: "经营结果", rows: [["营业收入", finance.revenue_10k], ["营业利润", finance.operating_profit_10k], ["净利润", finance.net_profit_10k], ["研发费用", finance.rd_expense_10k]] }, { title: "每股与估值", rows: [["EPS", finance.eps], ["每股净资产", finance.bps], ["PE动态 / TTM", `${formatNumber(finance.pe_dynamic)} / ${formatNumber(finance.pe_ttm)}`], ["PB / 股息率", `${formatNumber(finance.pb_mrq)} / ${pct(finance.dividend_yield)}`]] }];
-  return <>{!professional ? <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 p-3 text-sm text-warning"><AlertTriangle className="h-4 w-4 shrink-0" />历史财务数据不可用</div> : null}<section className="grid gap-5 lg:grid-cols-3">{groups.map((group) => <article key={group.title} className="rounded-xl border bg-card p-5 shadow-sm"><h2 className="font-semibold">{group.title}</h2><div className="mt-4 divide-y">{group.rows.map(([label, value]) => <div key={String(label)} className="flex justify-between gap-4 py-3 text-sm"><span className="text-muted-foreground">{String(label)}</span><span className="text-right font-mono">{typeof value === "number" ? `${formatNumber(value)}${String(label).includes("EPS") || String(label).includes("每股") ? "" : " 万元"}` : String(value ?? "—")}</span></div>)}</div></article>)}</section><div className="rounded-xl border bg-card p-5 text-sm"><span className="text-muted-foreground">主营业务：</span>{String(finance.main_business ?? "—")}<span className="ml-6 text-muted-foreground">最新报告日期：</span>{formatDate(finance.report_date)}<span className="ml-6 text-muted-foreground">股东人数：</span>{formatNumber(finance.shareholders, 0)}</div></>;
-}
-
 function SectorsTab({ sectors }: { sectors: Dict[] }) { return <section className="rounded-xl border bg-card p-5 shadow-sm"><h2 className="font-semibold">行业、概念、地区与风格关系</h2>{sectors.length ? <div className="mt-4 flex flex-wrap gap-2">{sectors.map((row, index) => <Link key={String(row.sector_code ?? row.code ?? index)} to={`/market/sectors/${String(row.sector_code ?? row.code ?? "")}`} className="rounded-full border bg-muted/40 px-3 py-1.5 text-sm hover:border-primary hover:text-primary">{String(row.sector_name ?? row.name ?? "板块")}</Link>)}</div> : <p className="mt-4 text-sm text-muted-foreground">尚未更新板块成分缓存。</p>}</section>; }
 
 function DividendTab({ detail }: { detail: Dict }) { const dividends = asRows(detail.dividends); const capital = asRows(detail.capital); return <section className="grid gap-5 xl:grid-cols-2"><DataTable title="历史分红送配" rows={dividends} empty="点击“刷新单股”获取分红记录" /><DataTable title="股本变化" rows={capital} empty="点击“刷新单股”获取股本记录" /></section>; }
@@ -97,12 +98,15 @@ function ResearchTab({ dossier, running, reportId, onResearch, onCreatePlan }: {
   return <><section className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]"><article className="rounded-xl border bg-card p-6"><SourceBadge status={dossier.source_status} asOf={dossier.data_as_of} /><p className="mt-4 leading-8">{dossier.overview}</p><div className="mt-5 grid gap-4 md:grid-cols-2"><div className="rounded-xl border border-market-up/30 bg-market-up/5 p-4"><h3 className="font-semibold text-market-up">正向证据</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{dossier.bull_thesis}</p></div><div className="rounded-xl border border-market-down/30 bg-market-down/5 p-4"><h3 className="font-semibold text-market-down">风险与反证</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{dossier.bear_thesis}</p></div></div></article><div className="space-y-5"><ListCard title="催化剂" items={dossier.catalysts} /><ListCard title="风险" items={dossier.risks} /><div className="grid grid-cols-2 gap-2"><button onClick={onResearch} className="rounded-lg border px-4 py-2 text-sm font-medium">重新生成</button>{reportId ? <Link to={`/reports/${reportId}`} className="rounded-lg border px-4 py-2 text-center text-sm font-medium text-primary">查看底稿</Link> : null}</div></div></section><section className="flex flex-col justify-between gap-4 rounded-xl border border-primary/30 bg-primary/5 p-5 sm:flex-row sm:items-center"><div className="font-semibold">形成买卖点</div><button onClick={onCreatePlan} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">下一步<ArrowRight className="h-4 w-4" /></button></section></>;
 }
 
-function CompanyBackLink() {
+function CompanyNavigation({ symbol, companyName }: { symbol: string; companyName?: string }) {
   const [params] = useSearchParams();
-  const fromValue = params.get("from") === "value";
-  return <div className="flex flex-wrap items-center gap-2 text-sm"><Link to={fromValue ? "/value" : "/screener"} className="inline-flex items-center gap-1 text-primary hover:underline"><ArrowLeft className="h-4 w-4" />{fromValue ? "返回价值龙头" : "返回股票筛选"}</Link></div>;
+  const legacyFrom = params.get("from") === "value" ? "/value" : params.get("from");
+  const from = safeInternalPath(legacyFrom, "/value");
+  const fromLabel = params.get("from_label") || inferReturnLabel(from);
+  const sectorName = params.get("sector_name");
+  return <nav aria-label="公司研究路径" className="flex flex-col gap-3 rounded-lg border bg-card px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 flex-wrap items-center gap-1.5 text-muted-foreground"><Link to="/value" className="hover:text-primary">价值投资</Link><ChevronRight className="h-3.5 w-3.5" />{from !== "/value" || sectorName ? <><Link to={from} className="hover:text-primary">{sectorName ? `${sectorName}龙头` : fromLabel}</Link><ChevronRight className="h-3.5 w-3.5" /></> : null}<span className="truncate text-foreground">{companyName || symbol}</span></div><div className="flex shrink-0 flex-wrap gap-2"><Link to={from} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 hover:bg-muted"><ArrowLeft className="h-4 w-4" />返回{sectorName ? `${sectorName}龙头` : fromLabel}</Link>{from !== "/value" ? <Link to="/value" className="rounded-md border px-3 py-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">返回价值投资</Link> : null}</div></nav>;
 }
-function LegacyCompany({ market, symbol }: { market: MarketCode; symbol: string }) { const [data, setData] = useState<CompanyDossier | null>(null); const [loading, setLoading] = useState(true); useEffect(() => { api.getCompanyDossier(market, symbol).then(setData).catch(() => setData(null)).finally(() => setLoading(false)); }, [market, symbol]); if (loading) return <WorkspacePage><CompanyBackLink /><LoadingState /></WorkspacePage>; if (!data) return <WorkspacePage><CompanyBackLink /><EmptyState title="未找到公司研究档案" body="港股、美股继续使用现有研究数据；当前缺少真实数据时不会显示示例行情。" /></WorkspacePage>; return <WorkspacePage><CompanyBackLink /><PageHeader eyebrow={`${market} / ${symbol}`} title={data.name} description={`${data.exchange} · ${data.sector_name}`} actions={<SourceBadge status={data.source_status} asOf={data.data_as_of} />} /><ResearchTab dossier={data} running={false} onResearch={() => undefined} onCreatePlan={() => undefined} /></WorkspacePage>; }
+function LegacyCompany({ market, symbol }: { market: MarketCode; symbol: string }) { const [data, setData] = useState<CompanyDossier | null>(null); const [loading, setLoading] = useState(true); useEffect(() => { api.getCompanyDossier(market, symbol).then(setData).catch(() => setData(null)).finally(() => setLoading(false)); }, [market, symbol]); if (loading) return <WorkspacePage><CompanyNavigation symbol={symbol} /><LoadingState /></WorkspacePage>; if (!data) return <WorkspacePage><CompanyNavigation symbol={symbol} /><EmptyState title="未找到公司研究档案" body="港股、美股继续使用现有研究数据；当前缺少真实数据时不会显示示例行情。" /></WorkspacePage>; return <WorkspacePage><CompanyNavigation symbol={symbol} companyName={data.name} /><PageHeader eyebrow={`${market} / ${symbol}`} title={data.name} description={`${data.exchange} · ${data.sector_name}`} actions={<SourceBadge status={data.source_status} asOf={data.data_as_of} />} /><ResearchTab dossier={data} running={false} onResearch={() => undefined} onCreatePlan={() => undefined} /></WorkspacePage>; }
 
 function DataTable({ title, rows, empty }: { title: string; rows: Dict[]; empty: string }) { const keys = rows.length ? Object.keys(rows[0]).slice(0, 8) : []; return <article className="overflow-hidden rounded-xl border bg-card shadow-sm"><div className="border-b p-5"><h2 className="font-semibold">{title}</h2></div>{rows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-xs"><thead className="bg-muted/50 text-muted-foreground"><tr>{keys.map((key) => <th key={key} className="p-3">{key}</th>)}</tr></thead><tbody className="divide-y">{rows.map((row, index) => <tr key={index}>{keys.map((key) => <td key={key} className="max-w-40 truncate p-3 font-mono" title={String(row[key] ?? "")}>{String(row[key] ?? "—")}</td>)}</tr>)}</tbody></table></div> : <p className="p-8 text-center text-sm text-muted-foreground">{empty}</p>}</article>; }
 function ListCard({ title, items }: { title: string; items: string[] }) { return <article className="rounded-xl border bg-card p-5"><h3 className="font-semibold">{title}</h3><ul className="mt-3 space-y-2 text-sm">{items.map((item) => <li key={item} className="rounded-lg bg-muted/50 p-3">{item}</li>)}</ul></article>; }

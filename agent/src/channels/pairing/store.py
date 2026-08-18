@@ -217,10 +217,9 @@ def get_approved(channel: str) -> list[str]:
 def format_pairing_reply(code: str) -> str:
     """Return the pairing-code message sent to unrecognised DM senders."""
     return (
-        "Hi there! This assistant only responds to approved users.\n\n"
-        f"Your pairing code is: `{code}`\n\n"
-        "To get access, ask the owner to approve this code:\n"
-        f"- In this chat: send `/pairing approve {code}`"
+        "你好，财报研究员只响应已授权用户。\n\n"
+        f"你的配对码是：`{code}`\n\n"
+        "请让系统管理员在「设置 → IM 通道 → 用户配对」中批准此配对码。"
     )
 
 

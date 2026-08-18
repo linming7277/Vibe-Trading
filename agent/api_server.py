@@ -9,6 +9,7 @@ infrastructure lives in ``src.api.{security,models,helpers,state}``.
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict
@@ -124,24 +125,57 @@ from src.api.scheduled_routes import (  # noqa: E402
 )
 
 
+def _start_preflight_background() -> threading.Thread:
+    """Run preflight checks in a daemon thread so network probes (OKX / LLM
+    / yfinance, each up to ~10s) never delay the server from opening its port.
+
+    Uvicorn blocks the listen socket until the startup lifespan hook returns;
+    the OKX / LLM checks were previously synchronously awaiting connect
+    timeouts, which pushed port-open past the launcher's readiness window.
+    The preflight table is informational here (its return value is unused),
+    so running it off the hot path keeps startup fast without losing output.
+    Mirrors ``cli.main._start_preflight_async``.
+    """
+    def _worker() -> None:
+        try:
+            from src.preflight import run_preflight
+
+            run_preflight(console)
+        except Exception:  # noqa: BLE001 — best-effort; never crash the server
+            logging.getLogger(__name__).warning("Preflight checks failed", exc_info=True)
+
+    thread = threading.Thread(target=_worker, daemon=True, name="vibe-preflight")
+    thread.start()
+    return thread
+
+
 async def _run_startup_preflight() -> None:
     """Run preflight checks on server startup."""
-    from src.preflight import run_preflight
-
     from src.config import migrate as _migrate
 
     try:
         _migrate.migrate_legacy_state()  # one-time pre-#904 state move; must never block startup
     except Exception:  # pragma: no cover — best-effort
         logging.getLogger(__name__).warning("Legacy state migration failed", exc_info=True)
-    run_preflight(console)
+    # Preflight is best-effort diagnostics and must not gate the listen socket.
+    _start_preflight_background()
     _start_scheduled_research_executor()
     from src.value_workspace.automation import start_value_research_scheduler
 
     start_value_research_scheduler()
     from src.config.accessor import get_env_config
 
-    if get_env_config().agent_tuning.vibe_trading_channels_auto_start:
+    auto_start_channels = get_env_config().agent_tuning.vibe_trading_channels_auto_start
+    if not auto_start_channels:
+        try:
+            from src.channels.config import load_channels_config
+
+            auto_start_channels = bool(load_channels_config().get("auto_start", False))
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Unable to read persisted channel auto-start setting", exc_info=True
+            )
+    if auto_start_channels:
         await _start_channel_runtime()
 
 
@@ -283,6 +317,15 @@ register_scheduled_routes(app)
 from src.api.research_routes import register_research_routes  # noqa: E402
 register_research_routes(app)
 
+from src.api.research_task_routes import register_research_task_routes  # noqa: E402
+register_research_task_routes(app, require_auth)
+
+from src.api.fine_track_routes import register_fine_track_routes  # noqa: E402
+register_fine_track_routes(app, require_auth)
+
+from src.api.financial_analysis_routes import register_financial_analysis_routes  # noqa: E402
+register_financial_analysis_routes(app, require_auth)
+
 from src.api.strategy_routes import register_strategy_routes  # noqa: E402
 register_strategy_routes(app)
 from src.api.value_workspace_routes import register_value_workspace_routes  # noqa: E402
@@ -373,8 +416,8 @@ def serve_main(argv: list[str] | None = None) -> int:
             stderr=subprocess.DEVNULL,
         )
         print(f"[dev] Vite PID={vite_proc.pid}")
-        print("[dev] Frontend: http://localhost:5173")
-        print(f"[dev] API: http://localhost:{args.port}")
+        print("[dev] Frontend: Vite on port 5173 (LAN address is shown by the Windows launcher)")
+        print(f"[dev] API: internal proxy port {args.port}")
     elif frontend_dist.exists():
         if not any(getattr(route, "path", None) == "/" for route in app.routes):
             app.mount("/", SPAStaticFiles(directory=str(frontend_dist), html=True), name="frontend")
@@ -385,7 +428,7 @@ def serve_main(argv: list[str] | None = None) -> int:
 
     print("=" * 50)
     print("  恒值投资服务")
-    print(f"  http://127.0.0.1:{args.port}")
+    print(f"  API internal port: {args.port} (use the frontend LAN address shown by the launcher)")
     print("=" * 50)
 
     # Redact api_key=/ticket= values from Uvicorn's access log (it logs the full

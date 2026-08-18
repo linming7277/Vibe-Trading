@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from contextlib import suppress
 from collections.abc import Iterable, Mapping
@@ -21,6 +22,12 @@ from src.session.models import Message, Session
 from src.session.service import SessionBusyError
 
 logger = logging.getLogger(__name__)
+
+_FINANCIAL_AGENT_PREFIX = re.compile(
+    r"^\s*(?:/财报(?:研究员)?|/financial(?:-analyst)?|财报(?:研究员)?|问财报研究员|@财报研究员)\s*[:：]?\s*",
+    re.IGNORECASE,
+)
+_GENERAL_AGENT_PREFIX = re.compile(r"^\s*(?:/通用|/general)\s*[:：]?\s*", re.IGNORECASE)
 
 
 @dataclass
@@ -45,6 +52,7 @@ class ChannelRuntime:
         poll_interval_s: float = 0.25,
         operators: Iterable[str] | None = None,
         channel_operators: Mapping[str, Iterable[str]] | None = None,
+        default_agents: Mapping[str, str] | None = None,
     ) -> None:
         self.bus = bus
         self.session_service = session_service
@@ -62,11 +70,17 @@ class ChannelRuntime:
             str(ch): {str(o) for o in ops}
             for ch, ops in (channel_operators or {}).items()
         }
+        self._default_agents = {
+            str(channel): str(agent)
+            for channel, agent in (default_agents or {}).items()
+        }
         self.session_map_path = session_map_path or (get_data_dir() / "channels" / "sessions.json")
         self._session_map: dict[str, str] = {}
         self._consumer_task: asyncio.Task[None] | None = None
         self._manager_task: asyncio.Task[Any] | None = None
         self._handler_tasks: set[asyncio.Task[None]] = set()
+        self._financial_histories: dict[str, list[dict[str, str]]] = {}
+        self._financial_busy_sessions: set[str] = set()
         self._running = False
 
     async def start(self, *, start_manager: bool = True) -> None:
@@ -165,6 +179,7 @@ class ChannelRuntime:
 
             if self._is_new_session_command(msg.content):
                 old_id = self.reset_session(msg.session_key)
+                self._financial_histories.pop(msg.session_key, None)
                 if old_id:
                     reply = "✅ Session reset. Your next message will start a new conversation."
                 else:
@@ -183,6 +198,15 @@ class ChannelRuntime:
                 )
                 return
 
+            financial_question = self._financial_agent_question(msg)
+            if financial_question is not None:
+                await self._handle_financial_agent(msg, financial_question)
+                return
+
+            general_question = self._general_agent_question(msg)
+            if general_question is not None:
+                msg.content = general_question
+
             session_id = self._session_for(msg)
             result = await self.session_service.send_message(
                 session_id,
@@ -190,24 +214,66 @@ class ChannelRuntime:
                 include_shell_tools=False,
             )
             attempt_id = result.get("attempt_id") if isinstance(result, dict) else None
-            reply = await self._wait_for_reply(session_id, attempt_id)
-            await self.bus.publish_outbound(
-                OutboundMessage(
+            progress_task: asyncio.Task[None] | None = None
+            stream_id = f"agent:{attempt_id or msg.metadata.get('message_id') or msg.session_key}"
+            if msg.channel == "feishu":
+                await self.bus.publish_outbound(OutboundMessage(
                     channel=msg.channel,
                     chat_id=msg.chat_id,
-                    content=reply.content,
+                    content="### Agent 执行过程\n\n- ⏳ 已接收任务，正在制定执行步骤",
+                    metadata=self._stream_metadata(msg, stream_id, progress=True),
+                ))
+                progress_task = asyncio.create_task(
+                    self._forward_agent_progress(msg, session_id, attempt_id, stream_id)
+                )
+            reply = await self._wait_for_reply(session_id, attempt_id)
+            if progress_task is not None:
+                with suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(asyncio.shield(progress_task), timeout=2)
+                if not progress_task.done():
+                    progress_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await progress_task
+            if msg.channel == "feishu":
+                await self.bus.publish_outbound(OutboundMessage(
+                    channel=msg.channel,
+                    chat_id=msg.chat_id,
+                    content=f"\n\n---\n\n### 执行结果\n\n{reply.content}",
                     metadata={
-                        "_channel_runtime": True,
+                        **self._stream_metadata(msg, stream_id),
                         "attempt_id": attempt_id,
                         "session_id": session_id,
-                        # QQ (and other platforms) need the originating message id
-                        # to reply as a passive message; without it, replies are
-                        # treated as active messages and rejected for
-                        # non-privileged bots.
-                        "message_id": msg.metadata.get("message_id"),
                     },
+                ))
+                await self.bus.publish_outbound(OutboundMessage(
+                    channel=msg.channel,
+                    chat_id=msg.chat_id,
+                    content="",
+                    metadata={
+                        **self._stream_metadata(msg, stream_id, end=True),
+                        "attempt_id": attempt_id,
+                        "session_id": session_id,
+                    },
+                ))
+            else:
+                await self.bus.publish_outbound(
+                    OutboundMessage(
+                        channel=msg.channel,
+                        chat_id=msg.chat_id,
+                        content=reply.content,
+                        metadata={
+                            "_channel_runtime": True,
+                            "attempt_id": attempt_id,
+                            "session_id": session_id,
+                            # QQ (and other platforms) need the originating message id
+                            # to reply as a passive message; without it, replies are
+                            # treated as active messages and rejected for
+                            # non-privileged bots.
+                            "message_id": msg.metadata.get("message_id"),
+                        },
+                    )
                 )
-            )
+
         except asyncio.CancelledError:
             raise
         except SessionBusyError:
@@ -243,6 +309,207 @@ class ChannelRuntime:
                     },
                 )
             )
+
+    def _financial_agent_question(self, msg: InboundMessage) -> str | None:
+        """Return a Financial Analyst prompt for explicit or dedicated routing."""
+        if msg.channel != "feishu":
+            return None
+        matched = _FINANCIAL_AGENT_PREFIX.match(msg.content or "")
+        if matched:
+            question = (msg.content or "")[matched.end():].strip()
+            return question or "请说明你想研究的公司名称或股票代码，以及具体财务问题。"
+        if self._default_agents.get(msg.channel) != "financial_analyst":
+            return None
+        if _GENERAL_AGENT_PREFIX.match(msg.content or ""):
+            return None
+        question = (msg.content or "").strip()
+        return question or "请说明你想研究的公司名称或股票代码，以及具体财务问题。"
+
+    def _general_agent_question(self, msg: InboundMessage) -> str | None:
+        """Strip the escape command used by a dedicated Financial Analyst bot."""
+        if self._default_agents.get(msg.channel) != "financial_analyst":
+            return None
+        matched = _GENERAL_AGENT_PREFIX.match(msg.content or "")
+        if not matched:
+            return None
+        return (msg.content or "")[matched.end():].strip() or "你好"
+
+    async def _handle_financial_agent(self, msg: InboundMessage, question: str) -> None:
+        """Answer an explicit Feishu Financial Analyst request outside AgentLoop."""
+        session_key = msg.session_key
+        if session_key in self._financial_busy_sessions:
+            await self.bus.publish_outbound(
+                OutboundMessage(
+                    channel=msg.channel, chat_id=msg.chat_id,
+                    content="财报研究员正在处理上一条问题，请等待回复后再继续提问。",
+                    metadata={"_channel_runtime": True, "financial_agent": True, "busy": True,
+                              "message_id": msg.metadata.get("message_id")},
+                )
+            )
+            return
+        self._financial_busy_sessions.add(session_key)
+        stream_id = f"financial:{msg.metadata.get('message_id') or session_key}"
+        base_stream_meta = {
+            "_channel_runtime": True,
+            "financial_agent": True,
+            "_stream_id": stream_id,
+            "message_id": msg.metadata.get("message_id"),
+            "chat_type": msg.metadata.get("chat_type"),
+        }
+        try:
+            # Import lazily: channel startup must remain available when the
+            # financial-analysis package or its optional providers are absent.
+            from src.financial_analysis.service import get_financial_analysis_service
+
+            history = self._financial_histories.get(session_key, [])[-8:]
+            await self.bus.publish_outbound(OutboundMessage(
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                content="### 财报研究过程\n\n- ⏳ 已接收问题，正在解析问题意图",
+                metadata={**base_stream_meta, "_progress": True, "_stream_delta": True},
+            ))
+            loop = asyncio.get_running_loop()
+
+            def publish_progress(stage: str, message: str, details: dict[str, Any]) -> None:
+                del details
+                future = asyncio.run_coroutine_threadsafe(
+                    self.bus.publish_outbound(OutboundMessage(
+                        channel=msg.channel,
+                        chat_id=msg.chat_id,
+                        content=f"\n- ✅ {message}",
+                        metadata={
+                            **base_stream_meta,
+                            "_progress": True,
+                            "_stream_delta": True,
+                            "progress_stage": stage,
+                        },
+                    )),
+                    loop,
+                )
+                future.result(timeout=3)
+
+            result = await asyncio.to_thread(
+                get_financial_analysis_service().chat_current_leader_pool,
+                question=question, history=history, progress=publish_progress,
+            )
+            answer = str(result.get("answer") or "财报研究员没有返回可展示的内容。")
+            scope = str(result.get("scope") or "workspace")
+            if scope == "company":
+                title = f"财报研究员 · {result.get('stock_name') or result.get('stock_code') or '公司研究'}"
+                data_note = f"数据截至 {result.get('as_of') or result.get('leader_snapshot_as_of') or '—'}"
+            elif scope == "capability":
+                title = "财报研究员 · 能力范围"
+                data_note = f"能力清单版本 {result.get('capability_version') or '—'}"
+            elif scope in {"data_boundary", "company_not_loaded", "context_required"}:
+                title = "财报研究员 · 数据边界"
+                data_note = "未接入的数据不会参与结论"
+            elif scope == "general_method":
+                title = "财报研究员 · 财报方法"
+                data_note = "本次未加载公司或龙头池数据"
+            else:
+                title = "财报研究员 · 龙头池研究"
+                data_note = f"龙头池数据截至 {result.get('leader_snapshot_as_of') or '—'}"
+            self._financial_histories[session_key] = [*history, {"role": "user", "content": question}, {"role": "assistant", "content": answer}][-12:]
+            await self.bus.publish_outbound(
+                OutboundMessage(
+                    channel=msg.channel, chat_id=msg.chat_id,
+                    content=f"\n\n---\n\n### {title}\n\n{answer}\n\n— {data_note}",
+                    metadata={**base_stream_meta, "_stream_delta": True, "scope": scope,
+                              "stock_code": result.get("stock_code")},
+                )
+            )
+            await self.bus.publish_outbound(OutboundMessage(
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                content="",
+                metadata={**base_stream_meta, "_stream_end": True, "scope": scope,
+                          "stock_code": result.get("stock_code")},
+            ))
+        except Exception as exc:  # noqa: BLE001 - IM users need an actionable response
+            logger.exception("Financial Analyst channel request failed for %s", msg.chat_id)
+            await self.bus.publish_outbound(
+                OutboundMessage(
+                    channel=msg.channel, chat_id=msg.chat_id,
+                    content=f"\n- ❌ 财报研究中断：{type(exc).__name__}: {exc}",
+                    metadata={**base_stream_meta, "_stream_delta": True, "error": True},
+                )
+            )
+            await self.bus.publish_outbound(OutboundMessage(
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                content="",
+                metadata={**base_stream_meta, "_stream_end": True, "error": True},
+            ))
+        finally:
+            self._financial_busy_sessions.discard(session_key)
+
+    @staticmethod
+    def _stream_metadata(
+        msg: InboundMessage,
+        stream_id: str,
+        *,
+        progress: bool = False,
+        end: bool = False,
+    ) -> dict[str, Any]:
+        metadata: dict[str, Any] = {
+            "_channel_runtime": True,
+            "_stream_id": stream_id,
+            "message_id": msg.metadata.get("message_id"),
+            "chat_type": msg.metadata.get("chat_type"),
+        }
+        if end:
+            metadata["_stream_end"] = True
+        else:
+            metadata["_stream_delta"] = True
+        if progress:
+            metadata["_progress"] = True
+        return metadata
+
+    async def _forward_agent_progress(
+        self,
+        msg: InboundMessage,
+        session_id: str,
+        attempt_id: str | None,
+        stream_id: str,
+    ) -> None:
+        """Render safe AgentLoop activity summaries into the Feishu stream."""
+        event_bus = getattr(self.session_service, "event_bus", None)
+        if event_bus is None or not hasattr(event_bus, "subscribe"):
+            return
+        reasoning_iters: set[int] = set()
+        async for event in event_bus.subscribe(session_id, replay_all=True):
+            data = dict(getattr(event, "data", {}) or {})
+            if attempt_id and data.get("attempt_id") != attempt_id:
+                continue
+            event_type = str(getattr(event, "event_type", ""))
+            line: str | None = None
+            if event_type == "attempt.started":
+                line = "通用 Agent 已开始执行"
+            elif event_type == "reasoning_delta":
+                iteration = int(data.get("iter") or 0)
+                if iteration not in reasoning_iters:
+                    reasoning_iters.add(iteration)
+                    line = f"正在分析任务并决定下一步（第 {max(iteration, 1)} 轮）"
+            elif event_type == "tool_call":
+                tool = str(data.get("tool") or "未知工具")
+                argument_keys = ", ".join(sorted((data.get("arguments") or {}).keys()))
+                line = f"调用工具：{tool}" + (f"（参数：{argument_keys}）" if argument_keys else "")
+            elif event_type == "tool_progress":
+                line = str(data.get("message") or data.get("stage") or "工具正在执行")
+            elif event_type == "tool_result":
+                tool = str(data.get("tool") or "工具")
+                status = "完成" if data.get("status") == "ok" else "失败"
+                elapsed = int(data.get("elapsed_ms") or 0)
+                line = f"{tool} 执行{status}" + (f"（{elapsed / 1000:.1f} 秒）" if elapsed else "")
+            elif event_type in {"attempt.completed", "attempt.failed", "attempt.cancelled"}:
+                break
+            if line:
+                await self.bus.publish_outbound(OutboundMessage(
+                    channel=msg.channel,
+                    chat_id=msg.chat_id,
+                    content=f"\n- ✅ {line}",
+                    metadata=self._stream_metadata(msg, stream_id, progress=True),
+                ))
 
     def _session_for(self, msg: InboundMessage) -> str:
         key = msg.session_key
@@ -349,6 +616,20 @@ class ChannelRuntime:
             if isinstance(value, Mapping) and value.get("operators"):
                 channel_ops[str(key)] = {str(o) for o in value["operators"]}
         return global_ops, channel_ops
+
+    @staticmethod
+    def default_agents_from_config(config: Mapping[str, Any] | None) -> dict[str, str]:
+        """Extract optional dedicated-agent routing from channel sections."""
+        if not config:
+            return {}
+        defaults: dict[str, str] = {}
+        for key, value in config.items():
+            if not isinstance(value, Mapping):
+                continue
+            agent = value.get("default_agent") or value.get("defaultAgent")
+            if agent in {"general", "financial_analyst"}:
+                defaults[str(key)] = str(agent)
+        return defaults
 
     @staticmethod
     def _is_pairing_command(content: str) -> bool:

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, Outlet, useNavigate, useOutletContext, useSearchParams } from "react-router";
+import { Link, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import {
   Activity, AlertTriangle, ChevronRight, ClipboardCheck,
   Loader2, Plus, RefreshCw, Search, ShieldAlert,
@@ -10,9 +10,10 @@ import { PageHeader, WorkspacePage } from "@/components/workspace/WorkspaceUI";
 import {
   api, type CalculationProfile, type CompanyResearchBatch, type CompanyResearchJob, type ValueCompanyArchive, type ValueUniverseCompany,
   type ResearchReport, type ValueEntryMonitor, type ValueLeaderScore, type ValueMonitorEvent, type ValueSectorScore, type ValueTrack,
-  type ValueAnalysisDimension, type ValueCompanyAnalysis, type ValueResearchAutomation, type ValueResearchUniverse, type ValueSignalEvaluation, type ValueUniverseAnalysis, type ValueWorkbench,
+  type Level3Leader, type ValueAnalysisDimension, type ValueCompanyAnalysis, type ValueIncrementalRun, type ValueResearchAutomation, type ValueResearchUniverse, type ValueSignalEvaluation, type ValueUniverseAnalysis, type ValueWorkbench,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { companyResearchPath } from "@/lib/routeContext";
 
 type ValueWorkspaceContext = {
   profiles: CalculationProfile[];
@@ -162,10 +163,11 @@ function leaderMetrics(leader: ValueLeaderScore) {
   return candidates.filter((item): item is [string, string] => Boolean(item[1])).slice(0, 3);
 }
 function labelStatus(value: string) {
-  return ({ ready: "待激活", draft: "待建档", bootstrapping: "建档中", archived: "已归档", queued: "排队", running: "进行中", partial: "部分可用", completed: "已完成", failed: "失败", cancelled: "已取消", active: "活动中", paused: "已暂停", closed: "已关闭", watching: "持续观察", entry_candidate: "入场候选", holding_review: "风险复核", exit_candidate: "退出/减仓候选", thesis_invalidated: "逻辑失效", data_insufficient: "数据不足", stale: "数据过期", insufficient_data: "数据不足", macro_pending: "宏观待更新" } as Record<string, string>)[value] || value;
+  return ({ ready: "待激活", draft: "待建档", not_archived: "待建档", bootstrapping: "建档中", archived: "已归档", queued: "排队", running: "进行中", partial: "部分可用", completed: "已完成", failed: "失败", cancelled: "已取消", active: "活动中", paused: "已暂停", closed: "已关闭", watching: "持续观察", entry_candidate: "入场候选", holding_review: "风险复核", exit_candidate: "退出/减仓候选", thesis_invalidated: "逻辑失效", data_insufficient: "数据不足", stale: "数据过期", insufficient_data: "数据不足", macro_pending: "宏观待更新" } as Record<string, string>)[value] || value;
 }
 
 export function ValueResearchWorkspace() {
+  const location = useLocation();
   const [params, setParams] = useSearchParams();
   const [profiles, setProfiles] = useState<CalculationProfile[]>([]);
   const [workbench, setWorkbench] = useState<ValueWorkbench | null>(null);
@@ -213,8 +215,12 @@ export function ValueResearchWorkspace() {
     setMonitors(monitorResult.items);
     setEvents(eventResult.items);
     setUniverses(universeResult.items);
-    const analysisUniverse = universeResult.items.find((item) => item.status === "active")
-      || universeResult.items.find((item) => ["ready", "partial", "bootstrapping"].includes(item.status));
+    // A fresh industry-leader archive must take precedence over an older
+    // macro-universe.  Otherwise the company list is correct but every new
+    // leader is incorrectly rendered as "待建档".
+    const analysisUniverse = universeResult.items.find((item) => item.status === "bootstrapping")
+      || universeResult.items.find((item) => ["ready", "partial"].includes(item.status))
+      || universeResult.items.find((item) => item.status === "active");
     if (analysisUniverse) {
       setUniverseAnalysis(await api.getValueUniverseAnalysis(analysisUniverse.id));
     } else {
@@ -380,8 +386,8 @@ export function ValueResearchWorkspace() {
     freezeUniverse, bootstrapUniverse, activateUniverse, runDailyIncrement, setAutomationEnabled,
   };
 
-  return <WorkspacePage className="space-y-5">
-    <ValueContextBar context={context} />
+  return <WorkspacePage className={location.pathname === "/value" ? "!max-w-none !p-0" : "space-y-5"}>
+    {location.pathname !== "/value" ? <ValueContextBar context={context} /> : null}
     <Outlet context={context} />
   </WorkspacePage>;
 }
@@ -554,11 +560,13 @@ function DecisionPane() {
 }
 
 function LeaderRow({ leader, selected, poolRank, onToggle }: { leader: ValueLeaderScore; selected: boolean; poolRank?: number; onToggle: () => void }) {
+  const location = useLocation();
   const dimensions = Object.entries(leader.component_scores).filter((entry): entry is [string, number] => entry[1] != null).sort((left, right) => right[1] - left[1]);
   const strongest = dimensions[0];
   const weakest = dimensions[dimensions.length - 1];
   const metrics = leaderMetrics(leader);
-  return <div className={cn("grid grid-cols-[30px_minmax(140px,180px)_minmax(220px,1fr)_100px] items-center gap-3 px-4 py-3.5 hover:bg-muted/40", selected && "bg-primary/5")}><input type="checkbox" checked={selected} onChange={onToggle} aria-label={`选择 ${leader.name}`} /><div className="min-w-0"><Link to={`/company/CN/${encodeURIComponent(leader.symbol)}?from=value`} className="block truncate text-[15px] font-medium text-primary hover:underline" title="查看公司详情">{leader.name}</Link><div className="font-mono text-xs text-muted-foreground">{leader.symbol}</div>{poolRank ? <div className="mt-0.5 truncate text-xs text-muted-foreground">{leader.sector_name} · 行业第 {leader.rank}</div> : null}</div><div className="min-w-0 text-[13px] leading-5"><div className="truncate text-emerald-700 dark:text-emerald-400" title={strongest ? LEADER_STRENGTH_TEXT[strongest[0]] : undefined}>优势：{strongest ? LEADER_STRENGTH_TEXT[strongest[0]] : "证据不足"}</div><div className="truncate text-amber-700 dark:text-amber-400" title={weakest ? LEADER_WEAKNESS_TEXT[weakest[0]] : undefined}>关注：{weakest ? LEADER_WEAKNESS_TEXT[weakest[0]] : "证据不足"}</div><div className="truncate text-muted-foreground">{metrics.length ? metrics.map(([label, value]) => `${label} ${value}`).join(" · ") : "暂无可读原始指标"}</div></div><div className="text-right"><div className="text-xs text-muted-foreground">{poolRank ? `全池第 ${poolRank}` : `行业第 ${leader.rank}`}</div><div className="text-sm font-semibold">{scoreLevel(leader.score)}</div><div className="font-mono text-xs text-muted-foreground">指数 {score(leader.score)} · {6 - leader.missing_fields.length}/6维</div></div></div>;
+  const companyPath = companyResearchPath(leader.symbol, { from: `${location.pathname}${location.search}`, fromLabel: `${leader.sector_name}龙头`, sectorCode: leader.sector_code, sectorName: leader.sector_name });
+  return <div className={cn("grid grid-cols-[30px_minmax(140px,180px)_minmax(220px,1fr)_100px] items-center gap-3 px-4 py-3.5 hover:bg-muted/40", selected && "bg-primary/5")}><input type="checkbox" checked={selected} onChange={onToggle} aria-label={`选择 ${leader.name}`} /><div className="min-w-0"><Link to={companyPath} className="block truncate text-[15px] font-medium text-primary hover:underline" title="查看公司详情">{leader.name}</Link><div className="font-mono text-xs text-muted-foreground">{leader.symbol}</div>{poolRank ? <div className="mt-0.5 truncate text-xs text-muted-foreground">{leader.sector_name} · 行业第 {leader.rank}</div> : null}</div><div className="min-w-0 text-[13px] leading-5"><div className="truncate text-emerald-700 dark:text-emerald-400" title={strongest ? LEADER_STRENGTH_TEXT[strongest[0]] : undefined}>优势：{strongest ? LEADER_STRENGTH_TEXT[strongest[0]] : "证据不足"}</div><div className="truncate text-amber-700 dark:text-amber-400" title={weakest ? LEADER_WEAKNESS_TEXT[weakest[0]] : undefined}>关注：{weakest ? LEADER_WEAKNESS_TEXT[weakest[0]] : "证据不足"}</div><div className="truncate text-muted-foreground">{metrics.length ? metrics.map(([label, value]) => `${label} ${value}`).join(" · ") : "暂无可读原始指标"}</div></div><div className="text-right"><div className="text-xs text-muted-foreground">{poolRank ? `全池第 ${poolRank}` : `行业第 ${leader.rank}`}</div><div className="text-sm font-semibold">{scoreLevel(leader.score)}</div><div className="font-mono text-xs text-muted-foreground">指数 {score(leader.score)} · {6 - leader.missing_fields.length}/6维</div></div></div>;
 }
 
 function ResearchSelectionBar() {
@@ -596,52 +604,94 @@ function ProfileEditor({ name, setName, mode, setMode, weights, setWeights, onCa
   return <section className="rounded-xl border bg-card p-5 shadow-sm"><div className="grid gap-4 lg:grid-cols-[1fr_160px]"><label className="text-sm">方案名称<input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 block h-9 w-full rounded-lg border bg-background px-3" /></label><label className="text-sm">计算方式<select value={mode} onChange={(event) => { const next = event.target.value as "single" | "composite"; setMode(next); if (next === "single") setWeights({ policy_cycle: 1 }); }} className="mt-1 block h-9 w-full rounded-lg border bg-background px-3"><option value="composite">加权组合</option><option value="single">单模型</option></select></label></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{Object.entries(MODEL_LABELS).map(([model, title]) => <label key={model} className={cn("rounded-lg border p-3", mode === "single" && weights[model] !== 1 && "opacity-50")}><div className="text-xs text-muted-foreground">{title}</div><input type="number" min="0" step="0.05" value={weights[model] || 0} onChange={(event) => { const value = Number(event.target.value); setWeights(mode === "single" ? { [model]: 1 } : { ...weights, [model]: value }); }} className="mt-2 h-8 w-full rounded border bg-background px-2 font-mono text-sm" /></label>)}</div><div className="mt-4 flex justify-end gap-2"><button onClick={onCancel} className="rounded-lg border px-3 py-2 text-sm">取消</button><button onClick={onSave} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">保存方案</button></div></section>;
 }
 
+type ResearchLeaderCompany = {
+  symbol: string;
+  name: string;
+  leaders: Level3Leader[];
+  analysis: ValueCompanyAnalysis | null;
+};
+
 export function ValueResearchQueue() {
-  const { batches, activeUniverse, universeAnalysis } = useValueWorkspace();
+  const { batches, universes, universeAnalysis } = useValueWorkspace();
   const [params, setParams] = useSearchParams();
   const [archive, setArchive] = useState<ValueCompanyArchive | null>(null);
   const [query, setQuery] = useState("");
   const [stateFilter, setStateFilter] = useState("all");
+  const [leaders, setLeaders] = useState<Level3Leader[]>([]);
+  const [leadersAsOf, setLeadersAsOf] = useState<string | null>(null);
+  const [leadersLoading, setLeadersLoading] = useState(true);
+  const [leadersError, setLeadersError] = useState("");
   const selectedJobId = params.get("job");
   const selectedSymbol = params.get("symbol") || "";
   const selected = batches.flatMap((batch) => batch.jobs.map((job) => ({ batch, job }))).find((item) => item.job.id === selectedJobId);
-  const selectedAnalysis = universeAnalysis?.items.find((item) => item.symbol === selectedSymbol) || null;
+  const archiveUniverse = universes.find((item) => item.id === universeAnalysis?.universe_id) || null;
+  const leaderCompanies = useMemo<ResearchLeaderCompany[]>(() => {
+    const analysisBySymbol = new Map((universeAnalysis?.items || []).map((item) => [item.symbol, item]));
+    const bySymbol = new Map<string, ResearchLeaderCompany>();
+    for (const leader of leaders) {
+      const existing = bySymbol.get(leader.stock_code);
+      if (existing) existing.leaders.push(leader);
+      else bySymbol.set(leader.stock_code, { symbol: leader.stock_code, name: leader.stock_name, leaders: [leader], analysis: analysisBySymbol.get(leader.stock_code) || null });
+    }
+    return [...bySymbol.values()];
+  }, [leaders, universeAnalysis?.items]);
+  const selectedCompany = leaderCompanies.find((item) => item.symbol === selectedSymbol) || null;
+  const selectedAnalysis = selectedCompany?.analysis || universeAnalysis?.items.find((item) => item.symbol === selectedSymbol) || null;
   const drawerAnalysis = selectedSymbol && archive?.analysis?.symbol === selectedSymbol
     ? archive.analysis
     : selectedAnalysis;
-  const visibleCompanies = [...(universeAnalysis?.items || []).filter((item) => {
-    const search = `${item.name} ${item.symbol} ${item.memberships.map((membership) => membership.track_name).join(" ")}`.toLowerCase();
-    return (stateFilter === "all" || item.current_state === stateFilter) && search.includes(query.trim().toLowerCase());
+  const visibleCompanies = [...leaderCompanies.filter((item) => {
+    const state = item.analysis?.current_state || "not_archived";
+    const search = `${item.name} ${item.symbol} ${item.leaders.map((leader) => `${leader.level1_name} ${leader.level2_name} ${leader.level3_name}`).join(" ")}`.toLowerCase();
+    return (stateFilter === "all" || state === stateFilter) && search.includes(query.trim().toLowerCase());
   })].sort((left, right) => {
-    const leaderScore = (item: ValueCompanyAnalysis) => Math.max(...item.memberships.map((membership) => Number(membership.leader_score) || 0), 0);
-    const leaderCoverage = (item: ValueCompanyAnalysis) => Math.max(...item.memberships.map((membership) => Number(membership.leader_coverage) || 0), 0);
+    const leaderScore = (item: ResearchLeaderCompany) => Math.max(...item.leaders.map((leader) => Number(leader.leader_score) || 0), 0);
+    const leaderCoverage = (item: ResearchLeaderCompany) => Math.max(...item.leaders.map((leader) => Number(leader.coverage) || 0), 0);
     return leaderScore(right) - leaderScore(left)
       || leaderCoverage(right) - leaderCoverage(left)
       || left.symbol.localeCompare(right.symbol);
   });
   const stateFilters = [
-    ["all", "全部", universeAnalysis?.total || 0],
-    ["stale", "待更新", universeAnalysis?.state_counts.stale || 0],
-    ["data_insufficient", "数据不足", universeAnalysis?.state_counts.data_insufficient || 0],
-    ["watching", "监控中", universeAnalysis?.state_counts.watching || 0],
-    ["entry_candidate", "入场候选", universeAnalysis?.state_counts.entry_candidate || 0],
+    ["all", "全部龙头", leaderCompanies.length],
+    ["not_archived", "待建档", leaderCompanies.filter((item) => !item.analysis).length],
+    ["stale", "待更新", leaderCompanies.filter((item) => item.analysis?.current_state === "stale").length],
+    ["data_insufficient", "数据不足", leaderCompanies.filter((item) => item.analysis?.current_state === "data_insufficient").length],
+    ["watching", "监控中", leaderCompanies.filter((item) => item.analysis?.current_state === "watching").length],
+    ["entry_candidate", "入场候选", leaderCompanies.filter((item) => item.analysis?.current_state === "entry_candidate").length],
   ].filter(([, , count]) => Number(count) > 0 || stateFilter === "all") as Array<[string, string, number]>;
+  useEffect(() => {
+    let cancelled = false;
+    setLeadersLoading(true); setLeadersError("");
+    api.getAllLevel3Leaders(2).then((value) => {
+      if (cancelled) return;
+      setLeaders(Object.values(value.items).flat());
+      setLeadersAsOf(value.as_of);
+      setLeadersError(value.snapshot_status === "ready" ? "" : "三级行业龙头快照尚未生成。");
+    }).catch((error) => {
+      if (!cancelled) setLeadersError(error instanceof Error ? error.message : "读取三级行业龙头快照失败。");
+    }).finally(() => { if (!cancelled) setLeadersLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => { if (!selectedSymbol) { setArchive(null); return; } let cancelled = false; api.getValueCompanyArchive(selectedSymbol).then((value) => { if (!cancelled) setArchive(value); }).catch(() => { if (!cancelled) setArchive(null); }); return () => { cancelled = true; }; }, [selectedSymbol]);
   const selectCompany = (symbol: string) => setParams((current) => { const next = new URLSearchParams(current); next.set("symbol", symbol); next.delete("job"); return next; });
   const closeCompany = () => setParams((current) => { const next = new URLSearchParams(current); next.delete("symbol"); next.delete("job"); return next; });
   const closeJob = () => setParams((current) => { const next = new URLSearchParams(current); next.delete("job"); return next; });
   return <div className="space-y-4">
-    <ResearchDesk activeUniverse={activeUniverse} archive={archive} selected={selected} selectedSymbol={selectedSymbol} drawerAnalysis={drawerAnalysis} visibleCompanies={visibleCompanies} query={query} stateFilter={stateFilter} stateFilters={stateFilters} onQueryChange={setQuery} onStateFilterChange={setStateFilter} onSelectCompany={selectCompany} onCloseCompany={closeCompany} onCloseJob={closeJob} />
+    <ResearchDesk archive={archive} selected={selected} selectedSymbol={selectedSymbol} selectedCompany={selectedCompany} drawerAnalysis={drawerAnalysis} visibleCompanies={visibleCompanies} sourceAsOf={leadersAsOf} operation={archiveUniverse?.latest_operation || null} loading={leadersLoading} sourceError={leadersError} query={query} stateFilter={stateFilter} stateFilters={stateFilters} onQueryChange={setQuery} onStateFilterChange={setStateFilter} onSelectCompany={selectCompany} onCloseCompany={closeCompany} onCloseJob={closeJob} />
   </div>;
 }
 
-function ResearchDesk({ activeUniverse, archive, selected, selectedSymbol, drawerAnalysis, visibleCompanies, query, stateFilter, stateFilters, onQueryChange, onStateFilterChange, onSelectCompany, onCloseCompany, onCloseJob }: {
-  activeUniverse?: ValueResearchUniverse;
+function ResearchDesk({ archive, selected, selectedSymbol, selectedCompany, drawerAnalysis, visibleCompanies, sourceAsOf, operation, loading, sourceError, query, stateFilter, stateFilters, onQueryChange, onStateFilterChange, onSelectCompany, onCloseCompany, onCloseJob }: {
   archive: ValueCompanyArchive | null;
   selected?: { batch: CompanyResearchBatch; job: CompanyResearchJob };
   selectedSymbol: string;
+  selectedCompany: ResearchLeaderCompany | null;
   drawerAnalysis: ValueCompanyAnalysis | null;
-  visibleCompanies: ValueCompanyAnalysis[];
+  visibleCompanies: ResearchLeaderCompany[];
+  sourceAsOf: string | null;
+  operation: ValueIncrementalRun | null;
+  loading: boolean;
+  sourceError: string;
   query: string;
   stateFilter: string;
   stateFilters: Array<[string, string, number]>;
@@ -651,17 +701,18 @@ function ResearchDesk({ activeUniverse, archive, selected, selectedSymbol, drawe
   onCloseCompany: () => void;
   onCloseJob: () => void;
 }) {
+  const location = useLocation();
   const [drawerTab, setDrawerTab] = useState<"overview" | "analysis" | "records">("overview");
   useEffect(() => { setDrawerTab("overview"); }, [selectedSymbol]);
-  if (!activeUniverse) return <Empty label="请先在决策工作台冻结、建档并激活一个研究宇宙。" />;
   return <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
-     <div className="border-b bg-muted/20 p-3"><label className="relative block"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索公司、代码或赛道" className="h-9 w-full rounded-lg border bg-background py-2 pl-9 pr-3 text-sm" /></label><div className="mt-2 flex flex-wrap gap-1.5">{stateFilters.map(([key, label, count]) => <button key={key} onClick={() => onStateFilterChange(key)} className={cn("rounded-full border px-2.5 py-1 text-xs", stateFilter === key && "border-primary bg-primary/10 text-primary")}>{label} {count}</button>)}</div></div>
+     <div className="border-b bg-muted/20 p-3"><div className="mb-3 flex flex-wrap items-end justify-between gap-2"><div><div className="font-semibold">行业龙头研究池</div><p className="mt-0.5 text-xs text-muted-foreground">与“行业龙头”页使用同一份三级行业龙头快照；研究档案和监控状态仅作为附加信息。</p></div><div className="text-xs text-muted-foreground">{loading ? "正在同步龙头快照…" : `快照日期：${sourceAsOf || "—"}`}</div></div>{operation ? <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/[0.035] px-3 py-2 text-sm"><div><span className="font-medium">首次建档</span><span className="ml-2 text-muted-foreground">{operation.completed}/{operation.total} 家已完成 · 失败 {operation.failed}</span></div><StatusBadge status={operation.status} /></div> : null}{sourceError ? <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">{sourceError}</div> : null}<label className="relative block"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索公司、代码或三级行业" className="h-9 w-full rounded-lg border bg-background py-2 pl-9 pr-3 text-sm" /></label><div className="mt-2 flex flex-wrap gap-1.5">{stateFilters.map(([key, label, count]) => <button key={key} onClick={() => onStateFilterChange(key)} className={cn("rounded-full border px-2.5 py-1 text-xs", stateFilter === key && "border-primary bg-primary/10 text-primary")}>{label} {count}</button>)}</div></div>
     <div className="space-y-3 p-3 sm:p-4">{visibleCompanies.map((company, index) => {
       const selectedCompany = company.symbol === selectedSymbol;
-      const leaderScore = Math.max(...company.memberships.map((item) => Number(item.leader_score) || 0), 0);
-      return <article key={company.symbol} className={cn("overflow-hidden rounded-xl border transition", selectedCompany ? "border-primary/50 bg-primary/[0.02] shadow-sm" : "hover:border-primary/30")}><button onClick={() => onSelectCompany(company.symbol)} className="grid w-full gap-3 p-4 text-left sm:grid-cols-[52px_minmax(0,1fr)_auto] sm:items-center"><div className="font-mono text-lg font-semibold text-muted-foreground">#{index + 1}</div><div className="min-w-0"><div className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="font-semibold">{company.name}</span><span className="font-mono text-xs text-muted-foreground">{company.symbol}</span><StatusBadge status={company.current_state} /></div><div className="mt-1 truncate text-xs text-muted-foreground">{company.memberships.map((item) => `${item.track_name} · 行业第 ${item.leader_rank}`).join(" / ")}</div></div><div className="flex items-center justify-between gap-3 sm:justify-end"><div className="text-right"><div className="text-xs text-muted-foreground">综合评分</div><div className="font-mono text-sm font-semibold">{leaderScore.toFixed(1)}</div></div><ChevronRight className="h-5 w-5 text-muted-foreground" /></div></button></article>;
-    })}{!visibleCompanies.length ? <Empty label="没有符合条件的公司。" /> : null}</div>
-    {selectedSymbol ? <><button type="button" aria-label="关闭公司详情" className="fixed inset-0 z-40 cursor-default bg-black/30 backdrop-blur-[1px]" onClick={onCloseCompany} /><aside role="dialog" aria-modal="true" aria-label="公司研究详情" className="fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl flex-col border-l border-border bg-background shadow-2xl"><header className="border-b border-border px-4 py-4 sm:px-6"><div className="flex items-center justify-between gap-4"><div className="min-w-0"><p className="text-xs text-muted-foreground">公司研究详情</p><h2 className="truncate text-lg font-semibold">{drawerAnalysis ? `${drawerAnalysis.name} · ${drawerAnalysis.symbol}` : "正在加载公司档案"}</h2></div><div className="flex shrink-0 items-center gap-2">{drawerAnalysis ? <Link to={`/company/CN/${encodeURIComponent(drawerAnalysis.symbol)}?from=value`} target="_blank" rel="noreferrer" className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">全屏查看</Link> : null}<button type="button" aria-label="关闭公司详情" onClick={onCloseCompany} className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">关闭</button></div></div>{drawerAnalysis ? <div role="tablist" aria-label="公司研究内容" className="mt-4 flex gap-1 overflow-x-auto"><button role="tab" aria-selected={drawerTab === "overview"} onClick={() => setDrawerTab("overview")} className={cn("shrink-0 rounded-md px-3 py-1.5 text-sm", drawerTab === "overview" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>研究结论</button><button role="tab" aria-selected={drawerTab === "analysis"} onClick={() => setDrawerTab("analysis")} className={cn("shrink-0 rounded-md px-3 py-1.5 text-sm", drawerTab === "analysis" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>七维分析</button><button role="tab" aria-selected={drawerTab === "records"} onClick={() => setDrawerTab("records")} className={cn("shrink-0 rounded-md px-3 py-1.5 text-sm", drawerTab === "records" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>资料与事件</button></div> : null}</header><div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">{drawerAnalysis ? <>{drawerTab === "overview" ? <CompanyResearchOverview analysis={drawerAnalysis} /> : null}{drawerTab === "analysis" ? <CompanyAnalysisDetail analysis={drawerAnalysis} /> : null}{drawerTab === "records" ? <div className="space-y-4">{archive?.analysis?.symbol === selectedSymbol ? <section className="rounded-xl border bg-card"><div className="border-b px-4 py-3 text-sm font-medium">资料来源、档案版本与历史变化</div><CompanyArchiveSources archive={archive} /></section> : <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">资料档案正在加载或尚未生成。</div>}{selected?.job.symbol === selectedSymbol ? <ResearchArchiveDetail batch={selected.batch} job={selected.job} onClose={onCloseJob} /> : <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">没有关联的批量研究任务记录。</div>}</div> : null}</> : <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">正在读取该公司的研究档案…</div>}</div></aside></> : null}
+      const leaderScore = Math.max(...company.leaders.map((item) => Number(item.leader_score) || 0), 0);
+      const state = company.analysis?.current_state || "not_archived";
+      return <article key={company.symbol} className={cn("overflow-hidden rounded-xl border transition", selectedCompany ? "border-primary/50 bg-primary/[0.02] shadow-sm" : "hover:border-primary/30")}><button onClick={() => onSelectCompany(company.symbol)} className="grid w-full gap-3 p-4 text-left sm:grid-cols-[52px_minmax(0,1fr)_auto] sm:items-center"><div className="font-mono text-lg font-semibold text-muted-foreground">#{index + 1}</div><div className="min-w-0"><div className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="font-semibold">{company.name}</span><span className="font-mono text-xs text-muted-foreground">{company.symbol}</span><StatusBadge status={state} /></div><div className="mt-1 truncate text-xs text-muted-foreground">{company.leaders.map((item) => `${item.level3_name} · 行业第 ${item.leader_rank}`).join(" / ")}</div></div><div className="flex items-center justify-between gap-3 sm:justify-end"><div className="text-right"><div className="text-xs text-muted-foreground">行业内评分</div><div className="font-mono text-sm font-semibold">{leaderScore.toFixed(1)}</div></div><ChevronRight className="h-5 w-5 text-muted-foreground" /></div></button></article>;
+    })}{loading ? <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />正在读取行业龙头池…</div> : !visibleCompanies.length ? <Empty label="没有符合条件的行业龙头公司。" /> : null}</div>
+    {selectedSymbol ? <><button type="button" aria-label="关闭公司详情" className="fixed inset-0 z-40 cursor-default bg-black/30 backdrop-blur-[1px]" onClick={onCloseCompany} /><aside role="dialog" aria-modal="true" aria-label="公司研究详情" className="fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl flex-col border-l border-border bg-background shadow-2xl"><header className="border-b border-border px-4 py-4 sm:px-6"><div className="flex items-center justify-between gap-4"><div className="min-w-0"><p className="text-xs text-muted-foreground">公司研究详情</p><h2 className="truncate text-lg font-semibold">{drawerAnalysis ? `${drawerAnalysis.name} · ${drawerAnalysis.symbol}` : selectedCompany ? `${selectedCompany.name} · ${selectedCompany.symbol}` : "正在加载公司档案"}</h2>{selectedCompany ? <p className="mt-1 truncate text-xs text-muted-foreground">{selectedCompany.leaders.map((leader) => `${leader.level1_name} / ${leader.level2_name} / ${leader.level3_name} · 行业第 ${leader.leader_rank}`).join("；")}</p> : null}</div><div className="flex shrink-0 items-center gap-2">{(drawerAnalysis || selectedCompany) ? <Link to={companyResearchPath((drawerAnalysis || selectedCompany)!.symbol, { from: `${location.pathname}${location.search}`, fromLabel: "公司研究" }, "research")} className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">进入公司详情</Link> : null}<button type="button" aria-label="关闭公司详情" onClick={onCloseCompany} className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">关闭</button></div></div>{drawerAnalysis ? <div role="tablist" aria-label="公司研究内容" className="mt-4 flex gap-1 overflow-x-auto"><button role="tab" aria-selected={drawerTab === "overview"} onClick={() => setDrawerTab("overview")} className={cn("shrink-0 rounded-md px-3 py-1.5 text-sm", drawerTab === "overview" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>研究结论</button><button role="tab" aria-selected={drawerTab === "analysis"} onClick={() => setDrawerTab("analysis")} className={cn("shrink-0 rounded-md px-3 py-1.5 text-sm", drawerTab === "analysis" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>七维分析</button><button role="tab" aria-selected={drawerTab === "records"} onClick={() => setDrawerTab("records")} className={cn("shrink-0 rounded-md px-3 py-1.5 text-sm", drawerTab === "records" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>资料与事件</button></div> : null}</header><div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">{drawerAnalysis ? <>{drawerTab === "overview" ? <CompanyResearchOverview analysis={drawerAnalysis} /> : null}{drawerTab === "analysis" ? <CompanyAnalysisDetail analysis={drawerAnalysis} /> : null}{drawerTab === "records" ? <div className="space-y-4">{archive?.analysis?.symbol === selectedSymbol ? <section className="rounded-xl border bg-card"><div className="border-b px-4 py-3 text-sm font-medium">资料来源、档案版本与历史变化</div><CompanyArchiveSources archive={archive} /></section> : <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">资料档案正在加载或尚未生成。</div>}{selected?.job.symbol === selectedSymbol ? <ResearchArchiveDetail batch={selected.batch} job={selected.job} onClose={onCloseJob} /> : <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">没有关联的批量研究任务记录。</div>}</div> : null}</> : <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">该公司已在行业龙头池中，尚未生成完整研究档案；可进入公司详情查看财务数据并发起分析。</div>}</div></aside></> : null}
   </section>;
 }
 

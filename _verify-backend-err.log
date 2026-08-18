@@ -1,0 +1,6 @@
+INFO:     Started server process [1600]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8899 (Press CTRL+C to quit)
+$AAPL: possibly delisted; no price data found  (period=1y)
+$AAPL: possibly delisted; no price data found  (period=5d)

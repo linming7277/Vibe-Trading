@@ -1,6 +1,7 @@
 /** API prefixes that must reach FastAPI instead of Vite's SPA fallback. */
 export const API_PROXY_PATHS = [
   "/auth",
+  "/api",
   "/sessions",
   "/swarm/presets",
   "/swarm/runs",

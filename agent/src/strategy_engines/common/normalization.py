@@ -48,9 +48,26 @@ def cross_sectional_percentiles(
         if len(present) == 1:
             result[present[0][1]][field] = 50.0
             continue
-        for rank, (_, index) in enumerate(present):
-            score = rank / (len(present) - 1) * 100
-            result[index][field] = round(score if higher_is_better else 100 - score, 4)
+        # Equal observations must not receive different cross-sectional ranks
+        # merely because their source rows happened to be ordered differently.
+        # Use the average rank for each tie group; when an entire field is
+        # constant it has no discriminating power, so return a neutral 50.
+        if present[0][0] == present[-1][0]:
+            for _, index in present:
+                result[index][field] = 50.0
+            continue
+        position = 0
+        while position < len(present):
+            value = present[position][0]
+            end = position + 1
+            while end < len(present) and present[end][0] == value:
+                end += 1
+            average_rank = (position + end - 1) / 2
+            score = average_rank / (len(present) - 1) * 100
+            normalized = round(score if higher_is_better else 100 - score, 4)
+            for _, index in present[position:end]:
+                result[index][field] = normalized
+            position = end
     return result
 
 

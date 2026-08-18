@@ -132,19 +132,19 @@ def test_value_service_lists_all_v2_leaders_when_sector_is_omitted(tmp_path: Pat
     cache = TdxDataStore(tmp_path / "tdx.db")
     data_store = ValueDataStore(tmp_path / "research.db")
     cache.upsert_records("value_leader_scores_v2", [
-        {"key": "2026-08-13:881001.SH:000001.SZ", "category": "2026-08-13:881001.SH", "payload": {"data_as_of": "2026-08-13", "symbol": "000001.SZ", "score": 70.0}},
-        {"key": "2026-08-13:881002.SH:600000.SH", "category": "2026-08-13:881002.SH", "payload": {"data_as_of": "2026-08-13", "symbol": "600000.SH", "score": 80.0}},
+        {"key": "2026-08-13:881001.SH:000001.SZ", "category": "2026-08-13:881001.SH", "payload": {"data_as_of": "2026-08-13", "symbol": "000001.SZ", "rank": 1, "score": 70.0}},
+        {"key": "2026-08-13:881002.SH:600000.SH", "category": "2026-08-13:881002.SH", "payload": {"as_of": "2026-08-13", "symbol": "600000.SH", "rank": 1, "score": 80.0}},
     ])
     service = ValueLineService(cache=cache, data_store=data_store)
     try:
         result = service.leaders(as_of="2026-08-13")
         assert result["formula_version"] == "value-leader-v2.0.0"
-        assert [item["symbol"] for item in result["items"]] == ["600000.SH", "000001.SZ"]
+        assert [item["symbol"] for item in result["items"]] == ["000001.SZ", "600000.SH"]
     finally:
         service.close()
 
 
-def test_total_leader_pool_ranks_candidate_leaders_by_score(tmp_path: Path) -> None:
+def test_total_leader_pool_preserves_sector_then_industry_order(tmp_path: Path) -> None:
     cache = TdxDataStore(tmp_path / "tdx.db")
     data_store = ValueDataStore(tmp_path / "research.db")
     cache.upsert_records("value_sector_scores_v2", [
@@ -158,8 +158,8 @@ def test_total_leader_pool_ranks_candidate_leaders_by_score(tmp_path: Path) -> N
     service = ValueLineService(cache=cache, data_store=data_store)
     try:
         result = service.leaders(as_of="2026-08-13")
-        assert [item["symbol"] for item in result["items"]] == ["000001.SZ", "600000.SH"]
-        assert result["items"][0]["candidate_sector_rank"] == 2
+        assert [item["symbol"] for item in result["items"]] == ["600000.SH", "000001.SZ"]
+        assert result["items"][0]["candidate_sector_rank"] == 1
         narrowed = service.leaders(as_of="2026-08-13", candidate_track_limit=1)
         assert [item["symbol"] for item in narrowed["items"]] == ["600000.SH"]
         assert narrowed["pool_rule"]["candidate_track_limit"] == 1
@@ -167,7 +167,7 @@ def test_total_leader_pool_ranks_candidate_leaders_by_score(tmp_path: Path) -> N
         service.close()
 
 
-def test_total_leader_pool_uses_global_capacity_not_per_track_quota(tmp_path: Path) -> None:
+def test_total_leader_pool_uses_per_track_top_five_quota(tmp_path: Path) -> None:
     cache = TdxDataStore(tmp_path / "tdx.db")
     data_store = ValueDataStore(tmp_path / "research.db")
     cache.upsert_records("value_sector_scores_v2", [
@@ -183,12 +183,10 @@ def test_total_leader_pool_uses_global_capacity_not_per_track_quota(tmp_path: Pa
     service = ValueLineService(cache=cache, data_store=data_store)
     try:
         result = service.leaders(as_of="2026-08-13", candidate_track_limit=1)
-        # Rank 6 enters because the pool takes the best five *overall* rather
-        # than stopping after a sector's first five ranked companies.
-        assert [item["rank"] for item in result["items"]] == [1, 2, 3, 5, 6]
+        assert [item["rank"] for item in result["items"]] == [1, 2, 3, 5]
         assert result["pool_rule"] == {
             "leaders_per_candidate_track": 5, "pool_capacity": 5, "candidate_track_limit": 1,
-            "scored_only": True, "deduplicated_by_symbol": True, "ordering": "leader_score_desc_global_capacity",
+            "scored_only": True, "deduplicated_by_symbol": True, "ordering": "sector_rank_then_leader_rank",
         }
     finally:
         service.close()
@@ -380,6 +378,39 @@ def test_tdx_history_normalizes_volume_and_amount_units() -> None:
     row = ValueMarketHistoryService._tdx_rows(payload, ["600519.SH"])[0]
     assert row["volume"] == 2_000_000
     assert row["amount"] == 2_700_000_000
+
+
+def test_market_completeness_uses_last_complete_daily_snapshot(tmp_path: Path) -> None:
+    from src.strategy_engines.history import HistoricalFeatureStore
+
+    symbols = ["000001.SZ", "000002.SZ", "000003.SZ"]
+    store = HistoricalFeatureStore(tmp_path / "history", tmp_path / "research.db")
+    complete = pd.DataFrame([
+        {"symbol": symbol, "close": 10.0, "amount": 100_000.0, "volume": 10_000.0, "source": "fixture"}
+        for symbol in symbols
+    ])
+    incomplete = complete.copy()
+    incomplete.loc[1:, ["amount", "volume"]] = 0.0
+    store.write_partition(market="CN", dataset="value_ohlcv", data_as_of="2026-08-13", frame=complete, provider="fixture")
+    store.write_partition(market="CN", dataset="value_ohlcv", data_as_of="2026-08-14", frame=incomplete, provider="fixture")
+    service = ValueMarketHistoryService(store=store, client=DummyClient(tmp_path))  # type: ignore[arg-type]
+
+    context = service.resolve_complete_market_snapshot(
+        history=service.read("2026-08-14"), symbols=symbols, requested_as_of="2026-08-14",
+    )
+
+    assert context["requested_as_of"] == "2026-08-14"
+    assert context["market_data_as_of"] == "2026-08-13"
+    assert context["market_data_status"] == "INCOMPLETE_FALLBACK"
+    assert context["requested_market_data_coverage"] == {
+        "total_symbols": 3, "valid_close_count": 3, "valid_amount_count": 1, "valid_volume_count": 1,
+        "zero_close_count": 0, "zero_amount_count": 2, "zero_volume_count": 2,
+        "missing_close_count": 0, "missing_amount_count": 0, "missing_volume_count": 0,
+        "close_coverage": 1.0, "amount_coverage": pytest.approx(1 / 3), "volume_coverage": pytest.approx(1 / 3),
+        "status": "INCOMPLETE",
+    }
+    assert context["market_data_coverage"]["status"] == "COMPLETE"
+    assert context["market_data_coverage"]["amount_coverage"] == 1.0
 
 
 def test_tdx_benchmark_alias_is_read_from_local_shenzhen_namespace() -> None:

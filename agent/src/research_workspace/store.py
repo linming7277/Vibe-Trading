@@ -81,7 +81,7 @@ class ResearchWorkspaceStore:
     only contains queryable product state and references to those artifacts.
     """
 
-    SCHEMA_VERSION = 10
+    SCHEMA_VERSION = 13
 
     def __init__(self, db_path: Path | None = None, *, seed: bool = False) -> None:
         self.db_path = Path(db_path or (get_runtime_root() / "research.db"))
@@ -411,6 +411,102 @@ class ResearchWorkspaceStore:
                     source TEXT NOT NULL, created_at TEXT NOT NULL,
                     PRIMARY KEY(as_of, sector_code, symbol)
                 );
+                CREATE TABLE IF NOT EXISTS company_business_profiles (
+                    parent_industry_code TEXT NOT NULL,
+                    parent_industry_name TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    stock_name TEXT NOT NULL,
+                    business_scope TEXT NOT NULL DEFAULT '',
+                    main_business TEXT NOT NULL DEFAULT '',
+                    company_description TEXT NOT NULL DEFAULT '',
+                    main_products TEXT NOT NULL DEFAULT '',
+                    source_json TEXT NOT NULL,
+                    data_status TEXT NOT NULL,
+                    source_hash TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(parent_industry_code, stock_code)
+                );
+                CREATE INDEX IF NOT EXISTS idx_company_business_profiles_status
+                    ON company_business_profiles(parent_industry_code,data_status,stock_code);
+                CREATE TABLE IF NOT EXISTS fine_grained_tracks (
+                    track_id TEXT PRIMARY KEY,
+                    track_name TEXT NOT NULL,
+                    normalized_name TEXT NOT NULL,
+                    parent_industry_code TEXT NOT NULL,
+                    parent_industry_name TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    classification_version TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(parent_industry_code, normalized_name)
+                );
+                CREATE INDEX IF NOT EXISTS idx_fine_grained_tracks_parent
+                    ON fine_grained_tracks(parent_industry_code,status,track_name);
+                CREATE TABLE IF NOT EXISTS company_track_memberships (
+                    membership_id TEXT PRIMARY KEY,
+                    stock_code TEXT NOT NULL,
+                    stock_name TEXT NOT NULL,
+                    track_id TEXT NOT NULL,
+                    parent_industry_code TEXT NOT NULL,
+                    membership_type TEXT NOT NULL,
+                    classification_reason TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    confidence_level TEXT NOT NULL,
+                    classification_source TEXT NOT NULL,
+                    review_status TEXT NOT NULL,
+                    source_hash TEXT NOT NULL,
+                    classification_version TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(parent_industry_code,stock_code,track_id),
+                    FOREIGN KEY(track_id) REFERENCES fine_grained_tracks(track_id) ON DELETE RESTRICT
+                );
+                CREATE INDEX IF NOT EXISTS idx_company_track_memberships_parent
+                    ON company_track_memberships(parent_industry_code,track_id,membership_type,stock_code);
+                CREATE TABLE IF NOT EXISTS company_track_suggestions (
+                    suggestion_id TEXT PRIMARY KEY,
+                    parent_industry_code TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    source_hash TEXT NOT NULL,
+                    classification_version TEXT NOT NULL,
+                    suggestion_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(parent_industry_code,stock_code,source_hash,classification_version)
+                );
+                CREATE TABLE IF NOT EXISTS fine_track_unclassified (
+                    parent_industry_code TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    stock_name TEXT NOT NULL,
+                    classification_status TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    source_hash TEXT NOT NULL,
+                    classification_version TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(parent_industry_code,stock_code)
+                );
+                CREATE TABLE IF NOT EXISTS fine_track_classification_runs (
+                    run_id TEXT PRIMARY KEY,
+                    idempotency_key TEXT NOT NULL UNIQUE,
+                    parent_industry_code TEXT NOT NULL,
+                    parent_industry_name TEXT NOT NULL,
+                    profile_hash TEXT NOT NULL,
+                    classification_version TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    company_count INTEGER NOT NULL,
+                    classified_count INTEGER NOT NULL DEFAULT 0,
+                    unclassified_count INTEGER NOT NULL DEFAULT 0,
+                    output_json TEXT NOT NULL DEFAULT '{}',
+                    error TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    started_at TEXT,
+                    completed_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_fine_track_runs_parent
+                    ON fine_track_classification_runs(parent_industry_code,created_at DESC);
                 CREATE TABLE IF NOT EXISTS value_refresh_jobs (
                     id TEXT PRIMARY KEY, modules_json TEXT NOT NULL, as_of TEXT NOT NULL,
                     status TEXT NOT NULL, current_module TEXT NOT NULL DEFAULT '',
@@ -578,6 +674,75 @@ class ResearchWorkspaceStore:
                     UNIQUE(event_id,channel),
                     FOREIGN KEY(event_id) REFERENCES value_research_events(id) ON DELETE CASCADE
                 );
+                CREATE TABLE IF NOT EXISTS value_level3_leader_runs (
+                    id TEXT PRIMARY KEY,
+                    idempotency_key TEXT NOT NULL UNIQUE,
+                    as_of TEXT NOT NULL,
+                    catalog_as_of TEXT NOT NULL,
+                    formula_version TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    statistics_json TEXT NOT NULL DEFAULT '{}',
+                    error TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    completed_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_value_level3_leader_runs_latest
+                    ON value_level3_leader_runs(as_of DESC,created_at DESC);
+                CREATE TABLE IF NOT EXISTS value_level3_leaders (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    as_of TEXT NOT NULL,
+                    level1_code TEXT NOT NULL,
+                    level1_name TEXT NOT NULL,
+                    level2_code TEXT NOT NULL,
+                    level2_name TEXT NOT NULL,
+                    level3_code TEXT NOT NULL,
+                    level3_name TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    stock_name TEXT NOT NULL,
+                    leader_rank INTEGER,
+                    leader_score REAL,
+                    leader_formula_version TEXT NOT NULL,
+                    component_scores_json TEXT NOT NULL,
+                    coverage REAL NOT NULL DEFAULT 0,
+                    eligibility_status TEXT NOT NULL,
+                    eligibility_reasons_json TEXT NOT NULL,
+                    metric_notes_json TEXT NOT NULL,
+                    raw_features_json TEXT NOT NULL,
+                    provenance_key TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    UNIQUE(run_id,level3_code,stock_code),
+                    FOREIGN KEY(run_id) REFERENCES value_level3_leader_runs(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_value_level3_leaders_industry_rank
+                    ON value_level3_leaders(as_of,level3_code,eligibility_status,leader_rank);
+                CREATE TABLE IF NOT EXISTS company_financial_analysis_snapshots (
+                    id TEXT PRIMARY KEY,
+                    stock_code TEXT NOT NULL,
+                    stock_name TEXT NOT NULL,
+                    as_of TEXT NOT NULL,
+                    historical_cutoff TEXT NOT NULL,
+                    financial_feature_version TEXT NOT NULL,
+                    forecast_version TEXT NOT NULL,
+                    feature_status TEXT NOT NULL,
+                    forecast_status TEXT NOT NULL,
+                    analysis_status TEXT NOT NULL,
+                    agent_provider TEXT,
+                    agent_model TEXT,
+                    identity_json TEXT NOT NULL,
+                    history_json TEXT NOT NULL,
+                    feature_json TEXT NOT NULL,
+                    forecast_json TEXT NOT NULL,
+                    analysis_payload_json TEXT,
+                    data_gaps_json TEXT NOT NULL DEFAULT '[]',
+                    source_hash TEXT NOT NULL,
+                    agent_error TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(stock_code,source_hash)
+                );
+                CREATE INDEX IF NOT EXISTS idx_company_financial_analysis_latest
+                    ON company_financial_analysis_snapshots(stock_code,as_of DESC,created_at DESC);
                 """
             )
             engine_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(engine_runs)")}

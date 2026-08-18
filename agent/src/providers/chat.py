@@ -278,36 +278,60 @@ class ChatLLM:
         model_name: Model name.
     """
 
-    def __init__(self, model_name: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        model_name: Optional[str] = None,
+        provider_name: Optional[str] = None,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ) -> None:
         """Initialize ChatLLM.
 
         Args:
             model_name: Model name; defaults to the environment variable value.
+            provider_name: Provider override for this immutable runtime.
         """
-        self._llm = build_llm(model_name=model_name)
+        credential_override = (
+            {"base_url": (base_url or "").strip(), "api_key": (api_key or "").strip()}
+            if base_url is not None or api_key is not None else None
+        )
+        self._llm = build_llm(
+            model_name=model_name,
+            provider_name=provider_name,
+            credential_override=credential_override,
+        )
         runtime_cfg = get_env_config().llm
         configured_model = (
             model_name or runtime_cfg.langchain_model_name
         ).strip()
         self.model_name = configured_model
         self.runtime_snapshot = LLMRuntimeSnapshot(
-            provider=runtime_cfg.langchain_provider.strip().lower() or "openai",
+            provider=(provider_name or runtime_cfg.langchain_provider).strip().lower() or "openai",
             configured_model=configured_model,
             reasoning_effort=runtime_cfg.langchain_reasoning_effort.strip().lower(),
         )
 
-    def chat(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, timeout: Optional[int] = None) -> LLMResponse:
+    def chat(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        timeout: Optional[int] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+    ) -> LLMResponse:
         """Call the LLM synchronously.
 
         Args:
             messages: Message list (OpenAI format).
             tools: Tool definition list (OpenAI function calling format).
             timeout: Optional per-call timeout in seconds.
+            response_format: Optional provider-native structured-output mode.
 
         Returns:
             LLMResponse.
         """
         llm = self._llm.bind_tools(tools) if tools else self._llm
+        if response_format:
+            llm = llm.bind(response_format=response_format)
         config = {"timeout": timeout} if timeout else {}
         ai_message = llm.invoke(messages, config=config)
         return self._parse_response(ai_message)

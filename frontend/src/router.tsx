@@ -19,6 +19,7 @@ const Committee = lazy(() => import("@/pages/Committee").then((m) => ({ default:
 const ResearchReports = lazy(() => import("@/pages/ResearchReports").then((m) => ({ default: m.ResearchReports })));
 const ReportDetail = lazy(() => import("@/pages/ReportDetail").then((m) => ({ default: m.ReportDetail })));
 const Agent = lazy(() => import("@/pages/Agent").then((m) => ({ default: m.Agent })));
+const AgentSettings = lazy(() => import("@/pages/AgentSettings").then((m) => ({ default: m.AgentSettings })));
 const Scheduled = lazy(() => import("@/pages/Scheduled").then((m) => ({ default: m.Scheduled })));
 const Backtests = lazy(() => import("@/pages/Reports").then((m) => ({ default: m.Reports })));
 const RunDetail = lazy(() => import("@/pages/RunDetail").then((m) => ({ default: m.RunDetail })));
@@ -33,6 +34,9 @@ const MarketOverview = lazy(() => import("@/pages/MarketOverview").then((m) => (
 const MarketRanks = lazy(() => import("@/pages/MarketRanks").then((m) => ({ default: m.MarketRanks })));
 const SectorRanking = lazy(() => import("@/pages/SectorRanking").then((m) => ({ default: m.SectorRanking })));
 const Screener = lazy(() => import("@/pages/Screener").then((m) => ({ default: m.Screener })));
+const GlobalOverview = lazy(() => import("@/pages/GlobalOverview").then((m) => ({ default: m.GlobalOverview })));
+const FineTrackManager = lazy(() => import("@/pages/FineTrackManager").then((m) => ({ default: m.FineTrackManager })));
+const FinancialAnalysis = lazy(() => import("@/pages/FinancialAnalysis").then((m) => ({ default: m.FinancialAnalysis })));
 
 function PageLoader() { return <div className="flex h-[60vh] items-center justify-center text-sm text-muted-foreground">正在加载工作台…</div>; }
 function wrap(Component: ComponentType) { return <Suspense fallback={<PageLoader />}><Component /></Suspense>; }
@@ -45,16 +49,19 @@ export const router = createBrowserRouter([{
     { path: "/today", element: wrap(Today) },
 
     { path: "/value", element: wrap(ValueStrategy), children: [
-      { index: true, element: wrap(ValueOverview) },
+      { index: true, element: wrap(FineTrackManager) },
+      { path: "legacy-workbench", element: wrap(ValueOverview) },
       { path: "profiles", element: wrap(ValueProfiles) },
       { path: "research", element: wrap(ValueResearchQueue) },
       { path: "valuation", element: wrap(ValueValuationCenter) },
       { path: "monitor", element: wrap(ValueMonitorCenter) },
       { path: "plans", element: wrap(ValuePlans) },
+      { path: "fine-tracks", element: redirect("/value") },
+      { path: "company/:stockCode/financial", element: wrap(FinancialAnalysis) },
     ] },
     { path: "/value/macro", element: redirect("/value?focus=macro") },
     { path: "/value/sectors", element: redirect("/value?focus=tracks") },
-    { path: "/value/leaders", element: redirect("/value?focus=leaders") },
+    { path: "/value/leaders", element: redirect("/value") },
     { path: "/value/company", element: redirect("/value/research") },
     { path: "/value/timing", element: redirect("/value/monitor") },
     { path: "/company", element: redirect("/value/research") },
@@ -67,6 +74,8 @@ export const router = createBrowserRouter([{
     { path: "/emotion/swing", element: wrap(EmotionStrategy) },
     { path: "/emotion/plans", element: wrap(EmotionStrategy) },
 
+    { path: "/global", element: wrap(GlobalOverview) },
+
     { path: "/simulation/accounts", element: wrap(SimulationHub) },
     { path: "/simulation/signals", element: wrap(SimulationHub) },
     { path: "/simulation/backtests", element: wrap(Backtests) },
@@ -75,6 +84,7 @@ export const router = createBrowserRouter([{
     { path: "/simulation/decay", element: wrap(SimulationHub) },
 
     { path: "/ai/agent", element: wrap(Agent) },
+    { path: "/ai/agents/settings", element: redirect("/settings/researchers") },
     { path: "/ai/value-committee", element: wrap(Committee) },
     { path: "/ai/emotion-committee", element: wrap(Committee) },
     { path: "/ai/committees/:committeeId", element: wrap(Committee) },
@@ -94,6 +104,7 @@ export const router = createBrowserRouter([{
     { path: "/models/strategies", element: wrap(ModelsHub) },
     { path: "/models/evidence", element: wrap(ModelsHub) },
     { path: "/settings", element: wrap(Settings) },
+    { path: "/settings/researchers", element: wrap(AgentSettings) },
 
     // Preserved legacy pages and deep links.
     { path: "/market/overview", element: wrap(MarketOverview) },

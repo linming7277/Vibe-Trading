@@ -24,6 +24,7 @@ def _client(
     import src.channels.pairing.store as pairing_store
 
     config_path = tmp_path / "agent.json"
+    monkeypatch.setenv("VIBE_TRADING_HOME", str(tmp_path))
     config_path.write_text(
         json.dumps({"channels": channels_config or {}}),
         encoding="utf-8",
@@ -109,3 +110,44 @@ def test_channels_pairing_rejects_removed_adapter(tmp_path: Path, monkeypatch) -
 
     assert response.status_code == 422
     assert "supported" in response.json()["detail"]
+
+
+def test_feishu_config_is_persisted_and_secret_is_never_returned(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import src.channels.settings as channel_settings
+
+    monkeypatch.setattr(
+        channel_settings,
+        "verify_feishu_credentials",
+        lambda app_id, app_secret: {"app_name": "财报研究员", "open_id": "ou_bot"},
+    )
+    client = _client(tmp_path, monkeypatch)
+
+    updated = client.put(
+        "/channels/feishu/config",
+        json={
+            "enabled": False,
+            "app_id": "cli_financial",
+            "app_secret": "secret-value",
+            "domain": "feishu",
+            "group_policy": "mention",
+            "reply_to_message": True,
+            "streaming": True,
+            "topic_isolation": True,
+            "default_agent": "financial_analyst",
+        },
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["config"]["app_secret_configured"] is True
+    assert "app_secret" not in updated.json()["config"]
+    assert updated.json()["bot"]["app_name"] == "财报研究员"
+    raw = json.loads((tmp_path / "agent.json").read_text(encoding="utf-8"))
+    assert raw["channels"]["feishu"]["app_secret"] == "secret-value"
+    assert raw["channels"]["feishu"]["default_agent"] == "financial_analyst"
+
+    fetched = client.get("/channels/feishu/config")
+    assert fetched.status_code == 200
+    assert fetched.json()["app_secret_configured"] is True
+    assert "app_secret" not in fetched.json()

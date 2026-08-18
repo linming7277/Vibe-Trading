@@ -1,5 +1,5 @@
 ﻿param(
-    [ValidateSet("gui", "start", "stop", "restart", "status", "smoke", "install-shortcut")]
+    [ValidateSet("gui", "start", "stop", "restart", "status", "smoke", "print-url", "install-shortcut")]
     [string]$Action = "gui"
 )
 
@@ -9,6 +9,36 @@ $script:StateRoot = Join-Path $script:RepoRoot ".launcher"
 $script:LogRoot = Join-Path $script:StateRoot "logs"
 $script:HostScript = Join-Path $PSScriptRoot "ServiceHost.ps1"
 $script:Strings = Get-Content -LiteralPath (Join-Path $PSScriptRoot "strings.zh-CN.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+
+$script:LanHost = if ([string]::IsNullOrWhiteSpace($env:HENGZHI_HOSTNAME)) { "hzstock" } else { $env:HENGZHI_HOSTNAME.Trim() }
+$script:FrontendUrl = "http://$($script:LanHost):5899/value"
+
+function Ensure-LocalProxyBypass {
+    <#
+    Browsers and PowerShell honor the Windows per-user proxy override, while
+    Python/Node mostly honor NO_PROXY. Keep both sides aligned so enabling a
+    desktop proxy cannot turn the local LAN URL into a 502.
+    #>
+    $internetSettings = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+    try {
+        $raw = (Get-ItemProperty -Path $internetSettings -Name ProxyOverride -ErrorAction SilentlyContinue).ProxyOverride
+        $entries = @($raw -split ";" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        $required = @("localhost", "127.*", "::1", "hzstock", "192.168.*")
+        $changed = $false
+        foreach ($item in $required) {
+            if ($entries -notcontains $item) { $entries += $item; $changed = $true }
+        }
+        if ($changed) {
+            Set-ItemProperty -Path $internetSettings -Name ProxyOverride -Value ($entries -join ";") -Type String -ErrorAction Stop
+        }
+    }
+    catch {
+        # A locked-down corporate policy may reject user proxy edits. The
+        # launcher still protects local Python/Node traffic through NO_PROXY.
+    }
+}
+
+Ensure-LocalProxyBypass
 
 $script:Services = @{
     backend = @{
@@ -109,15 +139,22 @@ function Stop-LauncherService([string]$ServiceName) {
     if ($state.Pid -gt 0) {
         Stop-ProcessTree $state.Pid
     }
+    if ($state.PortPid -gt 0 -and $state.PortPid -ne $state.Pid) {
+        Stop-ProcessTree $state.PortPid
+    }
     Remove-Item -LiteralPath $service.PidFile -Force -ErrorAction SilentlyContinue
-    for ($attempt = 0; $attempt -lt 20; $attempt++) {
+    for ($attempt = 0; $attempt -lt 40; $attempt++) {
         $remaining = Get-PortOwner $service.Port
         if ($remaining -eq 0) { break }
+        if (-not (Get-Process -Id $remaining -ErrorAction SilentlyContinue)) {
+            Start-Sleep -Milliseconds 250
+            continue
+        }
         if (-not (Test-WorkspaceProcess $remaining $ServiceName)) {
             throw "Port $($service.Port) is still occupied by PID $remaining."
         }
         Stop-ProcessTree $remaining
-        Start-Sleep -Milliseconds 150
+        Start-Sleep -Milliseconds 250
     }
 }
 
@@ -298,8 +335,8 @@ function Show-LauncherWindow {
         }
     }
 
-    Add-ServiceRow "backend" 92 $script:Strings.backend $script:Strings.backendHint
-    Add-ServiceRow "frontend" 184 $script:Strings.frontend $script:Strings.frontendHint
+    Add-ServiceRow "backend" 92 $script:Strings.backend "前端代理后端（本机端口 8899）"
+    Add-ServiceRow "frontend" 184 $script:Strings.frontend $script:FrontendUrl
 
     function Update-StatusLabels {
         foreach ($serviceName in @("backend", "frontend")) {
@@ -337,7 +374,7 @@ function Show-LauncherWindow {
     $openButton.Location = New-Object System.Drawing.Point(406, 286)
     $openButton.Size = New-Object System.Drawing.Size(112, 36)
     $openButton.FlatStyle = "Flat"
-    $openButton.Add_Click({ Start-Process "http://127.0.0.1:5899/value" })
+    $openButton.Add_Click({ Start-Process $script:FrontendUrl })
     $form.Controls.Add($openButton)
 
     $logsButton = New-Object System.Windows.Forms.Button
@@ -349,7 +386,7 @@ function Show-LauncherWindow {
     $form.Controls.Add($logsButton)
 
     $footer = New-Object System.Windows.Forms.Label
-    $footer.Text = $script:Strings.ready
+    $footer.Text = "访问地址：$($script:FrontendUrl)；同一局域网设备请使用此地址。"
     $footer.ForeColor = [System.Drawing.Color]::FromArgb(105, 115, 132)
     $footer.Location = New-Object System.Drawing.Point(31, 347)
     $footer.Size = New-Object System.Drawing.Size(600, 30)
@@ -365,6 +402,7 @@ function Show-LauncherWindow {
 }
 
 if ($Action -eq "install-shortcut") { Install-DesktopShortcut; exit 0 }
+if ($Action -eq "print-url") { Write-Output $script:FrontendUrl; exit 0 }
 if ($Action -eq "smoke") {
     & (Join-Path $PSScriptRoot "Smoke-Hengzhi-Stack.ps1") -StartIfNeeded
     exit $LASTEXITCODE

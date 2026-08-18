@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import logging
 import os
 import re
 import threading
@@ -36,6 +37,29 @@ FEISHU_AVAILABLE = importlib.util.find_spec("lark_oapi") is not None
 _LOGIN_CONSOLE = Console()
 
 
+class _LarkCredentialFilter(logging.Filter):
+    """Remove temporary credentials from SDK connection URLs and errors."""
+
+    _SENSITIVE_QUERY = re.compile(
+        r"(?i)(access_key|ticket|tenant_access_token|app_secret)=([^&\s]+)"
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        record.msg = self._SENSITIVE_QUERY.sub(r"\1=[REDACTED]", message)
+        record.args = ()
+        return True
+
+
+def _install_lark_log_redaction() -> None:
+    logger = logging.getLogger("Lark")
+    if not any(isinstance(item, _LarkCredentialFilter) for item in logger.filters):
+        logger.addFilter(_LarkCredentialFilter())
+    for handler in logger.handlers:
+        if not any(isinstance(item, _LarkCredentialFilter) for item in handler.filters):
+            handler.addFilter(_LarkCredentialFilter())
+
+
 def _load_lark_runtime() -> tuple[Any, str, str]:
     """Import the heavy Feishu SDK lazily.
 
@@ -48,6 +72,8 @@ def _load_lark_runtime() -> tuple[Any, str, str]:
     import lark_oapi as lark
     import lark_oapi.ws.client as lark_ws_client
     from lark_oapi.core.const import FEISHU_DOMAIN, LARK_DOMAIN
+
+    _install_lark_log_redaction()
 
     if (
         not ws_client_already_imported
@@ -355,6 +381,7 @@ class FeishuConfig(BaseModel):
     streaming: bool = True
     domain: Literal["feishu", "lark"] = "feishu"  # Set to "lark" for international Lark
     topic_isolation: bool = True  # If True, each topic in group chat gets its own session (isolation)
+    default_agent: Literal["general", "financial_analyst"] = "general"
 
 
 # =============================================================================

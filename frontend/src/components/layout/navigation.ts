@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Activity, BarChart3, Bot, Database, FlaskConical, Scale, Settings } from "lucide-react";
+import { Activity, BarChart3, Bot, Database, FlaskConical, Globe, Scale, Settings, Users } from "lucide-react";
 
 export interface SecondaryNavigationItem {
   to: string;
@@ -8,7 +8,7 @@ export interface SecondaryNavigationItem {
 }
 
 export interface PrimaryNavigationItem {
-  id: "market" | "value" | "emotion" | "simulation" | "ai";
+  id: "market" | "value" | "emotion" | "global" | "simulation" | "ai";
   to: string;
   label: string;
   icon: LucideIcon;
@@ -37,7 +37,7 @@ export const PRIMARY_NAVIGATION: PrimaryNavigationItem[] = [
     id: "value", to: "/value", label: "价值投资", icon: Scale,
     matches: ["/value", "/company"],
     secondary: [
-      { to: "/value", label: "价值龙头" },
+      { to: "/value", label: "行业龙头" },
       { to: "/value/research", label: "公司研究" },
       { to: "/value/valuation", label: "估值与买卖点" },
       { to: "/value/plans", label: "投委与计划" },
@@ -54,6 +54,13 @@ export const PRIMARY_NAVIGATION: PrimaryNavigationItem[] = [
       { to: "/emotion/short", label: "短线候选" },
       { to: "/emotion/swing", label: "波段候选" },
       { to: "/emotion/plans", label: "情绪计划" },
+    ],
+  },
+  {
+    id: "global", to: "/global", label: "全球策略", icon: Globe,
+    matches: ["/global"],
+    secondary: [
+      { to: "/global", label: "全球全景" },
     ],
   },
   {
@@ -82,7 +89,8 @@ export const PRIMARY_NAVIGATION: PrimaryNavigationItem[] = [
 
 export const UTILITY_NAVIGATION: UtilityNavigationItem[] = [
   { to: "/models/data", label: "数据与模型", icon: Database, matches: ["/models", "/data", "/lab/alpha", "/lab/correlation", "/formula", "/funds"] },
-  { to: "/settings", label: "设置", icon: Settings },
+  { to: "/settings/researchers", label: "研究员设置", icon: Users, matches: ["/settings/researchers", "/ai/agents/settings"] },
+  { to: "/settings", label: "设置", icon: Settings, matches: ["=/settings"] },
 ];
 
 const MODELS_NAVIGATION = {
@@ -113,6 +121,7 @@ const DETAIL_ROUTES = [
 ];
 
 function matchesPath(pathname: string, target: string) {
+  if (target.startsWith("=")) return pathname === target.slice(1);
   return pathname === target || pathname.startsWith(`${target}/`);
 }
 

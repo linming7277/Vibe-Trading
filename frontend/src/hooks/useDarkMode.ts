@@ -4,20 +4,12 @@ import { publishThemeChange } from "@/lib/theme-store";
 
 const STORAGE_KEY = "qa-theme";
 
-function getSystemPreference(): boolean {
-  if (typeof window.matchMedia !== "function") return false;
-  try {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-  } catch {
-    return false;
-  }
-}
-
+// 系统默认深色：未手动设置主题时固定使用深色，不跟随系统 prefers-color-scheme。
 function getPreferredTheme(): boolean {
   const saved = safeGet(STORAGE_KEY);
   if (saved === "dark") return true;
   if (saved === "light") return false;
-  return getSystemPreference();
+  return true;
 }
 
 export function useDarkMode() {
@@ -45,27 +37,8 @@ export function useDarkMode() {
     };
     window.addEventListener("storage", onStorage);
 
-    if (typeof window.matchMedia !== "function") {
-      return () => window.removeEventListener("storage", onStorage);
-    }
-
-    let mediaQuery: MediaQueryList;
-    try {
-      mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    } catch {
-      return () => window.removeEventListener("storage", onStorage);
-    }
-
-    const onSystemChange = (event: MediaQueryListEvent) => {
-      if (safeGet(STORAGE_KEY) !== null) return;
-      syncTheme(event.matches);
-    };
-    mediaQuery.addEventListener("change", onSystemChange);
-
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      mediaQuery.removeEventListener("change", onSystemChange);
-    };
+    // 默认固定深色，不监听系统 prefers-color-scheme 变化。
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const toggle = useCallback(() => {

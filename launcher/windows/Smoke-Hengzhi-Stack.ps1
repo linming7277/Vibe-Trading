@@ -7,7 +7,10 @@ $ErrorActionPreference = "Stop"
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $launcher = Join-Path $PSScriptRoot "HengzhiLauncher.ps1"
 $backendUrl = "http://127.0.0.1:8899"
-$frontendUrl = "http://127.0.0.1:5899"
+$frontendUrl = (& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $launcher -Action print-url | Select-Object -Last 1).Trim()
+if (-not $frontendUrl) { $frontendUrl = "http://localhost:5899" }
+$frontendRootUrl = $frontendUrl -replace '/value/?$', ''
+$frontendCheckUrl = "http://localhost:5899"
 
 function Invoke-Launcher([string]$Action) {
     $raw = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $launcher -Action $Action
@@ -54,7 +57,7 @@ $fundamentals = Invoke-Api "/tdx/data/fundamentals?limit=1"
 if ($quotes.total -lt 1 -or @($quotes.items).Count -lt 1) { throw "Quote data API returned no records." }
 if ($fundamentals.total -lt 1 -or @($fundamentals.items).Count -lt 1) { throw "Fundamental data API returned no records." }
 
-$page = Invoke-WebRequest -Uri ($frontendUrl + "/data") -UseBasicParsing -TimeoutSec $TimeoutSeconds
+$page = Invoke-WebRequest -Uri ($frontendCheckUrl + "/data") -UseBasicParsing -TimeoutSec $TimeoutSeconds
 if ($page.StatusCode -ne 200 -or $page.Content -notmatch '<div id="root">') {
     throw "Frontend data route did not return a valid SPA page."
 }
@@ -63,7 +66,7 @@ $result = [ordered]@{
     status = "passed"
     checked_at = [DateTime]::UtcNow.ToString("o")
     launcher = @($states | ForEach-Object { [ordered]@{ service = $_.Service; status = $_.Status; pid = $_.Pid } })
-    backend = [ordered]@{ url = $backendUrl; status = $health.status; service = $health.service }
+    backend = [ordered]@{ endpoint = "internal:8899"; status = $health.status; service = $health.service }
     tdx = [ordered]@{
         home = $tdx.tdx_home
         quotes = [int]$quoteModule.item_count
@@ -71,6 +74,6 @@ $result = [ordered]@{
         fundamental_status = $fundamentalModule.status
     }
     data_api = [ordered]@{ quote_total = [int]$quotes.total; fundamental_total = [int]$fundamentals.total }
-    frontend = [ordered]@{ url = ($frontendUrl + "/data"); status_code = [int]$page.StatusCode; spa_root = $true }
+    frontend = [ordered]@{ url = ($frontendRootUrl + "/data"); status_code = [int]$page.StatusCode; spa_root = $true }
 }
 $result | ConvertTo-Json -Depth 6

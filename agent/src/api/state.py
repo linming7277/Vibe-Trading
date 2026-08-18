@@ -96,6 +96,7 @@ def _get_channel_runtime():
     config = load_channels_config()
     _channel_manager = ChannelManager(config, _channel_bus, session_service=svc)
     global_operators, channel_operators = ChannelRuntime.operators_from_config(config)
+    default_agents = ChannelRuntime.default_agents_from_config(config)
     _channel_runtime = ChannelRuntime(
         bus=_channel_bus,
         session_service=svc,
@@ -103,8 +104,34 @@ def _get_channel_runtime():
         reply_timeout_s=config["reply_timeout_s"],
         operators=global_operators,
         channel_operators=channel_operators,
+        default_agents=default_agents,
     )
     _set_host_attr("_channel_runtime", _channel_runtime)
     _set_host_attr("_channel_bus", _channel_bus)
     _set_host_attr("_channel_manager", _channel_manager)
     return _channel_runtime
+
+
+async def _reload_channel_runtime(*, start: bool) -> object | None:
+    """Stop and rebuild channel singletons after operator config changes."""
+    global _channel_runtime, _channel_bus, _channel_manager
+
+    import sys as _sys
+
+    host = _sys.modules.get("api_server") or _sys.modules.get("agent.api_server")
+    runtime = getattr(host, "_channel_runtime", None) if host is not None else _channel_runtime
+    if runtime is not None:
+        await runtime.stop()
+
+    _channel_runtime = None
+    _channel_bus = None
+    _channel_manager = None
+    _set_host_attr("_channel_runtime", None)
+    _set_host_attr("_channel_bus", None)
+    _set_host_attr("_channel_manager", None)
+
+    if not start:
+        return None
+    rebuilt = _get_channel_runtime()
+    await rebuilt.start(start_manager=True)
+    return rebuilt

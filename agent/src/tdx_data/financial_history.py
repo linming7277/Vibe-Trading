@@ -133,6 +133,9 @@ def normalize_financial_row(symbol: str, row: dict[str, Any], raw_version: str) 
         "capex": _number(row.get("FN114")),
         "shareholders": _number(row.get("FN242")),
         "total_shares": _number(row.get("FN238")),
+        # Confirmed from sequential Q1/Q2/Q3/Q4 samples: TDX professional
+        # finance exposes these flow fields as single-period, not YTD values.
+        "flow_basis": "single_period",
         "source": "TongDaXin professional finance / TQ",
         "data_as_of": announcement_date,
         "raw_version": raw_version,

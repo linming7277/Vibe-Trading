@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ import pytest
 from src.channels.bus.events import InboundMessage, OutboundMessage
 from src.channels.bus.queue import MessageBus
 from src.channels.manager import ChannelManager
+from src.channels.feishu import _LarkCredentialFilter
 from src.channels.registry import discover_channel_names, inspect_channels
 from src.config.schema import ChannelsConfig
 from src.channelsui.cli_apps_api import normalize_cli_app_mentions
@@ -27,6 +29,24 @@ from src.session.webui_turns import (
     websocket_turn_wall_started_at,
 )
 from src.utils.media_decode import FileSizeExceeded, save_base64_data_url
+
+
+def test_lark_sdk_logs_redact_temporary_connection_credentials() -> None:
+    record = logging.LogRecord(
+        "Lark",
+        logging.INFO,
+        __file__,
+        1,
+        "connected?access_key=temporary-key&ticket=temporary-ticket&service_id=1",
+        (),
+        None,
+    )
+
+    assert _LarkCredentialFilter().filter(record) is True
+    assert "temporary-key" not in record.getMessage()
+    assert "temporary-ticket" not in record.getMessage()
+    assert "access_key=[REDACTED]" in record.getMessage()
+    assert "ticket=[REDACTED]" in record.getMessage()
 
 
 class FakeSessionService:
@@ -70,6 +90,30 @@ class FakeSessionService:
     def get_messages(self, session_id: str, limit: int = 100) -> list[Message]:
         del limit
         return list(self.messages.get(session_id, []))
+
+
+class FakeFinancialAgent:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def chat_current_leader_pool(self, *, question: str, history: list[dict[str, str]], progress=None) -> dict[str, Any]:
+        self.calls.append({"question": question, "history": history})
+        if progress is not None:
+            progress("financial_snapshot_loaded", "已读取测试财务快照", {"as_of": "2026-08-17"})
+        return {
+            "answer": "已基于本地财务快照回答。", "scope": "company",
+            "stock_code": "002371.SZ", "stock_name": "北方华创", "as_of": "2026-08-17",
+            "leader_snapshot_as_of": "2026-08-17",
+        }
+
+
+async def consume_stream(bus: MessageBus) -> tuple[str, list[OutboundMessage]]:
+    messages: list[OutboundMessage] = []
+    while True:
+        item = await asyncio.wait_for(bus.consume_outbound(), timeout=2)
+        messages.append(item)
+        if item.metadata.get("_stream_end"):
+            return "".join(message.content for message in messages), messages
 
 
 def test_channel_manager_rejects_removed_websocket_adapter() -> None:
@@ -266,6 +310,165 @@ def test_channel_runtime_routes_inbound_to_session_and_outbound(tmp_path: Path) 
                 "message_id": "orig-msg-42",
             },
         )
+
+    asyncio.run(scenario())
+
+
+def test_channel_runtime_routes_explicit_feishu_financial_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def scenario() -> None:
+        import src.financial_analysis.service as financial_service
+        from src.channels.runtime import ChannelRuntime
+
+        financial = FakeFinancialAgent()
+        monkeypatch.setattr(financial_service, "get_financial_analysis_service", lambda: financial)
+        bus = MessageBus()
+        general = FakeSessionService()
+        runtime = ChannelRuntime(bus=bus, session_service=general, manager=None, session_map_path=tmp_path / "sessions.json")
+        await runtime.start(start_manager=False)
+        try:
+            await bus.publish_inbound(InboundMessage(
+                channel="feishu", sender_id="user-1", chat_id="chat-1",
+                content="/财报 北方华创的经营质量怎么样？", metadata={"message_id": "msg-1"},
+            ))
+            content, outbound = await consume_stream(bus)
+        finally:
+            await runtime.stop()
+
+        assert general.sent == []
+        assert financial.calls == [{"question": "北方华创的经营质量怎么样？", "history": []}]
+        assert "财报研究过程" in content
+        assert "已读取测试财务快照" in content
+        assert "财报研究员 · 北方华创" in content
+        assert outbound[-1].metadata["financial_agent"] is True
+        assert outbound[-1].metadata["stock_code"] == "002371.SZ"
+
+    asyncio.run(scenario())
+
+
+def test_dedicated_feishu_bot_routes_plain_questions_to_financial_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        import src.financial_analysis.service as financial_service
+        from src.channels.runtime import ChannelRuntime
+
+        financial = FakeFinancialAgent()
+        monkeypatch.setattr(financial_service, "get_financial_analysis_service", lambda: financial)
+        bus = MessageBus()
+        general = FakeSessionService()
+        runtime = ChannelRuntime(
+            bus=bus,
+            session_service=general,
+            manager=None,
+            session_map_path=tmp_path / "sessions.json",
+            default_agents={"feishu": "financial_analyst"},
+        )
+        await runtime.start(start_manager=False)
+        try:
+            await bus.publish_inbound(InboundMessage(
+                channel="feishu", sender_id="owner", chat_id="chat-1",
+                content="贵州茅台近五年的现金流质量怎么样？",
+                metadata={"message_id": "msg-dedicated"},
+            ))
+            content, outbound = await consume_stream(bus)
+        finally:
+            await runtime.stop()
+
+        assert general.sent == []
+        assert financial.calls[0]["question"] == "贵州茅台近五年的现金流质量怎么样？"
+        assert "财报研究过程" in content
+        assert outbound[-1].metadata["financial_agent"] is True
+
+    asyncio.run(scenario())
+
+
+def test_dedicated_feishu_bot_general_escape_uses_normal_agent(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        from src.channels.runtime import ChannelRuntime
+
+        bus = MessageBus()
+        general = FakeSessionService()
+        runtime = ChannelRuntime(
+            bus=bus,
+            session_service=general,
+            manager=None,
+            session_map_path=tmp_path / "sessions.json",
+            reply_timeout_s=1,
+            poll_interval_s=0.01,
+            default_agents={"feishu": "financial_analyst"},
+        )
+        await runtime.start(start_manager=False)
+        try:
+            await bus.publish_inbound(InboundMessage(
+                channel="feishu", sender_id="owner", chat_id="chat-1",
+                content="/通用 介绍一下系统功能",
+                metadata={"message_id": "msg-general"},
+            ))
+            content, outbound = await consume_stream(bus)
+        finally:
+            await runtime.stop()
+
+        assert general.sent == [("session-1", "介绍一下系统功能")]
+        assert "Agent 执行过程" in content
+        assert "agent reply: 介绍一下系统功能" in content
+        assert outbound[-1].metadata["_stream_end"] is True
+
+    asyncio.run(scenario())
+
+
+def test_feishu_general_agent_streams_safe_tool_execution_progress(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        from src.channels.runtime import ChannelRuntime
+        from src.session.events import EventBus
+
+        class EventfulSessionService(FakeSessionService):
+            def __init__(self) -> None:
+                super().__init__()
+                self.event_bus = EventBus()
+
+            async def send_message(self, session_id: str, content: str, *, include_shell_tools: bool = False):
+                result = await super().send_message(
+                    session_id, content, include_shell_tools=include_shell_tools,
+                )
+                attempt_id = result["attempt_id"]
+                common = {"attempt_id": attempt_id}
+                self.event_bus.emit(session_id, "attempt.started", common)
+                self.event_bus.emit(session_id, "reasoning_delta", {**common, "iter": 1, "tail": "hidden reasoning"})
+                self.event_bus.emit(session_id, "tool_call", {
+                    **common, "tool": "market_snapshot", "arguments": {"symbol": "000001.SZ"},
+                })
+                self.event_bus.emit(session_id, "tool_result", {
+                    **common, "tool": "market_snapshot", "status": "ok", "elapsed_ms": 850,
+                    "preview": "sensitive result preview",
+                })
+                self.event_bus.emit(session_id, "attempt.completed", common)
+                return result
+
+        bus = MessageBus()
+        service = EventfulSessionService()
+        runtime = ChannelRuntime(
+            bus=bus,
+            session_service=service,
+            manager=None,
+            session_map_path=tmp_path / "sessions.json",
+            reply_timeout_s=1,
+            poll_interval_s=0.01,
+            default_agents={"feishu": "financial_analyst"},
+        )
+        await runtime.start(start_manager=False)
+        try:
+            await bus.publish_inbound(InboundMessage(
+                channel="feishu", sender_id="owner", chat_id="chat-1",
+                content="/通用 检查市场数据", metadata={"message_id": "msg-progress"},
+            ))
+            content, _ = await consume_stream(bus)
+        finally:
+            await runtime.stop()
+
+        assert "调用工具：market_snapshot（参数：symbol）" in content
+        assert "market_snapshot 执行完成（0.8 秒）" in content
+        assert "hidden reasoning" not in content
+        assert "sensitive result preview" not in content
 
     asyncio.run(scenario())
 
@@ -596,8 +799,9 @@ def test_channel_runtime_new_command_resets_session_and_creates_fresh_one(tmp_pa
             await bus.publish_inbound(
                 InboundMessage(channel="feishu", sender_id="u1", chat_id="c1", content="hello")
             )
-            reply1 = await asyncio.wait_for(bus.consume_outbound(), timeout=1)
-            assert reply1.metadata["session_id"] == "session-1"
+            content1, reply1 = await consume_stream(bus)
+            assert "agent reply: hello" in content1
+            assert reply1[-1].metadata["session_id"] == "session-1"
 
             await bus.publish_inbound(
                 InboundMessage(channel="feishu", sender_id="u1", chat_id="c1", content="/new")
@@ -609,8 +813,9 @@ def test_channel_runtime_new_command_resets_session_and_creates_fresh_one(tmp_pa
             await bus.publish_inbound(
                 InboundMessage(channel="feishu", sender_id="u1", chat_id="c1", content="after reset")
             )
-            reply2 = await asyncio.wait_for(bus.consume_outbound(), timeout=1)
-            assert reply2.metadata["session_id"] == "session-2"
+            content2, reply2 = await consume_stream(bus)
+            assert "agent reply: after reset" in content2
+            assert reply2[-1].metadata["session_id"] == "session-2"
         finally:
             await runtime.stop()
 

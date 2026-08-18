@@ -35,8 +35,8 @@ MODULE_LABELS = {
 }
 SECTOR_DATASET = "value_sector_scores_v2"
 LEADER_DATASET = "value_leader_scores_v2"
-# The candidate-track choice controls pool capacity, not a per-track quota.
-# For example, the top 20 tracks produce one global top-100 leader pool.
+# Leader Score is an industry-internal percentile.  A candidate track exposes
+# its own Top5; it must not be used as a cross-industry quality ranking.
 TOTAL_LEADER_POOL_PER_TRACK = 5
 INDUSTRY_DATASET = "value_industries"
 
@@ -258,7 +258,8 @@ class ValueLineService:
         if membership["status"] != "ready":
             raise RuntimeError("membership_history_unavailable")
         macro = self.data_store.get_macro_snapshot(as_of)
-        history = ValueMarketHistoryService().read(as_of)
+        history_service = ValueMarketHistoryService()
+        history = history_service.read(as_of)
         if history.empty:
             raise RuntimeError("market_history_unavailable")
         fundamentals = {row["key"]: row["payload"] for row in self.cache.list_records("fundamentals", limit=10_000)["items"]}
@@ -269,6 +270,14 @@ class ValueLineService:
         for row in membership["items"]:
             member_map[row["sector_code"]].append(row["symbol"])
             names[row["sector_code"]] = row["sector_name"]
+        market_context = history_service.resolve_complete_market_snapshot(
+            history=history,
+            symbols=sorted({symbol for members in member_map.values() for symbol in members}),
+            requested_as_of=as_of,
+        )
+        # All market-derived sector inputs end on one complete snapshot.
+        # Financial PIT below intentionally remains bound to requested as_of.
+        history = history[history["trade_date"] <= pd.Timestamp(market_context["market_data_as_of"])]
         price_map: dict[str, pd.DataFrame] = {
             str(symbol): frame.sort_values("trade_date") for symbol, frame in history.groupby("symbol")
         }
@@ -389,11 +398,17 @@ class ValueLineService:
             effective_coverage = min(result.coverage, meta["member_coverage"])
             missing = [key for key in SECTOR_WEIGHTS if components.get(key) is None]
             provenance = stable_fingerprint({
-                "as_of": as_of, "sector": meta["sector_code"], "raw": sector_raw[index], "components": components,
+                "as_of": as_of, "market_data_as_of": market_context["market_data_as_of"],
+                "sector": meta["sector_code"], "raw": sector_raw[index], "components": components,
                 "formula": SECTOR_VERSION, "matrix": MATRIX_VERSION, "membership_as_of": membership["as_of"],
             })
             sector_results.append({
-                **meta, "as_of": as_of, "score": effective_score, "base_score": effective_score,
+                **meta, "as_of": as_of, "requested_as_of": as_of,
+                "market_data_as_of": market_context["market_data_as_of"],
+                "financial_data_as_of": as_of, "market_data_status": market_context["market_data_status"],
+                "market_data_coverage": market_context["market_data_coverage"],
+                "requested_market_data_coverage": market_context["requested_market_data_coverage"],
+                "score": effective_score, "base_score": effective_score,
                 "coverage": effective_coverage, "confidence": _confidence(effective_coverage), "status": effective_status,
                 "raw_features": sector_raw[index], "normalized_features": normalized[index], "component_scores": components,
                 "components": _component_details(components, components, SECTOR_WEIGHTS, result),
@@ -405,7 +420,7 @@ class ValueLineService:
                     "available": [name for name in SECTOR_CONTEXT_FIELDS if meta.get(name) is not None],
                     "missing": [name for name in SECTOR_CONTEXT_FIELDS if meta.get(name) is None],
                 },
-                "data_as_of": as_of, "sources": ["TongDaXin", "AKShare", "国家统计局", "中国人民银行"],
+                "sources": ["TongDaXin", "AKShare", "国家统计局", "中国人民银行"],
                 "provenance_key": provenance,
             })
         sector_results.sort(key=lambda row: (row["score"] is None, -(row["score"] or 0), row["sector_code"]))
@@ -424,7 +439,7 @@ class ValueLineService:
         for sector in sector_results:
             rows = self._leader_rows(
                 sector["sector_code"], sector["sector_name"], sector["members"], as_of,
-                financials, fundamentals, quotes,
+                financials, fundamentals, quotes, market_context,
             )
             leaders.extend(rows)
             for row in rows:
@@ -447,6 +462,7 @@ class ValueLineService:
         financials: dict[str, list[dict[str, Any]]],
         fundamentals: dict[str, dict[str, Any]],
         quotes: dict[str, dict[str, Any]],
+        market_context: dict[str, Any],
     ) -> list[dict[str, Any]]:
         candidates: list[dict[str, Any]] = []
         identities: list[dict[str, str]] = []
@@ -524,7 +540,9 @@ class ValueLineService:
                 "raw_features": candidates[index], "normalized_features": normalized[index],
                 "component_scores": components, "components": _component_details(components, components, LEADER_WEIGHTS, score),
                 "missing_fields": missing, "growth_status": statuses[index],
-                "formula_version": LEADER_VERSION, "data_as_of": as_of,
+                "formula_version": LEADER_VERSION, "as_of": as_of,
+                "requested_as_of": as_of, "market_data_as_of": market_context["market_data_as_of"],
+                "financial_data_as_of": as_of, "market_data_status": market_context["market_data_status"],
                 "sources": ["TongDaXin professional finance", "TongDaXin quote/fundamental"],
                 "provenance_key": provenance,
             })
@@ -678,20 +696,15 @@ class ValueLineService:
                 str(row["payload"].get("sector_code") or ""): int(row["payload"].get("rank") or 10_000)
                 for row in self.cache.list_records(SECTOR_DATASET, category=target, limit=500)["items"]
             }
-            # A total leader pool is not a second copy of the A-share universe.
-            # Candidate-track count determines its capacity, but does not give
-            # every candidate track a five-company quota.  All scored members
-            # of the selected tracks compete on one leader-score ranking.
+            # Preserve the industry context: Leader Score orders companies
+            # inside one 881 industry only, while Sector Score orders tracks.
             items = [
                 {**row, "candidate_sector_rank": sector_ranks.get(str(row.get("sector_code") or ""), 10_000)}
                 for row in items
                 if row.get("score") is not None
                 and (candidate_track_limit is None or sector_ranks.get(str(row.get("sector_code") or ""), 10_000) <= candidate_track_limit)
             ]
-            # This is a cross-track research queue.  Sector rank is context
-            # and a stable tie-breaker; it is never a primary ordering rule.
             items.sort(key=lambda row: (
-                row.get("score") is None, -(row.get("score") or 0), -float(row.get("coverage") or 0),
                 row["candidate_sector_rank"], row.get("rank") or 10_000, row.get("symbol") or "",
             ))
             # Be defensive if a future membership source assigns a company to
@@ -705,8 +718,7 @@ class ValueLineService:
                 if symbol:
                     seen_symbols.add(symbol)
                 unique_items.append(row)
-            pool_capacity = candidate_track_limit * TOTAL_LEADER_POOL_PER_TRACK if candidate_track_limit else None
-            items = unique_items[:pool_capacity] if pool_capacity else unique_items
+            items = [row for row in unique_items if int(row.get("rank") or 10_000) <= TOTAL_LEADER_POOL_PER_TRACK]
         return {
             "as_of": target, "sector_code": sector_code, "items": items, "total": len(items),
             "formula_version": LEADER_VERSION,
@@ -716,7 +728,7 @@ class ValueLineService:
                 "candidate_track_limit": candidate_track_limit,
                 "scored_only": True,
                 "deduplicated_by_symbol": True,
-                "ordering": "leader_score_desc_global_capacity",
+                "ordering": "sector_rank_then_leader_rank",
             },
         }
 

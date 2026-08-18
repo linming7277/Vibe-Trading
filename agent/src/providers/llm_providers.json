@@ -27,6 +27,15 @@
     "api_key_required": true
   },
   {
+    "name": "volcengine",
+    "label": "火山方舟（OpenAI 兼容）",
+    "api_key_env": "OPENAI_API_KEY",
+    "base_url_env": "OPENAI_BASE_URL",
+    "default_model": "deepseek-v4-flash",
+    "default_base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+    "api_key_required": true
+  },
+  {
     "name": "anthropic",
     "label": "Anthropic / Messages API Proxy",
     "api_key_env": "ANTHROPIC_API_KEY",

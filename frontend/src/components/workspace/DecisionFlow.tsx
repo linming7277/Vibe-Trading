@@ -12,7 +12,7 @@ export function DecisionFlow({ current }: { current: 1 | 2 | 3 | 4 | 5 }) {
     "/market/macro?flow=1",
     "/market/sectors?view=research&flow=1",
     flow.sector_code ? `/screener?sector=${encodeURIComponent(flow.sector_code)}&flow=1` : "/screener?flow=1",
-    flow.symbol ? `/company/CN/${encodeURIComponent(flow.symbol)}?tab=${encodeURIComponent("研究结论")}&flow=1` : "/screener?flow=1",
+    flow.symbol ? `/company/CN/${encodeURIComponent(flow.symbol)}?tab=research&flow=1&from=${encodeURIComponent("/value")}&from_label=${encodeURIComponent("价值龙头")}` : "/screener?flow=1",
     flow.symbol ? `/signals?new=1&market=CN&symbol=${encodeURIComponent(flow.symbol)}&name=${encodeURIComponent(flow.company_name || flow.symbol)}&flow=1` : "/signals",
   ];
   const values = [flow.macro_stance, flow.sector_name, flow.company_name || flow.symbol, flow.research_completed_at ? "底稿已生成" : undefined, flow.trade_plan_id ? "计划已保存" : undefined];
@@ -32,4 +32,3 @@ export function DecisionFlow({ current }: { current: 1 | 2 | 3 | 4 | 5 }) {
     </div></div>
   </section>;
 }
-

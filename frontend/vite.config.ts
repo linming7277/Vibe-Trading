@@ -6,7 +6,25 @@ import { API_PROXY_PATHS } from "./proxyPaths";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const apiTarget = env.VITE_API_URL || "http://127.0.0.1:8899";
-  const apiProxy = { target: apiTarget, changeOrigin: true };
+  const allowedHosts = (env.VITE_ALLOWED_HOST || "")
+    .split(",")
+    .map((host) => host.trim())
+    .filter(Boolean);
+  const apiProxy = {
+    target: apiTarget,
+    changeOrigin: true,
+    // The browser origin is the LAN URL (for example
+    // http://192.168.110.49:5899), while the Vite proxy talks to FastAPI on
+    // loopback. Forwarding that origin makes the backend's cross-site guard
+    // reject POSTs from the financial agent even though this is a same-origin
+    // request from the user's point of view. The proxy is local and already
+    // changes Host, so remove Origin before forwarding to FastAPI.
+    configure(proxy) {
+      proxy.on("proxyReq", (proxyReq) => {
+        proxyReq.removeHeader("origin");
+      });
+    },
+  };
   const apiProxyWithHtmlFallback = {
     ...apiProxy,
     bypass(req: { headers: { accept?: string } }) {
@@ -22,7 +40,9 @@ export default defineConfig(({ mode }) => {
       alias: { "@": path.resolve(__dirname, "./src") },
     },
     server: {
+      host: "0.0.0.0",
       port: 5899,
+      ...(allowedHosts.length ? { allowedHosts } : {}),
       proxy: {
         ...Object.fromEntries(API_PROXY_PATHS.map((p) => [p, apiProxy])),
         // SPA RunDetail page — only the two-segment ``/runs/{id}``

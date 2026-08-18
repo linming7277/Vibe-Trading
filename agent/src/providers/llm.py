@@ -764,6 +764,7 @@ def _build_native_deepseek(
     model: str,
     temperature: float,
     callbacks: Any = None,
+    credentials: dict[str, str] | None = None,
 ) -> Any | None:
     """Build the optional native DeepSeek adapter when installed.
 
@@ -780,7 +781,7 @@ def _build_native_deepseek(
         )
         return None
 
-    creds = get_llm_credentials("deepseek", model)
+    creds = credentials or get_llm_credentials("deepseek", model)
     api_key = creds["api_key"]
     base_url = creds["base_url"]
     return chat_deepseek(
@@ -1185,11 +1186,19 @@ def provider_diagnostics() -> dict[str, Any]:
     }
 
 
-def build_llm(*, model_name: Optional[str] = None, callbacks: Any = None) -> Any:
+def build_llm(
+    *,
+    model_name: Optional[str] = None,
+    provider_name: Optional[str] = None,
+    callbacks: Any = None,
+    credential_override: dict[str, str] | None = None,
+) -> Any:
     """Construct the configured LangChain chat model.
 
     Args:
         model_name: Model name; defaults to LANGCHAIN_MODEL_NAME.
+        provider_name: Optional per-call provider override. Credentials are
+            still resolved exclusively by the provider environment layer.
         callbacks: Optional LangChain callbacks.
 
     Returns:
@@ -1203,7 +1212,11 @@ def build_llm(*, model_name: Optional[str] = None, callbacks: Any = None) -> Any
     if not name:
         raise RuntimeError("LANGCHAIN_MODEL_NAME is not set")
     temperature = get_env_config().llm.langchain_temperature
-    provider = get_env_config().llm.langchain_provider.lower()
+    provider = (provider_name or get_env_config().llm.langchain_provider).strip().lower()
+    explicit_credentials = credential_override or (
+        get_llm_credentials(provider, name, allow_openai_fallback=False)
+        if provider_name is not None else None
+    )
     caps = get_provider_capabilities(provider, name)
     if provider in {"openai-codex", "openai_codex"}:
         from src.providers.openai_codex import OpenAICodexLLM
@@ -1230,6 +1243,7 @@ def build_llm(*, model_name: Optional[str] = None, callbacks: Any = None) -> Any
                 model=name,
                 temperature=temperature,
                 callbacks=callbacks,
+                credentials=explicit_credentials,
             )
             if native_llm is not None:
                 return native_llm
@@ -1256,12 +1270,24 @@ def build_llm(*, model_name: Optional[str] = None, callbacks: Any = None) -> Any
     # Optional reasoning activation for relays requiring opt-in (e.g. OpenRouter).
     # Moonshot/DeepSeek official APIs emit reasoning by default and ignore this field.
     effort = get_env_config().llm.langchain_reasoning_effort.strip().lower()
-    creds = get_llm_credentials(provider, name)
+    creds = explicit_credentials or get_llm_credentials(provider, name)
     api_key = creds["api_key"]
     _validate_authorization_credential(
         api_key,
         source=_credential_env_source(caps.api_key_env),
     )
+    extra_body: dict[str, Any] | None = (
+        {"reasoning": {"effort": effort}}
+        if effort and caps.openrouter_reasoning_body
+        else None
+    )
+    if provider == "ollama":
+        # langchain-openai 0.3 serializes its ``max_tokens`` constructor
+        # argument as ``max_completion_tokens``. Ollama's OpenAI-compatible
+        # endpoint currently ignores that alias, so put the supported wire
+        # field in extra_body; the OpenAI SDK merges it into the JSON request.
+        extra_body = {"max_tokens": 512}
+
     kwargs: dict[str, Any] = {
         "model": name,
         "api_key": api_key or None,
@@ -1269,18 +1295,17 @@ def build_llm(*, model_name: Optional[str] = None, callbacks: Any = None) -> Any
         "temperature": temperature,
         "timeout": get_env_config().llm.timeout_seconds,
         "max_retries": get_env_config().llm.max_retries,
+        "max_tokens": None,
         "callbacks": callbacks,
-        "extra_body": (
-            {"reasoning": {"effort": effort}}
-            if effort and caps.openrouter_reasoning_body
-            else None
-        ),
+        "extra_body": extra_body,
         # Direct OpenAI takes the effort as a top-level request field instead
         # (gpt-5.6-* require it, even "none", to accept function tools).
         # None is dropped by langchain-openai, so unsupported providers keep a
         # payload without the field.
         "reasoning_effort": (
-            effort
+            "none"
+            if provider == "ollama"
+            else effort
             if effort and _supports_top_level_reasoning_effort(provider, caps.name)
             else None
         ),

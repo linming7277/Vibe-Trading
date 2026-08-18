@@ -29,11 +29,12 @@ Windows 推荐双击仓库根目录的 `Hengzhi-Launcher.cmd`，或使用无界�
 ```powershell
 powershell -ExecutionPolicy Bypass -File launcher/windows/HengzhiLauncher.ps1 -Action start
 powershell -ExecutionPolicy Bypass -File launcher/windows/HengzhiLauncher.ps1 -Action status
+powershell -ExecutionPolicy Bypass -File launcher/windows/HengzhiLauncher.ps1 -Action print-url
 ```
 
-- 工作台：`http://127.0.0.1:5899/value`
-- 数据中心：`http://127.0.0.1:5899/data`
-- 后端 API：`http://127.0.0.1:8899`
+- 工作台（局域网）：固定使用 `http://hzstock:5899/value`，电脑更换 IP 后地址不变
+- 数据中心：`http://hzstock:5899/data`
+- 后端 API：由前端代理使用本机 `8899` 端口，不需要同事直接访问
 
 首次运行前需准备 Python 3.11–3.13、Node.js 22，并安装依赖：
 

@@ -53,6 +53,9 @@ class ValueWorkspaceStore:
         "sources_json": "sources", "evidence_ids_json": "evidence_ids",
         "rules_json": "rules", "inputs_json": "inputs", "reasons_json": "reasons",
         "comparable_json": "comparable", "dcf_json": "dcf",
+        "eligibility_reasons_json": "eligibility_reasons",
+        "eligibility_exclusions_json": "eligibility_exclusions",
+        "metric_applicability_notes_json": "metric_applicability_notes",
     }
 
     def __init__(self, db_path: Path | None = None) -> None:
@@ -164,6 +167,27 @@ class ValueWorkspaceStore:
             ):
                 if column not in event_columns:
                     self._conn.execute(f"ALTER TABLE value_monitor_events ADD COLUMN {column} {declaration}")
+            leader_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(value_track_leaders)")}
+            for column, declaration in (
+                ("formula_version", "TEXT"),
+                ("data_as_of", "TEXT"),
+                ("metric_applicability_notes_json", "TEXT NOT NULL DEFAULT '[]'"),
+            ):
+                if column not in leader_columns:
+                    self._conn.execute(f"ALTER TABLE value_track_leaders ADD COLUMN {column} {declaration}")
+            universe_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(value_research_universes)")}
+            if "eligibility_exclusions_json" not in universe_columns:
+                self._conn.execute("ALTER TABLE value_research_universes ADD COLUMN eligibility_exclusions_json TEXT NOT NULL DEFAULT '[]'")
+            membership_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(value_research_universe_members)")}
+            for column, declaration in (
+                ("sector_score", "REAL"),
+                ("leader_formula_version", "TEXT"),
+                ("eligibility_status", "TEXT NOT NULL DEFAULT 'eligible'"),
+                ("eligibility_reasons_json", "TEXT NOT NULL DEFAULT '[]'"),
+                ("metric_applicability_notes_json", "TEXT NOT NULL DEFAULT '[]'"),
+            ):
+                if column not in membership_columns:
+                    self._conn.execute(f"ALTER TABLE value_research_universe_members ADD COLUMN {column} {declaration}")
             timestamp = now()
             self._conn.execute(
                 """INSERT OR IGNORE INTO value_research_automation(
@@ -277,10 +301,15 @@ class ValueWorkspaceStore:
                 )
                 for leader in item.get("leaders", []):
                     self._conn.execute(
-                        "INSERT INTO value_track_leaders VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        """INSERT INTO value_track_leaders(
+                               id,engine_run_id,track_id,symbol,name,leader_type,base_score,coverage,rank,
+                               component_scores_json,quality_flags_json,research_status,created_at,
+                               formula_version,data_as_of,metric_applicability_notes_json
+                           ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (new_id("leader"), run_id, item["track_id"], leader["symbol"], leader["name"], leader["leader_type"],
                          leader.get("base_score"), leader["coverage"], leader["rank"], json.dumps(leader["component_scores"]),
-                         json.dumps(leader.get("quality_flags", [])), "idle", now()),
+                         json.dumps(leader.get("quality_flags", [])), "idle", now(), leader.get("formula_version"),
+                         leader.get("data_as_of") or item["data_as_of"], json.dumps(leader.get("metric_applicability_notes", []))),
                     )
             self._conn.commit()
 
@@ -295,7 +324,7 @@ class ValueWorkspaceStore:
     def create_universe(
         self, *, idempotency_key: str, run_id: str, profile_id: str,
         candidate_limit: int, leader_limit: int, data_as_of: str,
-        formula_version: str, members: list[dict[str, Any]],
+        formula_version: str, members: list[dict[str, Any]], eligibility_exclusions: list[dict[str, Any]] | None = None,
     ) -> tuple[dict[str, Any], bool]:
         existing = self._conn.execute(
             "SELECT id FROM value_research_universes WHERE idempotency_key=?", (idempotency_key,),
@@ -312,22 +341,26 @@ class ValueWorkspaceStore:
                     """INSERT INTO value_research_universes(
                            id,idempotency_key,engine_run_id,profile_id,candidate_limit,leader_limit,
                            status,data_as_of,formula_version,track_count,membership_count,company_count,
-                           created_at,activated_at,archived_at
-                       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           created_at,activated_at,archived_at,eligibility_exclusions_json
+                       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (universe_id, idempotency_key, run_id, profile_id, candidate_limit, leader_limit,
                      "draft", data_as_of, formula_version, track_count, len(members), company_count,
-                     timestamp, None, None),
+                     timestamp, None, None, json.dumps(eligibility_exclusions or [])),
                 )
                 self._conn.executemany(
                     """INSERT INTO value_research_universe_members(
                            id,universe_id,track_id,track_name,track_rank,symbol,name,leader_rank,
-                           leader_type,leader_score,leader_coverage,inclusion_reason,created_at
-                       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           leader_type,leader_score,leader_coverage,inclusion_reason,created_at,
+                           sector_score,leader_formula_version,eligibility_status,eligibility_reasons_json,
+                           metric_applicability_notes_json
+                       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     [(
                         new_id("membership"), universe_id, item["track_id"], item["track_name"],
                         item["track_rank"], item["symbol"], item["name"], item["leader_rank"],
                         item["leader_type"], item.get("leader_score"), item["leader_coverage"],
-                        item["inclusion_reason"], timestamp,
+                        item["inclusion_reason"], timestamp, item.get("sector_score"),
+                        item.get("leader_formula_version"), item.get("eligibility_status", "eligible"),
+                        json.dumps(item.get("eligibility_reasons", [])), json.dumps(item.get("metric_applicability_notes", [])),
                     ) for item in members],
                 )
                 self._conn.commit()
@@ -823,7 +856,7 @@ class ValueWorkspaceStore:
 
     def latest_signal_evaluation(self, monitor_id: str) -> dict[str, Any] | None:
         return self.row(self._conn.execute(
-            "SELECT * FROM value_signal_evaluations WHERE monitor_id=? ORDER BY created_at DESC LIMIT 1",
+            "SELECT * FROM value_signal_evaluations WHERE monitor_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1",
             (monitor_id,),
         ).fetchone())
 

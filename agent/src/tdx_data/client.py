@@ -113,7 +113,7 @@ class TdxClient:
             "get_sector_list", "get_stock_list_in_sector", "get_stock_info", "get_more_info",
             "get_relation", "get_trackzs_etf_info", "get_kzz_info", "get_ipo_info",
             "formula_get_all", "formula_get_info", "get_divid_factors", "get_gb_info_by_date",
-            "get_exday_data", "get_trading_dates", "refresh_cache", "get_financial_data",
+            "get_exday_data", "get_trading_dates", "refresh_cache", "refresh_kline", "get_financial_data",
             "formula_process_mul",
         }
         if method not in allowed:

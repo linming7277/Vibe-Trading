@@ -34,14 +34,14 @@ describe("useDarkMode", () => {
     mockMatchMedia(false);
   });
 
-  it("follows the light system theme when no preference is stored", () => {
+  it("uses the product dark default when no preference is stored", () => {
     const { result } = renderHook(() => useDarkMode());
 
-    expect(result.current.dark).toBe(false);
+    expect(result.current.dark).toBe(true);
     expect(localStorage.getItem("qa-theme")).toBeNull();
   });
 
-  it("follows the dark system theme when no preference is stored", () => {
+  it("keeps the product dark default when the system theme is dark", () => {
     mockMatchMedia(true);
 
     const { result } = renderHook(() => useDarkMode());
@@ -63,20 +63,20 @@ describe("useDarkMode", () => {
     expect(localStorage.getItem("qa-theme")).toBeNull();
 
     act(() => result.current.toggle());
-    expect(localStorage.getItem("qa-theme")).toBe("dark");
+    expect(localStorage.getItem("qa-theme")).toBe("light");
 
     act(() => result.current.toggle());
-    expect(localStorage.getItem("qa-theme")).toBe("light");
+    expect(localStorage.getItem("qa-theme")).toBe("dark");
   });
 
   it("keeps the root class and color scheme in sync", () => {
     const { result } = renderHook(() => useDarkMode());
-    expect(document.documentElement.classList.contains("dark")).toBe(false);
-    expect(document.documentElement.style.colorScheme).toBe("light");
-
-    act(() => result.current.toggle());
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(document.documentElement.style.colorScheme).toBe("dark");
+
+    act(() => result.current.toggle());
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(document.documentElement.style.colorScheme).toBe("light");
   });
 
   it("re-reads the stored preference after a cross-tab storage event", () => {
@@ -89,7 +89,7 @@ describe("useDarkMode", () => {
     expect(document.documentElement.style.colorScheme).toBe("dark");
   });
 
-  it("resumes following system changes when the stored preference is removed", () => {
+  it("returns to the product dark default when the stored preference is removed", () => {
     localStorage.setItem("qa-theme", "light");
     const system = mockMatchMedia(false);
     const { result } = renderHook(() => useDarkMode());

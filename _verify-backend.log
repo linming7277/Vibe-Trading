@@ -1,0 +1,30 @@
+[prod] Frontend served from D:\AI\hzstock\frontend\dist
+==================================================
+  恒值投资服务
+  http://127.0.0.1:8899
+==================================================
+
+Preflight Check
+ N/A  │ LLM (openai)       │ LANGCHAIN_MODEL_NAME not set in .env (agent       
+      │                    │ cannot function)                                  
+ FAIL │ OKX API            │ ConnectTimeout:                                   
+      │                    │ HTTPSConnectionPool(host='www.okx.com',           
+      │                    │ port=443): Max retries exceeded with url:         
+      │                    │ /api/v5/market/candles?instId=BTC-USDT&bar=1D&li… 
+      │                    │ (Caused by                                        
+      │                    │ ConnectTimeoutError(<HTTPSConnection(host='www.o… 
+      │                    │ port=443) at 0x1b3bfe20350>, 'Connection to       
+      │                    │ www.okx.com timed out. (connect timeout=10)'))    
+      │                    │ (crypto backtest unavailable)                     
+ FAIL │ yfinance           │ KeyError: 'exchangeTimezoneName' (US/HK equity    
+      │                    │ backtest unavailable)                             
+ N/A  │ Tushare            │ TUSHARE_TOKEN not set (optional) (A-share data    
+      │                    │ unavailable)                                      
+ OK   │ akshare            │ installed                                         
+ OK   │ ccxt               │ installed                                         
+ OK   │ Content Filter     │ 5% (set via CONTENT_FILTER_WARNING_THRESHOLD)     
+      │ Threshold          │                                                   
+
+Critical check failed - agent cannot start without a working LLM provider.
+  See: agent/.env.example for configuration reference
+

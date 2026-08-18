@@ -7,13 +7,14 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from src.strategy_engines.store import StrategyEngineStore
+from src.strategy_engines.value.leader_score_v2 import FORMULA_VERSION as LEADER_FORMULA_VERSION
 from src.value_workspace.automation import next_value_run
 from src.value_workspace.service import ValueWorkspaceService
 from src.value_workspace.store import ValueWorkspaceStore
 
 
 @pytest.fixture()
-def workspace(tmp_path: Path):
+def workspace(tmp_path: Path, monkeypatch):
     value = ValueWorkspaceStore(tmp_path / "research.db")
     engine = StrategyEngineStore(value.db_path)
     profile = value.get_profile("profile_value_line_v2")
@@ -30,7 +31,8 @@ def workspace(tmp_path: Path):
             leaders.append({
                 "symbol": symbol, "name": f"公司{track_index}-{leader_index}", "leader_type": "综合龙头",
                 "base_score": 90 - leader_index, "coverage": 1, "rank": leader_index,
-                "component_scores": {"industry_position": 90 - leader_index},
+                "component_scores": {"industry_position": 90 - leader_index}, "formula_version": LEADER_FORMULA_VERSION,
+                "data_as_of": "2026-08-14",
             })
         tracks.append({
             "track_id": f"881{track_index:03d}.SH", "track_name": f"赛道{track_index}", "category": "行业",
@@ -38,6 +40,10 @@ def workspace(tmp_path: Path):
             "component_scores": {}, "source_status": "ready", "data_as_of": "2026-08-14", "leaders": leaders,
         })
     value.replace_tracks(run["id"], profile["id"], tracks)
+    monkeypatch.setattr(
+        ValueWorkspaceService, "_research_eligibility_context",
+        lambda _self, symbols, _as_of: ({symbol: [{"close": 10, "data_as_of": "2026-08-14"}] * 20 for symbol in symbols}, {symbol: True for symbol in symbols}, ["2026-08-14"]),
+    )
     try:
         yield value, engine, run
     finally:
@@ -45,7 +51,7 @@ def workspace(tmp_path: Path):
         value.close()
 
 
-def test_universe_uses_global_score_capacity_and_keeps_all_memberships(workspace):
+def test_universe_uses_per_track_top_five_and_keeps_all_memberships(workspace):
     value, _, run = workspace
     service = ValueWorkspaceService(value)
     universe, created = service.create_research_universe(run["id"], 5)
@@ -53,14 +59,44 @@ def test_universe_uses_global_score_capacity_and_keeps_all_memberships(workspace
     assert created is True and repeated_created is False
     assert repeated["id"] == universe["id"]
     assert universe["track_count"] == 5
-    # Five candidate tracks create capacity for 25 unique companies.  A
-    # company ranked sixth inside a track can enter when its global score is
-    # stronger than alternatives; there is no per-track five-company quota.
-    assert universe["company_count"] == 25
-    assert universe["membership_count"] == 29
+    # Leader scores are industry-local percentiles.  Each selected industry
+    # contributes only its own Top5; there is no cross-industry elimination.
+    assert universe["company_count"] == 21
+    assert universe["membership_count"] == 25
     shared = next(item for item in universe["companies"] if item["symbol"] == "000001.SZ")
     assert len(shared["memberships"]) == 5
-    assert max(item["leader_rank"] for item in universe["members"]) == 6
+    assert max(item["leader_rank"] for item in universe["members"]) == 5
+    assert all(item["leader_formula_version"] == LEADER_FORMULA_VERSION for item in universe["members"])
+
+
+@pytest.mark.parametrize("formula_version", [None, "legacy-leader-v1.0.0"])
+def test_universe_rejects_legacy_or_unversioned_leader_snapshots(workspace, formula_version):
+    value, _, run = workspace
+    tracks = value.list_tracks(run["id"])
+    for track in tracks:
+        track["leaders"] = value.list_leaders(run["id"], track["track_id"])
+    tracks[0]["leaders"] = [{
+        **item, "formula_version": formula_version, "data_as_of": "2026-08-14",
+    } for item in tracks[0]["leaders"]]
+    value.replace_tracks(run["id"], "profile_value_line_v2", tracks)
+    with pytest.raises(ValueError, match="LEGACY_INCOMPATIBLE"):
+        ValueWorkspaceService(value).create_research_universe(run["id"], 5)
+
+
+def test_universe_persists_eligibility_exclusion_reasons(workspace):
+    value, _, run = workspace
+    tracks = value.list_tracks(run["id"])
+    for track in tracks:
+        track["leaders"] = value.list_leaders(run["id"], track["track_id"])
+    tracks[0]["leaders"][0]["name"] = "*ST 测试公司"
+    value.replace_tracks(run["id"], "profile_value_line_v2", tracks)
+    universe, _ = ValueWorkspaceService(value).create_research_universe(run["id"], 5)
+    excluded = next(item for item in universe["eligibility_exclusions"] if item["symbol"] == "000001.SZ")
+    assert "ST_OR_DELISTING" in excluded["reasons"]
+    # The shared symbol remains through its other eligible industry contexts;
+    # the excluded membership itself is preserved in the exclusion audit log.
+    assert universe["company_count"] == 21
+    assert universe["membership_count"] == 24
 
 
 def test_snapshot_evidence_and_signal_events_are_idempotent(workspace):
@@ -111,11 +147,11 @@ def test_snapshot_evidence_and_signal_events_are_idempotent(workspace):
     assert evaluations[0]["signal_state"] == "entry_candidate"
     analysis = service.universe_analysis(universe["id"])
     company_analysis = next(item for item in analysis["items"] if item["symbol"] == "000001.SZ")
-    assert analysis["total"] == 25
+    assert analysis["total"] == 21
     analysis_scores = [max(float(member["leader_score"]) for member in item["memberships"]) for item in analysis["items"]]
     assert analysis_scores == sorted(analysis_scores, reverse=True)
     assert analysis["state_counts"]["entry_candidate"] == 1
-    assert analysis["state_counts"]["not_archived"] == 24
+    assert analysis["state_counts"]["not_archived"] == 20
     assert company_analysis["model_state"] == "not_configured"
     assert company_analysis["metrics"]["pe_ttm"] == 8
     assert company_analysis["risk_facts"] == []

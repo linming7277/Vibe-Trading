@@ -64,6 +64,11 @@ class OperationPayload(BaseModel):
     as_of: str | None = None
 
 
+class Level3LeaderBootstrapPayload(BaseModel):
+    as_of: str | None = None
+    leader_limit: Literal[2] = 2
+
+
 class EventAcknowledgePayload(BaseModel):
     status: Literal["acknowledged", "closed"] = "acknowledged"
     note: str = Field(default="", max_length=2000)
@@ -310,6 +315,30 @@ def register_value_workspace_routes(app: FastAPI, require_auth: AuthDep) -> None
             if created:
                 background_tasks.add_task(_run_operation, operation["id"])
             return {**operation, "created": created}
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        finally:
+            service.close()
+
+    @app.post("/strategy/value/industry-leader-universe/bootstrap", dependencies=[Depends(require_auth)])
+    async def bootstrap_industry_leader_universe(
+        background_tasks: BackgroundTasks, payload: Level3LeaderBootstrapPayload | None = None,
+    ):
+        """Create and archive the same Top-2 pool rendered by the industry-leader page."""
+        service = ValueWorkspaceService()
+        try:
+            universe, universe_created = service.create_level3_leader_research_universe(
+                as_of=payload.as_of if payload else None,
+                leader_limit=payload.leader_limit if payload else 2,
+            )
+            operation, created = service.create_operation(
+                universe["id"], run_kind="bootstrap", as_of=str(universe["data_as_of"]),
+            )
+            if created:
+                background_tasks.add_task(_run_operation, operation["id"])
+            return {**operation, "created": created, "universe": universe, "universe_created": universe_created}
         except KeyError as exc:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:

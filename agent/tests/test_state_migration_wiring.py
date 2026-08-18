@@ -127,15 +127,16 @@ def test_api_lifespan_preserves_startup_and_shutdown_order(
 
     asyncio.run(scenario())
 
-    assert events == [
-        "migration",
-        "preflight",
-        "scheduler-start",
-        "channels-start",
-        "serving",
-        "channels-stop",
-        "scheduler-stop",
-    ]
+    # preflight now runs on a background daemon thread (it must never gate the
+    # listen socket), so its "preflight" event may land before or after the
+    # sync startup steps. Assert the deterministic ordering of the remaining
+    # steps and that preflight was still invoked at least once.
+    assert events.index("migration") < events.index("scheduler-start")
+    assert events.index("scheduler-start") < events.index("channels-start")
+    assert events.index("channels-start") < events.index("serving")
+    assert events.index("serving") < events.index("channels-stop")
+    assert events.index("channels-stop") < events.index("scheduler-stop")
+    assert events.count("preflight") == 1
 
 
 def test_api_lifespan_stops_scheduler_when_channel_shutdown_fails(

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ModelPicker } from "@/components/settings/ModelPicker";
 import { QVerisSettings } from "@/components/settings/QVerisSettings"; // QVERIS-INTEGRATION
-import { api, isAuthRequiredError, type ChannelRuntimeStatus, type DataSourceSettings, type LLMProviderOption, type LLMSettings } from "@/lib/api";
+import { api, isAuthRequiredError, type ChannelRuntimeStatus, type DataSourceSettings, type FeishuChannelConfig, type LLMProviderOption, type LLMSettings } from "@/lib/api";
 import { getApiAuthKey, setApiAuthKey } from "@/lib/apiAuth";
 
 interface LLMFormState {
@@ -39,6 +39,11 @@ export function Settings() {
   const [settings, setSettings] = useState<LLMSettings | null>(null);
   const [dataSettings, setDataSettings] = useState<DataSourceSettings | null>(null);
   const [channelStatus, setChannelStatus] = useState<ChannelRuntimeStatus | null>(null);
+  const [feishuConfig, setFeishuConfig] = useState<FeishuChannelConfig | null>(null);
+  const [feishuSecret, setFeishuSecret] = useState("");
+  const [clearFeishuSecret, setClearFeishuSecret] = useState(false);
+  const [feishuPairingCode, setFeishuPairingCode] = useState("");
+  const [feishuPairingResult, setFeishuPairingResult] = useState("");
   const [form, setForm] = useState<LLMFormState | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [modelOptions, setModelOptions] = useState<string[]>([]);
@@ -53,6 +58,7 @@ export function Settings() {
   const [dataSaving, setDataSaving] = useState(false);
   const [channelRefreshing, setChannelRefreshing] = useState(false);
   const [channelAction, setChannelAction] = useState<"start" | "stop" | null>(null);
+  const [feishuSaving, setFeishuSaving] = useState(false);
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,8 +68,9 @@ export function Settings() {
       api.getLLMSettings(),
       api.getDataSourceSettings(),
       api.getChannelStatus(),
+      api.getFeishuChannelConfig(),
     ])
-      .then(([llmResult, dataSourceResult, channelResult]) => {
+      .then(([llmResult, dataSourceResult, channelResult, feishuResult]) => {
         if (!alive) return;
 
         if (llmResult.status === "fulfilled") {
@@ -108,6 +115,15 @@ export function Settings() {
           toast.error(`${t("settings.channels.refreshFailed")}: ${message}`);
           setChannelStatus(null);
         }
+
+        if (feishuResult.status === "fulfilled") {
+          setFeishuConfig(feishuResult.value);
+        } else {
+          const message = feishuResult.reason instanceof Error
+            ? feishuResult.reason.message
+            : t("settings.unknownError", { defaultValue: "Unknown error" });
+          toast.error(`${t("settings.channels.feishuLoadFailed")}: ${message}`);
+        }
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -139,6 +155,55 @@ export function Settings() {
       toast.error(`${action === "start" ? t("settings.channels.startFailed") : t("settings.channels.stopFailed")}: ${error instanceof Error ? error.message : t("settings.unknownError", { defaultValue: "Unknown error" })}`);
     } finally {
       setChannelAction(null);
+    }
+  };
+
+  const saveFeishuConfig = async () => {
+    if (!feishuConfig) return;
+    setFeishuSaving(true);
+    try {
+      const result = await api.updateFeishuChannelConfig({
+        auto_start: feishuConfig.auto_start,
+        enabled: feishuConfig.enabled,
+        app_id: feishuConfig.app_id.trim(),
+        app_secret: feishuSecret.trim() || undefined,
+        clear_app_secret: clearFeishuSecret,
+        domain: feishuConfig.domain,
+        group_policy: feishuConfig.group_policy,
+        reply_to_message: feishuConfig.reply_to_message,
+        streaming: feishuConfig.streaming,
+        topic_isolation: feishuConfig.topic_isolation,
+        default_agent: feishuConfig.default_agent,
+      });
+      setFeishuConfig(result.config);
+      setChannelStatus(result.runtime);
+      setFeishuSecret("");
+      setClearFeishuSecret(false);
+      toast.success(result.bot?.app_name
+        ? t("settings.channels.feishuConnectedAs", { name: result.bot.app_name })
+        : t("settings.channels.feishuSaved"));
+    } catch (error) {
+      toast.error(`${t("settings.channels.feishuSaveFailed")}: ${error instanceof Error ? error.message : t("settings.unknownError", { defaultValue: "Unknown error" })}`);
+    } finally {
+      setFeishuSaving(false);
+    }
+  };
+
+  const runFeishuPairing = async (command: "list" | "approve") => {
+    const code = feishuPairingCode.trim();
+    if (command === "approve" && !code) return;
+    try {
+      const result = await api.runChannelPairingCommand({
+        channel: "feishu",
+        command: command === "list" ? "list" : `approve ${code}`,
+      });
+      setFeishuPairingResult(result.reply);
+      if (command === "approve" && result.reply.startsWith("Approved")) {
+        setFeishuPairingCode("");
+        toast.success(t("settings.channels.pairingApproved"));
+      }
+    } catch (error) {
+      toast.error(`${t("settings.channels.pairingFailed")}: ${error instanceof Error ? error.message : t("settings.unknownError", { defaultValue: "Unknown error" })}`);
     }
   };
 
@@ -381,6 +446,125 @@ export function Settings() {
           </button>
         </div>
       </div>
+
+      {feishuConfig ? (
+        <div className="mb-5 border-y bg-muted/10 px-4 py-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">{t("settings.channels.feishuTitle")}</h3>
+              <p className="mt-1 text-xs text-muted-foreground">{t("settings.channels.feishuDescription")}</p>
+            </div>
+            <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                aria-label={t("settings.channels.feishuEnabled")}
+                type="checkbox"
+                checked={feishuConfig.enabled}
+                onChange={(event) => setFeishuConfig({ ...feishuConfig, enabled: event.target.checked })}
+              />
+              {t("settings.channels.feishuEnabled")}
+            </label>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="grid gap-2">
+              <span className={labelClass}>App ID</span>
+              <input
+                aria-label="飞书 App ID"
+                className={fieldClass}
+                value={feishuConfig.app_id}
+                onChange={(event) => setFeishuConfig({ ...feishuConfig, app_id: event.target.value })}
+                placeholder="cli_xxxxxxxxxxxxxxxx"
+              />
+            </label>
+            <label className="grid gap-2">
+              <span className={labelClass}>App Secret</span>
+              <input
+                aria-label="飞书 App Secret"
+                type="password"
+                autoComplete="new-password"
+                className={fieldClass}
+                value={feishuSecret}
+                disabled={clearFeishuSecret}
+                onChange={(event) => setFeishuSecret(event.target.value)}
+                placeholder={feishuConfig.app_secret_configured ? t("settings.channels.secretConfigured") : t("settings.channels.secretRequired")}
+              />
+              {feishuConfig.app_secret_configured ? (
+                <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    aria-label={t("settings.channels.clearFeishuSecret")}
+                    type="checkbox"
+                    checked={clearFeishuSecret}
+                    onChange={(event) => { setClearFeishuSecret(event.target.checked); setFeishuSecret(""); }}
+                  />
+                  {t("settings.channels.clearFeishuSecret")}
+                </label>
+              ) : null}
+            </label>
+            <label className="grid gap-2">
+              <span className={labelClass}>{t("settings.channels.defaultAgent")}</span>
+              <select
+                aria-label={t("settings.channels.defaultAgent")}
+                className={fieldClass}
+                value={feishuConfig.default_agent}
+                onChange={(event) => setFeishuConfig({ ...feishuConfig, default_agent: event.target.value as FeishuChannelConfig["default_agent"] })}
+              >
+                <option value="financial_analyst">{t("settings.channels.financialAnalyst")}</option>
+                <option value="general">{t("settings.channels.generalAgent")}</option>
+              </select>
+            </label>
+            <label className="grid gap-2">
+              <span className={labelClass}>{t("settings.channels.groupPolicy")}</span>
+              <select
+                aria-label={t("settings.channels.groupPolicy")}
+                className={fieldClass}
+                value={feishuConfig.group_policy}
+                onChange={(event) => setFeishuConfig({ ...feishuConfig, group_policy: event.target.value as FeishuChannelConfig["group_policy"] })}
+              >
+                <option value="mention">{t("settings.channels.mentionOnly")}</option>
+                <option value="open">{t("settings.channels.allGroupMessages")}</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+            <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+              <label className="inline-flex items-center gap-2"><input type="checkbox" checked={feishuConfig.auto_start} onChange={(event) => setFeishuConfig({ ...feishuConfig, auto_start: event.target.checked })} />{t("settings.channels.autoStart")}</label>
+              <label className="inline-flex items-center gap-2"><input type="checkbox" checked={feishuConfig.reply_to_message} onChange={(event) => setFeishuConfig({ ...feishuConfig, reply_to_message: event.target.checked })} />{t("settings.channels.replyToMessage")}</label>
+              <label className="inline-flex items-center gap-2"><input type="checkbox" checked={feishuConfig.streaming} onChange={(event) => setFeishuConfig({ ...feishuConfig, streaming: event.target.checked })} />{t("settings.channels.streaming")}</label>
+              <label className="inline-flex items-center gap-2"><input type="checkbox" checked={feishuConfig.topic_isolation} onChange={(event) => setFeishuConfig({ ...feishuConfig, topic_isolation: event.target.checked })} />{t("settings.channels.topicIsolation")}</label>
+            </div>
+            <button
+              type="button"
+              onClick={() => void saveFeishuConfig()}
+              disabled={feishuSaving || (feishuConfig.enabled && (!feishuConfig.app_id.trim() || (!feishuConfig.app_secret_configured && !feishuSecret.trim())))}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {feishuSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {feishuConfig.enabled ? t("settings.channels.saveAndConnect") : t("settings.channels.saveFeishu")}
+            </button>
+          </div>
+          <div className="mt-4 border-t pt-4">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-medium">{t("settings.channels.pairingTitle")}</h4>
+                <p className="mt-1 text-xs text-muted-foreground">{t("settings.channels.pairingDescription")}</p>
+              </div>
+              <button type="button" className="rounded-md border px-3 py-1.5 text-xs hover:bg-muted" onClick={() => void runFeishuPairing("list")}>{t("settings.channels.listPairing")}</button>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                aria-label={t("settings.channels.pairingCode")}
+                className={fieldClass}
+                value={feishuPairingCode}
+                onChange={(event) => setFeishuPairingCode(event.target.value.toUpperCase())}
+                placeholder={t("settings.channels.pairingCodePlaceholder")}
+              />
+              <button type="button" disabled={!feishuPairingCode.trim()} className="shrink-0 rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-50" onClick={() => void runFeishuPairing("approve")}>{t("settings.channels.approvePairing")}</button>
+            </div>
+            {feishuPairingResult ? <pre className="mt-3 whitespace-pre-wrap rounded-md bg-muted/50 p-3 text-xs">{feishuPairingResult}</pre> : null}
+          </div>
+        </div>
+      ) : null}
 
       {channelStatus ? (
         <>

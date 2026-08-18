@@ -18,17 +18,23 @@ from .domestic_network import direct_domestic_http_client
 from .value_data_store import ValueDataStore, now
 
 
-POLICY_SOURCES = (
-    ("国务院政策文件库", "https://sousuo.www.gov.cn/zcwjk/"),
-    ("国家发展和改革委员会", "https://zfxxgk.ndrc.gov.cn/web/dirlist.jsp"),
-    ("工业和信息化部", "https://www.miit.gov.cn/zwgk/"),
-)
 # The unified library includes public State Council and ministry documents and
 # is more stable than scraping each ministry's changing navigation page.
+#
+# Each entry is (source_name, start_url, detail_url_pattern). Only links whose
+# normalized URL matches detail_url_pattern are treated as policy-detail pages;
+# navigation/category links (channels, "regulations library", "guidelines", ...)
+# are skipped so the event table stays clean. A pattern of None accepts every
+# in-domain link (fallback for sources without a stable detail-path signature).
+#
+# NDRC:  detail pages live at /web/iteminfo.jsp?id=<n>
+# MIIT:  detail pages live at /<category>/art/<year>/art_<hash>.html
+# State Council library is a JS-rendered SPA (no static anchors); it is retained
+# with a pattern that never matches so its absence doesn't break the other two.
 POLICY_SOURCES = (
-    ("State Council policy library", "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?t=zhengcelibrary"),
-    ("NDRC", "https://zfxxgk.ndrc.gov.cn/web/dirlist.jsp"),
-    ("MIIT", "https://www.miit.gov.cn/zwgk/"),
+    ("State Council policy library", "https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?t=zhengcelibrary", r"zhengcelibrary-nomatch-placeholder"),
+    ("NDRC", "https://zfxxgk.ndrc.gov.cn/web/dirlist.jsp", r"zfxxgk\.ndrc\.gov\.cn/web/iteminfo\.jsp\?id="),
+    ("MIIT", "https://www.miit.gov.cn/zwgk/", r"www\.miit\.gov\.cn/.*/art/\d{4}/art_"),
 )
 ALLOWED_HOSTS = ("www.gov.cn", "sousuo.www.gov.cn", "zfxxgk.ndrc.gov.cn", "www.ndrc.gov.cn", "www.miit.gov.cn")
 CLASSIFIER_VERSION = "value-policy-classifier-v1.0.0"
@@ -111,14 +117,18 @@ class PolicyDataService:
         seen_urls: set[str] = set()
         seen_hashes: set[str] = set()
         seen_document_numbers: set[str] = set()
-        for source_name, start_url in POLICY_SOURCES:
+        for source_name, start_url, detail_pattern in POLICY_SOURCES:
             try:
                 listing, _ = self.fetcher(start_url, {})
                 soup = BeautifulSoup(listing, "html.parser")
                 links: list[str] = []
                 for anchor in soup.select("a[href]"):
                     url = _normalize_url(urljoin(start_url, str(anchor.get("href") or "")))
-                    if urlsplit(url).hostname in ALLOWED_HOSTS and url not in links and url not in seen_urls:
+                    if urlsplit(url).hostname not in ALLOWED_HOSTS:
+                        continue
+                    if detail_pattern and not re.search(detail_pattern, url):
+                        continue
+                    if url not in links and url not in seen_urls:
                         links.append(url)
                 if not links:
                     raise RuntimeError("page_structure_changed:no_policy_links")

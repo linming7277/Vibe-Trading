@@ -8,6 +8,9 @@ const apiMock = vi.hoisted(() => ({
   getLLMSettings: vi.fn(),
   getDataSourceSettings: vi.fn(),
   getChannelStatus: vi.fn(),
+  getFeishuChannelConfig: vi.fn(),
+  updateFeishuChannelConfig: vi.fn(),
+  runChannelPairingCommand: vi.fn(),
   listLLMModels: vi.fn(),
   startChannels: vi.fn(),
   stopChannels: vi.fn(),
@@ -102,11 +105,29 @@ function channelStatus(overrides = {}) {
   };
 }
 
+function feishuConfig() {
+  return {
+    auto_start: true,
+    enabled: true,
+    app_id: "cli_financial",
+    app_secret_configured: true,
+    domain: "feishu" as const,
+    group_policy: "mention" as const,
+    reply_to_message: true,
+    streaming: true,
+    topic_isolation: true,
+    default_agent: "financial_analyst" as const,
+    allow_from_count: 1,
+    config_path: "C:/Users/test/.vibe-trading/agent.json",
+  };
+}
+
 describe("Settings IM channels panel", () => {
   beforeEach(() => {
     apiMock.getLLMSettings.mockResolvedValue(llmSettings());
     apiMock.getDataSourceSettings.mockResolvedValue(dataSourceSettings());
     apiMock.getChannelStatus.mockResolvedValue(channelStatus());
+    apiMock.getFeishuChannelConfig.mockResolvedValue(feishuConfig());
     apiMock.listLLMModels.mockResolvedValue({
       provider: "openrouter",
       models: ["deepseek/deepseek-v3.2"],
@@ -115,6 +136,15 @@ describe("Settings IM channels panel", () => {
     });
     apiMock.startChannels.mockResolvedValue(channelStatus({ running: true }));
     apiMock.stopChannels.mockResolvedValue(channelStatus());
+    apiMock.updateFeishuChannelConfig.mockResolvedValue({
+      config: feishuConfig(),
+      bot: { app_name: "财报研究员", open_id: "ou_bot" },
+      runtime: channelStatus({ running: true }),
+    });
+    apiMock.runChannelPairingCommand.mockResolvedValue({
+      channel: "feishu",
+      reply: "Approved pairing code `ABC123` — user can now access feishu",
+    });
   });
 
   it("renders channel runtime status and refreshes it", async () => {
@@ -137,6 +167,34 @@ describe("Settings IM channels panel", () => {
     fireEvent.click(screen.getByRole("button", { name: tr("settings.channels.start") }));
 
     await waitFor(() => expect(apiMock.startChannels).toHaveBeenCalledTimes(1));
+  });
+
+  it("saves the dedicated Feishu Financial Analyst configuration", async () => {
+    render(<Settings />);
+    await screen.findByText(tr("settings.channels.feishuTitle"));
+
+    fireEvent.click(screen.getByRole("button", { name: tr("settings.channels.saveAndConnect") }));
+
+    await waitFor(() => expect(apiMock.updateFeishuChannelConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        app_id: "cli_financial",
+        default_agent: "financial_analyst",
+        group_policy: "mention",
+      }),
+    ));
+  });
+
+  it("approves a Feishu user pairing code", async () => {
+    render(<Settings />);
+    await screen.findByText(tr("settings.channels.pairingTitle"));
+
+    fireEvent.change(screen.getByLabelText(tr("settings.channels.pairingCode")), { target: { value: "abc123" } });
+    fireEvent.click(screen.getByRole("button", { name: tr("settings.channels.approvePairing") }));
+
+    await waitFor(() => expect(apiMock.runChannelPairingCommand).toHaveBeenCalledWith({
+      channel: "feishu",
+      command: "approve ABC123",
+    }));
   });
 
   it("still renders LLM and data source settings when channel status fails", async () => {

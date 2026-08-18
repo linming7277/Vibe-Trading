@@ -35,6 +35,234 @@ export interface CorrelationResponse {
   matrix: number[][];
 }
 
+export interface FinancialAgentProgress {
+  stage: string;
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+export interface FinancialAgentReply {
+  answer: string;
+  scope: "workspace" | "company" | "capability" | "data_boundary" | "general_method" | "company_not_loaded" | "context_required";
+  provider?: string;
+  model?: string;
+  stock_code?: string;
+  stock_name?: string;
+  data_context?: { company_count: number; industry_count: number; data_dates: string[] };
+}
+
+export type ResearchAgentRole =
+  | "research_lead" | "macro_policy" | "industry" | "company" | "valuation" | "risk"
+  | "track_classifier" | "financial_analyst";
+
+export interface ResearchAgentConfig {
+  role: ResearchAgentRole;
+  provider: string;
+  model: string;
+  enabled: boolean;
+  updated_at: string;
+}
+
+export interface ResearchAgentProvider {
+  provider: string;
+  label: string;
+  models: string[];
+  default_model: string;
+  configured: boolean;
+}
+
+export interface ResearchAgentModelOption {
+  id: string;
+  name: string;
+  ready: boolean;
+}
+
+export interface ResearchAgentModelSetting {
+  role: ResearchAgentRole;
+  model_id: string;
+  model_name: string;
+  enabled: boolean;
+  ready: boolean;
+  updated_at: string;
+  models: ResearchAgentModelOption[];
+}
+
+export interface ResearchAgentConnectionSetting {
+  role: ResearchAgentRole;
+  base_url: string;
+  model: string;
+  api_key_configured: boolean;
+  enabled: boolean;
+  ready: boolean;
+  updated_at: string;
+}
+
+export interface FineTrackIndustry {
+  industry_code: string;
+  industry_name: string;
+  industry_level: string;
+  raw_industry_level: string;
+  level: 2 | 3;
+  is_terminal: boolean;
+  tdx_class_code: string;
+  level1_code: string;
+  level1_name: string;
+  level2_code: string;
+  level2_name: string;
+  level3_code: string;
+  level3_name: string;
+  terminal_level: 2 | 3;
+  member_count: number;
+  as_of: string | null;
+  source: Record<string, unknown>;
+}
+
+export interface Level3Leader {
+  level1_code: string;
+  level1_name: string;
+  level2_code: string;
+  level2_name: string;
+  level3_code: string;
+  level3_name: string;
+  stock_code: string;
+  stock_name: string;
+  leader_rank: number;
+  leader_score: number;
+  leader_formula_version: string;
+  component_scores: Record<string, number | null>;
+  coverage: number;
+  eligibility_status: "eligible" | "ineligible";
+  eligibility_reasons: string[];
+  metric_applicability_notes: string[];
+  as_of: string;
+}
+
+export interface FinancialPoint {
+  report_date: string;
+  announcement_date: string;
+  period_type: string;
+  value: number | null;
+}
+
+export interface FinancialForecastScenario {
+  scenario: "BEAR" | "BASE" | "BULL";
+  label: string;
+  revenue_growth_assumptions: number[];
+  margin_assumptions: Array<number | null>;
+  forecast: Array<{ year: string; revenue: number | null; net_profit: number | null }>;
+  assumption_notes: string[];
+}
+
+export interface FinancialAnalysisSnapshot {
+  id: string;
+  stock_code: string;
+  stock_name: string;
+  as_of: string;
+  historical_cutoff: string;
+  financial_feature_version: string;
+  forecast_version: string;
+  feature_status: "READY" | "PARTIAL" | "INSUFFICIENT_DATA";
+  forecast_status: "READY" | "PARTIAL" | "LIMITED" | "INSUFFICIENT_DATA";
+  analysis_status: "NOT_RUN" | "CONFIGURATION_REQUIRED" | "COMPLETED" | "FAILED";
+  agent_provider: string | null;
+  agent_model: string | null;
+  agent_error: string;
+  identity: {
+    stock_code: string; stock_name: string;
+    level1_name: string | null; level2_name: string | null; level3_name: string | null;
+    leader_rank: number | null; leader_score: number | null; leader_formula_version: string | null;
+    metric_applicability_notes: string[];
+    market_valuation?: {
+      as_of?: string | null; pe?: number | null; pb?: number | null;
+      dividend_yield?: number | null; market_cap?: number | null;
+      source?: string; limitations?: string[];
+    };
+  };
+  history: Array<Record<string, number | string | null>>;
+  feature: {
+    status: string;
+    growth: Record<string, FinancialPoint[] | { value: number | null; years: number; status: string }>;
+    profitability: { roe: FinancialPoint[]; gross_margin: { status: string; items: FinancialPoint[] }; net_margin: FinancialPoint[] };
+    cash_flow: { operating_cash_flow: FinancialPoint[]; cash_conversion: FinancialPoint[]; ocf_to_revenue: FinancialPoint[] };
+    balance_sheet: { total_assets: FinancialPoint[]; equity: FinancialPoint[]; debt_ratio: FinancialPoint[] };
+    capital_expenditure: { capex: FinancialPoint[]; capex_to_revenue: FinancialPoint[] };
+    trends: Record<string, string>;
+    latest_changes: Array<Record<string, number | string | boolean | null>>;
+    data_quality: { coverage: number; missing_fields: string[]; annual_period_count: number; cautions: string[] };
+  };
+  forecast: {
+    status: string;
+    disclaimer: string;
+    scenarios: Partial<Record<"BEAR" | "BASE" | "BULL", FinancialForecastScenario>>;
+    assumption_notes: string[];
+  };
+  analysis: null | {
+    stock_code: string; stock_name: string; executive_summary: string;
+    historical_performance: Record<string, string>;
+    latest_changes: string[]; financial_strengths: string[]; financial_risks: string[];
+    forecast_analysis: { bear: string; base: string; bull: string; key_assumptions: string[] };
+    key_metrics_to_monitor: string[]; confidence: string; data_gaps: string[];
+    claims: Array<{ type: "FACT" | "INFERENCE" | "FORECAST" | "UNKNOWN"; statement: string; evidence_keys: string[] }>;
+  };
+  data_gaps: string[];
+  source_hash: string;
+  idempotent_reuse?: boolean;
+}
+
+export interface FinancialChatArchiveEntry {
+  id: string;
+  stock_code: string;
+  stock_name: string;
+  role: "user" | "assistant";
+  content: string;
+  source_snapshot_id: string | null;
+  source_hash: string | null;
+  created_at: string;
+}
+
+export interface FinancialDossier {
+  snapshot: FinancialAnalysisSnapshot;
+  chat_entries: FinancialChatArchiveEntry[];
+  archive_summary: { chat_entry_count: number; latest_chat_at: string | null; analysis_status: FinancialAnalysisSnapshot["analysis_status"]; source_hash: string };
+}
+
+export interface FineTrackCompanyProfile {
+  stock_code: string;
+  stock_name: string;
+  third_level_industry_code: string;
+  third_level_industry_name: string;
+  second_level_industry_code: string;
+  second_level_industry_name: string;
+  first_level_industry_code: string;
+  first_level_industry_name: string;
+  business_scope: string;
+  main_business: string;
+  company_description: string;
+  main_products: string;
+  data_status: "REAL" | "PARTIAL" | "MISSING";
+  updated_at: string;
+}
+
+export interface FineTrackMembership {
+  membership_id: string;
+  stock_code: string;
+  stock_name: string;
+  membership_type: "PRIMARY" | "SECONDARY";
+  classification_reason: string;
+  confidence: number;
+  confidence_level: "HIGH" | "MEDIUM" | "LOW";
+  review_status: "AUTO_ACCEPTED" | "NEEDS_REVIEW" | "MANUAL_CONFIRMED";
+}
+
+export interface FineTrack {
+  track_id: string;
+  track_name: string;
+  description: string;
+  status: string;
+  company_count: number;
+  companies: FineTrackMembership[];
+}
+
 export interface RegimeEpisode {
   start: string;
   end: string | null;
@@ -97,6 +325,62 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   return JSON.parse(text) as T;
+}
+
+async function streamFinancialChat<T extends FinancialAgentReply>(
+  path: string,
+  body: unknown,
+  onProgress?: (progress: FinancialAgentProgress) => void,
+): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(), Accept: "text/event-stream" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await errorFromResponse(res);
+  if (!res.body) throw new ApiError("财报研究过程未返回可读取的事件流", res.status);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: T | null = null;
+  const consume = (block: string) => {
+    let event = "message";
+    const data: string[] = [];
+    for (const line of block.split(/\r?\n/)) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+    }
+    if (!data.length) return;
+    const payload = JSON.parse(data.join("\n")) as Record<string, unknown>;
+    if (event === "progress") {
+      onProgress?.({
+        stage: String(payload.stage || "progress"),
+        message: String(payload.message || "正在处理…"),
+        details: (payload.details as Record<string, unknown> | undefined) || {},
+      });
+    } else if (event === "result") {
+      result = payload as T;
+    } else if (event === "error") {
+      throw new ApiError(String(payload.message || "财报研究失败"), Number(payload.status || 500));
+    }
+  };
+
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      buffer += decoder.decode(chunk.value || new Uint8Array(), { stream: !chunk.done });
+      const blocks = buffer.split(/\r?\n\r?\n/);
+      buffer = blocks.pop() || "";
+      for (const block of blocks) consume(block);
+      if (chunk.done) break;
+    }
+    if (buffer.trim()) consume(buffer);
+  } finally {
+    reader.releaseLock();
+  }
+  if (!result) throw new ApiError("财报研究过程未返回最终结论", res.status);
+  return result;
 }
 
 export interface UploadResult {
@@ -202,6 +486,90 @@ export const api = {
   retrySwarmRun: (id: string) =>
     request<{ id: string; status: string; preset_name: string }>(`/swarm/runs/${id}/retry`, { method: "POST" }),
   getLLMSettings: () => request<LLMSettings>("/settings/llm"),
+  getResearchAgentConfigs: () =>
+    request<{ items: ResearchAgentConfig[] }>("/api/agents/config"),
+  getResearchAgentProviders: () =>
+    request<{ items: ResearchAgentProvider[] }>("/api/agents/providers"),
+  updateResearchAgentConfig: (role: ResearchAgentRole, body: Pick<ResearchAgentConfig, "provider" | "model" | "enabled">) =>
+    request<ResearchAgentConfig>(`/api/agents/config/${encodeURIComponent(role)}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  getResearchAgentModelSettings: () =>
+    request<{ items: ResearchAgentModelSetting[] }>("/api/agents/model-settings"),
+  updateResearchAgentModelSetting: (role: ResearchAgentRole, body: Pick<ResearchAgentModelSetting, "model_id" | "enabled">) =>
+    request<ResearchAgentModelSetting>(`/api/agents/model-settings/${encodeURIComponent(role)}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  getResearchAgentConnections: () =>
+    request<{ items: ResearchAgentConnectionSetting[] }>("/api/agents/connections"),
+  updateResearchAgentConnection: (role: ResearchAgentRole, body: {
+    base_url: string; model: string; api_key?: string; clear_api_key?: boolean; enabled: boolean;
+  }) => request<ResearchAgentConnectionSetting>(`/api/agents/connections/${encodeURIComponent(role)}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  }),
+  getFineTrackIndustries: () =>
+    request<{ items: FineTrackIndustry[]; total: number; level1_total: number; level2_total: number; level3_total: number; level2_leaf_total: number; source: Record<string, unknown> }>("/api/value/industries"),
+  getAllLevel3Leaders: (limit = 2, asOf?: string) =>
+    request<{
+      as_of: string | null;
+      items: Record<string, Level3Leader[]>;
+      total: number;
+      snapshot_status: "ready" | "not_built";
+    }>(`/api/value/level3-leaders?limit=${encodeURIComponent(String(limit))}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getLevel3IndustryLeaders: (industryCode: string, limit = 2) =>
+    request<{
+      industry: FineTrackIndustry;
+      as_of: string | null;
+      formula_version: string;
+      company_count: number;
+      eligible_count: number;
+      items: Level3Leader[];
+      total_ranked: number;
+      snapshot_status: "ready" | "not_built";
+      comparison_scope: string;
+    }>(`/api/value/industries/${encodeURIComponent(industryCode)}/leaders?limit=${limit}`),
+  getCompanyFinancialAnalysis: (stockCode: string, asOf?: string) =>
+    request<FinancialAnalysisSnapshot>(`/api/value/companies/${encodeURIComponent(stockCode)}/financial${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getCompanyFinancialDossier: (stockCode: string, asOf?: string) =>
+    request<FinancialDossier>(`/api/value/companies/${encodeURIComponent(stockCode)}/financial/dossier${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
+  analyzeCompanyFinancials: (stockCode: string, body: { as_of?: string; refresh?: boolean } = {}) =>
+    request<FinancialAnalysisSnapshot>(`/api/value/companies/${encodeURIComponent(stockCode)}/financial/analyze`, {
+      method: "POST", body: JSON.stringify(body),
+    }),
+  chatCompanyFinancials: (stockCode: string, body: { question: string; as_of?: string; history?: Array<{ role: string; content: string }> }) =>
+    request<{ stock_code: string; stock_name: string; as_of: string; answer: string; provider: string; model: string }>(
+      `/api/value/companies/${encodeURIComponent(stockCode)}/financial/chat`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  streamCompanyFinancials: (
+    stockCode: string,
+    body: { question: string; as_of?: string; history?: Array<{ role: string; content: string }> },
+    onProgress?: (progress: FinancialAgentProgress) => void,
+  ) => streamFinancialChat<FinancialAgentReply>(
+    `/api/value/companies/${encodeURIComponent(stockCode)}/financial/chat/stream`, body, onProgress,
+  ),
+  chatFinancialAgent: (body: { question: string; history?: Array<{ role: string; content: string }>; candidates?: Array<Record<string, unknown>> }) =>
+    request<FinancialAgentReply>(
+      "/api/value/financial-agent/chat",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  streamFinancialAgent: (
+    body: { question: string; history?: Array<{ role: string; content: string }>; candidates?: Array<Record<string, unknown>> },
+    onProgress?: (progress: FinancialAgentProgress) => void,
+  ) => streamFinancialChat<FinancialAgentReply>("/api/value/financial-agent/chat/stream", body, onProgress),
+  getFineTrackIndustryCompanies: (industryCode: string) =>
+    request<{ industry: FineTrackIndustry; items: FineTrackCompanyProfile[]; total: number; data_status_counts: Record<string, number> }>(
+      `/api/value/industries/${encodeURIComponent(industryCode)}/companies`,
+    ),
+  getFineTracks: (industryCode: string) =>
+    request<{ industry: FineTrackIndustry; items: FineTrack[]; total: number; unclassified: Array<Record<string, string>>; classification_version: string }>(
+      `/api/value/industries/${encodeURIComponent(industryCode)}/tracks`,
+    ),
+  classifyFineTracks: (industryCode: string) =>
+    request<Record<string, unknown>>(`/api/value/industries/${encodeURIComponent(industryCode)}/classify-tracks`, { method: "POST" }),
   updateLLMSettings: (settings: UpdateLLMSettingsRequest) =>
     request<LLMSettings>("/settings/llm", {
       method: "PUT",
@@ -219,6 +587,12 @@ export const api = {
       body: JSON.stringify(settings),
     }),
   getChannelStatus: () => request<ChannelRuntimeStatus>("/channels/status"),
+  getFeishuChannelConfig: () => request<FeishuChannelConfig>("/channels/feishu/config"),
+  updateFeishuChannelConfig: (body: FeishuChannelConfigUpdate) =>
+    request<FeishuChannelConfigUpdateResponse>("/channels/feishu/config", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   startChannels: () => request<ChannelRuntimeActionResponse>("/channels/start", { method: "POST" }),
   stopChannels: () => request<ChannelRuntimeActionResponse>("/channels/stop", { method: "POST" }),
   runChannelPairingCommand: (body: ChannelPairingCommandRequest) =>
@@ -753,6 +1127,41 @@ export interface ChannelRuntimeStatus {
   outbound_queue: number;
   session_count: number;
   channels: Record<string, ChannelAdapterStatus>;
+}
+
+export interface FeishuChannelConfig {
+  auto_start: boolean;
+  enabled: boolean;
+  app_id: string;
+  app_secret_configured: boolean;
+  domain: "feishu" | "lark";
+  group_policy: "mention" | "open";
+  reply_to_message: boolean;
+  streaming: boolean;
+  topic_isolation: boolean;
+  default_agent: "general" | "financial_analyst";
+  allow_from_count: number;
+  config_path: string;
+}
+
+export interface FeishuChannelConfigUpdate {
+  auto_start: boolean;
+  enabled: boolean;
+  app_id: string;
+  app_secret?: string;
+  clear_app_secret?: boolean;
+  domain: "feishu" | "lark";
+  group_policy: "mention" | "open";
+  reply_to_message: boolean;
+  streaming: boolean;
+  topic_isolation: boolean;
+  default_agent: "general" | "financial_analyst";
+}
+
+export interface FeishuChannelConfigUpdateResponse {
+  config: FeishuChannelConfig;
+  bot: { app_name: string; open_id: string } | null;
+  runtime: ChannelRuntimeStatus;
 }
 
 export interface ChannelRuntimeActionResponse extends ChannelRuntimeStatus {
