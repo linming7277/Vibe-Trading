@@ -9,8 +9,26 @@ from fastapi.testclient import TestClient
 
 from src.api import research_task_routes
 from src.api.research_task_routes import register_research_task_routes
-from src.research_tasks.service import FINAL_FIELDS, ResearchTaskService
+from src.research_tasks.service import FINAL_FIELDS, ResearchTaskService, _parse_json
 from src.research_tasks.store import AGENT_ROLES, ResearchTaskStore
+
+
+def test_parse_json_recovers_object_wrapped_in_prose() -> None:
+    # Endpoints that ignore response_format let the model wrap the object in
+    # prose; the parser must salvage the outermost object, not discard it.
+    assert _parse_json('好的，结果如下：\n{"answer": "风险结论", "data_gaps": []}\n以上。') == {
+        "answer": "风险结论", "data_gaps": [],
+    }
+
+
+def test_parse_json_still_handles_fenced_and_pure_json() -> None:
+    assert _parse_json('```json\n{"a": 1}\n```') == {"a": 1}
+    assert _parse_json('  {"a": 1}  ') == {"a": 1}
+
+
+def test_parse_json_rejects_prose_without_any_object() -> None:
+    with pytest.raises(Exception):
+        _parse_json("【风险结论】\n纯文本回答，没有任何 JSON 对象。")
 
 
 class FakeRuntime:
@@ -92,6 +110,14 @@ def test_agent_role_configs_persist_provider_and_model(store: ResearchTaskStore)
         "base_url": "", "api_key_configured": False,
         "enabled": False, "updated_at": "x"
     }
+
+
+def test_structured_output_capability_override_persists(store: ResearchTaskStore) -> None:
+    saved = store.update_structured_output_capabilities("financial_analyst", {
+        "supports_json_schema": True, "preferred_mode": "JSON_SCHEMA",
+    })
+    assert saved["structured_output"]["preferred_mode"] == "JSON_SCHEMA"
+    assert store.get_runtime_config("financial_analyst")["structured_output"]["supports_json_schema"] is True
 
 
 def test_industry_task_state_machine_and_single_review(store: ResearchTaskStore) -> None:
@@ -231,10 +257,3 @@ def test_model_only_settings_update_internal_config(store: ResearchTaskStore) ->
     assert updated["enabled"] is False
     assert "provider" not in updated
     assert store.get_config("industry")["model"] == target["name"]
-
-
-def test_track_classifier_does_not_offer_ollama_model(store: ResearchTaskStore) -> None:
-    settings = service(store, FakeRuntime()).get_model_settings()
-    classifier = next(item for item in settings if item["role"] == "track_classifier")
-    assert classifier["ready"] is False
-    assert "qwen2.5:32b" not in {item["name"] for item in classifier["models"]}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 import api_server
@@ -54,7 +55,10 @@ def test_channels_status_reports_only_personal_edition_adapters(tmp_path: Path, 
     assert response.status_code == 200
     payload = response.json()
     assert payload["running"] is False
-    assert set(payload["channels"]) == {"feishu", "weixin"}
+    assert set(payload["channels"]) == {
+        "feishu", "feishu_supervisor", "feishu_risk", "feishu_valuation",
+        "feishu_macro_policy", "weixin",
+    }
     assert payload["channels"]["feishu"]["configured"] is True
     assert payload["channels"]["weixin"]["enabled"] is False
     assert "reply_timeout_s" not in payload["channels"]
@@ -135,7 +139,7 @@ def test_feishu_config_is_persisted_and_secret_is_never_returned(
             "reply_to_message": True,
             "streaming": True,
             "topic_isolation": True,
-            "default_agent": "financial_analyst",
+            "default_agent": "investment_research_supervisor",
         },
     )
 
@@ -145,9 +149,58 @@ def test_feishu_config_is_persisted_and_secret_is_never_returned(
     assert updated.json()["bot"]["app_name"] == "财报研究员"
     raw = json.loads((tmp_path / "agent.json").read_text(encoding="utf-8"))
     assert raw["channels"]["feishu"]["app_secret"] == "secret-value"
-    assert raw["channels"]["feishu"]["default_agent"] == "financial_analyst"
+    assert raw["channels"]["feishu"]["default_agent"] == "investment_research_supervisor"
 
     fetched = client.get("/channels/feishu/config")
     assert fetched.status_code == 200
     assert fetched.json()["app_secret_configured"] is True
+    assert "app_secret" not in fetched.json()
+
+
+@pytest.mark.parametrize(
+    ("path", "channel", "agent", "label"),
+    [
+        ("feishu-risk", "feishu_risk", "risk_researcher", "风险研究员"),
+        ("feishu-valuation", "feishu_valuation", "valuation_researcher", "估值研究员"),
+        ("feishu-macro-policy", "feishu_macro_policy", "macro_policy_researcher", "宏观政策研究员"),
+    ],
+)
+def test_specialist_feishu_config_is_isolated_and_role_is_fixed(
+    tmp_path: Path,
+    monkeypatch,
+    path: str,
+    channel: str,
+    agent: str,
+    label: str,
+) -> None:
+    import src.channels.settings as channel_settings
+
+    monkeypatch.setattr(
+        channel_settings,
+        "verify_feishu_credentials",
+        lambda app_id, app_secret: {"app_name": label, "open_id": "ou_specialist"},
+    )
+    client = _client(tmp_path, monkeypatch)
+
+    response = client.put(
+        f"/channels/{path}/config",
+        json={
+            "enabled": False,
+            "app_id": f"cli_{channel}",
+            "app_secret": "specialist-secret",
+            "default_agent": "general",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["config"]["app_secret_configured"] is True
+    assert "app_secret" not in response.json()["config"]
+    raw = json.loads((tmp_path / "agent.json").read_text(encoding="utf-8"))
+    assert raw["channels"][channel]["default_agent"] == agent
+    assert raw["channels"][channel]["app_secret"] == "specialist-secret"
+    assert raw["channels"].get("feishu", {}).get("default_agent") != agent
+
+    fetched = client.get(f"/channels/{path}/config")
+    assert fetched.status_code == 200
+    assert fetched.json()["default_agent"] == agent
     assert "app_secret" not in fetched.json()

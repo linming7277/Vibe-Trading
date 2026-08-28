@@ -20,9 +20,6 @@ from src.config.paths import get_runtime_root
 
 AGENT_ROLES = (
     "research_lead", "macro_policy", "industry", "company", "valuation", "risk",
-    # Background data-processing role. ResearchTaskService never selects it for
-    # Multi-Agent discussions; it is exposed here only for model configuration.
-    "track_classifier",
     # Standalone Value Line Financial Analyst; it is never routed into the
     # paused Multi-Agent research committee.
     "financial_analyst",
@@ -66,6 +63,7 @@ class ResearchTaskStore:
                     model TEXT NOT NULL,
                     base_url TEXT NOT NULL DEFAULT '',
                     api_key TEXT NOT NULL DEFAULT '',
+                    capabilities_json TEXT NOT NULL DEFAULT '{}',
                     enabled INTEGER NOT NULL DEFAULT 1,
                     updated_at TEXT NOT NULL
                 );
@@ -114,6 +112,8 @@ class ResearchTaskStore:
                 self._conn.execute("ALTER TABLE agent_model_configs ADD COLUMN base_url TEXT NOT NULL DEFAULT ''")
             if "api_key" not in columns:
                 self._conn.execute("ALTER TABLE agent_model_configs ADD COLUMN api_key TEXT NOT NULL DEFAULT ''")
+            if "capabilities_json" not in columns:
+                self._conn.execute("ALTER TABLE agent_model_configs ADD COLUMN capabilities_json TEXT NOT NULL DEFAULT '{}'")
 
     def _seed_configs(self) -> None:
         cfg = get_env_config().llm
@@ -129,9 +129,17 @@ class ResearchTaskStore:
 
     @staticmethod
     def _config(row: sqlite3.Row) -> dict[str, Any]:
-        return {"role": row["role"], "provider": row["provider"], "model": row["model"],
-                "base_url": row["base_url"], "api_key_configured": bool(row["api_key"]),
-                "enabled": bool(row["enabled"]), "updated_at": row["updated_at"]}
+        result = {"role": row["role"], "provider": row["provider"], "model": row["model"],
+                  "base_url": row["base_url"], "api_key_configured": bool(row["api_key"]),
+                  "enabled": bool(row["enabled"]), "updated_at": row["updated_at"]}
+        capability_config = _loads(row["capabilities_json"], {})
+        structured_output = capability_config.get("structured_output", {})
+        if structured_output:
+            result["structured_output"] = structured_output
+        request_extra_body = capability_config.get("request_extra_body", {})
+        if isinstance(request_extra_body, dict) and request_extra_body:
+            result["request_extra_body"] = request_extra_body
+        return result
 
     def list_configs(self) -> list[dict[str, Any]]:
         rows = self._conn.execute("SELECT * FROM agent_model_configs").fetchall()
@@ -173,6 +181,22 @@ class ResearchTaskStore:
                    SET provider='openai', model=?, base_url=?, api_key=?, enabled=?, updated_at=?
                    WHERE role=?""",
                 (model.strip(), base_url.strip().rstrip("/"), next_key, int(enabled), _now(), role),
+            )
+        return self.get_config(role)
+
+    def update_structured_output_capabilities(
+        self, role: str, capabilities: dict[str, Any], *, request_extra_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Persist a model-instance capability override without inferring model behaviour."""
+        if role not in AGENT_ROLES:
+            raise ValueError("unknown agent role")
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE agent_model_configs SET capabilities_json=?, updated_at=? WHERE role=?",
+                (json.dumps({
+                    "structured_output": capabilities,
+                    **({"request_extra_body": request_extra_body} if request_extra_body else {}),
+                }, ensure_ascii=False), _now(), role),
             )
         return self.get_config(role)
 

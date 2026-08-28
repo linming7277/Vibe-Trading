@@ -49,62 +49,8 @@ def _structured_response_format(
         "additionalProperties": False,
     }
     if phase == "FINANCIAL_ANALYSIS":
-        financial_evidence = sorted({
-            str(item.get("key")) for item in (payload or {}).get("evidence", [])
-            if isinstance(item, dict) and item.get("key")
-        })
-        reference_item: dict[str, Any] = {"type": "string"}
-        if financial_evidence:
-            reference_item["enum"] = financial_evidence
-        schema = {
-            "type": "object",
-            "properties": {
-                "stock_code": {"type": "string"}, "stock_name": {"type": "string"},
-                "executive_summary": {"type": "string", "maxLength": 400},
-                "historical_performance": {
-                    "type": "object",
-                    "properties": {key: {"type": "string", "maxLength": 240} for key in (
-                        "growth", "profitability", "cash_flow", "balance_sheet"
-                    )},
-                    "required": ["growth", "profitability", "cash_flow", "balance_sheet"],
-                    "additionalProperties": False,
-                },
-                **{key: {"type": "array", "items": {"type": "string", "maxLength": 160}, "maxItems": 8}
-                   for key in ("latest_changes", "financial_strengths", "financial_risks", "key_metrics_to_monitor", "data_gaps")},
-                "forecast_analysis": {
-                    "type": "object",
-                    "properties": {
-                        "bear": {"type": "string", "maxLength": 240},
-                        "base": {"type": "string", "maxLength": 240},
-                        "bull": {"type": "string", "maxLength": 240},
-                        "key_assumptions": {"type": "array", "items": {"type": "string", "maxLength": 160}, "maxItems": 8},
-                    },
-                    "required": ["bear", "base", "bull", "key_assumptions"],
-                    "additionalProperties": False,
-                },
-                "confidence": {"type": "string", "enum": ["LOW", "MEDIUM", "HIGH"]},
-                "claims": {
-                    "type": "array", "maxItems": 12,
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "type": {"type": "string", "enum": ["FACT", "INFERENCE", "FORECAST", "UNKNOWN"]},
-                            "statement": {"type": "string", "maxLength": 180},
-                            "evidence_keys": {"type": "array", "items": reference_item, "maxItems": 6},
-                        },
-                        "required": ["type", "statement", "evidence_keys"],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            "required": [
-                "stock_code", "stock_name", "executive_summary", "historical_performance",
-                "latest_changes", "financial_strengths", "financial_risks", "forecast_analysis",
-                "key_metrics_to_monitor", "confidence", "data_gaps", "claims",
-            ],
-            "additionalProperties": False,
-        }
-    elif phase in {"RESEARCH", "CROSS_REVIEW"}:
+        raise ValueError("financial analysis must supply its own target_schema")
+    if phase in {"RESEARCH", "CROSS_REVIEW"}:
         schema = {
             "type": "object",
             "properties": {
@@ -183,7 +129,8 @@ def _structured_response_format(
 
 class ModelRuntime(Protocol):
     def invoke(self, *, role: str, phase: str, provider: str, model: str,
-               instruction: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+               instruction: str, payload: dict[str, Any],
+               target_schema: dict[str, Any] | None = None) -> dict[str, Any]: ...
 
 
 def _parse_json(content: str) -> dict[str, Any]:
@@ -191,7 +138,16 @@ def _parse_json(content: str) -> dict[str, Any]:
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
         text = re.sub(r"\s*```$", "", text)
-    value = json.loads(text)
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        # Some OpenAI-compatible endpoints ignore response_format and let
+        # the model wrap the object in prose; salvage the outermost object
+        # instead of discarding a complete answer.
+        start, end = text.find("{"), text.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        value = json.loads(text[start:end + 1])
     if not isinstance(value, dict):
         raise ValueError("model response must be a JSON object")
     return value
@@ -201,8 +157,11 @@ class ProviderModelRuntime:
     """Production adapter; all model calls go through the existing provider layer."""
 
     def invoke(self, *, role: str, phase: str, provider: str, model: str,
-               instruction: str, payload: dict[str, Any]) -> dict[str, Any]:
-        client = ChatLLM(model_name=model, provider_name=provider)
+               instruction: str, payload: dict[str, Any],
+               target_schema: dict[str, Any] | None = None,
+               max_tokens: int | None = None,
+               extra_body: dict[str, Any] | None = None) -> dict[str, Any]:
+        client = ChatLLM(model_name=model, provider_name=provider, max_tokens=max_tokens, extra_body=extra_body)
         is_ollama = provider.strip().lower() == "ollama"
         if is_ollama:
             # Qwen-family local models may otherwise spend most of their CPU
@@ -214,24 +173,28 @@ class ProviderModelRuntime:
         response = client.chat([
             {"role": "system", "content": instruction},
             {"role": "user", "content": user_content},
-        ], response_format=_structured_response_format(phase, payload))
+        ], response_format=target_schema or _structured_response_format(phase, payload))
         if not response.content:
             raise RuntimeError("empty model response")
         return _parse_json(response.content)
 
     def invoke_with_connection(self, *, role: str, phase: str, model: str,
-                               base_url: str, api_key: str, instruction: str,
-                               payload: dict[str, Any]) -> dict[str, Any]:
+                                base_url: str, api_key: str, instruction: str,
+                                payload: dict[str, Any], target_schema: dict[str, Any] | None = None,
+                                max_tokens: int | None = None,
+                                extra_body: dict[str, Any] | None = None) -> dict[str, Any]:
         client = ChatLLM(
             model_name=model,
             provider_name="openai",
             base_url=base_url,
             api_key=api_key,
+            max_tokens=max_tokens,
+            extra_body=extra_body,
         )
         response = client.chat([
             {"role": "system", "content": instruction},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False, default=str)},
-        ], response_format=_structured_response_format(phase, payload))
+        ], response_format=target_schema or _structured_response_format(phase, payload))
         if not response.content:
             raise RuntimeError("empty model response")
         return _parse_json(response.content)

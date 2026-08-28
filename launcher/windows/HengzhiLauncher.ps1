@@ -1,17 +1,35 @@
 ﻿param(
-    [ValidateSet("gui", "start", "stop", "restart", "status", "smoke", "print-url", "install-shortcut")]
-    [string]$Action = "gui"
+    [ValidateSet("gui", "console", "start", "stop", "restart", "status", "smoke", "print-url", "install-shortcut")]
+    [string]$Action = "console",
+    [switch]$AutoStart
 )
 
 $ErrorActionPreference = "Stop"
 $script:RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $script:StateRoot = Join-Path $script:RepoRoot ".launcher"
 $script:LogRoot = Join-Path $script:StateRoot "logs"
+$script:ClientAccessFile = Join-Path $script:StateRoot "access-clients.json"
 $script:HostScript = Join-Path $PSScriptRoot "ServiceHost.ps1"
 $script:Strings = Get-Content -LiteralPath (Join-Path $PSScriptRoot "strings.zh-CN.json") -Raw -Encoding UTF8 | ConvertFrom-Json
 
-$script:LanHost = if ([string]::IsNullOrWhiteSpace($env:HENGZHI_HOSTNAME)) { "hzstock" } else { $env:HENGZHI_HOSTNAME.Trim() }
+function Get-PreferredLanAddress {
+    try {
+        $addresses = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+            Where-Object { $_.AddressState -eq "Preferred" } |
+            Select-Object -ExpandProperty IPAddress
+        foreach ($address in $addresses) {
+            if ($address -like "10.*" -or $address -like "192.168.*") { return $address }
+            if ($address -match "^172\.(1[6-9]|2[0-9]|3[0-1])\.") { return $address }
+        }
+    }
+    catch {}
+    return ""
+}
+
+$script:LanHost = if ([string]::IsNullOrWhiteSpace($env:HENGZHI_HOSTNAME)) { "127.0.0.1" } else { $env:HENGZHI_HOSTNAME.Trim() }
 $script:FrontendUrl = "http://$($script:LanHost):5899/value"
+$script:LanAddress = Get-PreferredLanAddress
+$script:LanFrontendUrl = if ($script:LanAddress) { "http://$($script:LanAddress):5899/value" } else { "未检测到可用局域网 IPv4 地址" }
 
 function Ensure-LocalProxyBypass {
     <#
@@ -59,6 +77,26 @@ $script:Services = @{
 
 function Initialize-LauncherState {
     New-Item -ItemType Directory -Path $script:LogRoot -Force | Out-Null
+}
+
+function Get-RecentClientAccess {
+    if (-not (Test-Path -LiteralPath $script:ClientAccessFile)) { return @() }
+    try {
+        $payload = Get-Content -LiteralPath $script:ClientAccessFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        $clients = @($payload.clients | Where-Object {
+            $_ -and -not [string]::IsNullOrWhiteSpace([string]$_.ip) -and
+            -not [string]::IsNullOrWhiteSpace([string]$_.last_seen)
+        })
+        return @($clients | Sort-Object -Property last_seen -Descending | Select-Object -First 50)
+    }
+    catch {
+        return @()
+    }
+}
+
+function Format-ClientAccessTime($value) {
+    try { return ([DateTimeOffset]::Parse([string]$value)).ToLocalTime().ToString("MM-dd HH:mm:ss") }
+    catch { return "—" }
 }
 
 function Get-ProcessCommandLine([int]$ProcessId) {
@@ -262,8 +300,8 @@ function Show-LauncherWindow {
 
     $form = New-Object System.Windows.Forms.Form
     $form.Text = $script:Strings.title
-    $form.Size = New-Object System.Drawing.Size(680, 430)
-    $form.MinimumSize = New-Object System.Drawing.Size(680, 430)
+    $form.Size = New-Object System.Drawing.Size(760, 610)
+    $form.MinimumSize = New-Object System.Drawing.Size(760, 610)
     $form.StartPosition = "CenterScreen"
     $form.Font = New-Object System.Drawing.Font("Microsoft YaHei UI", 9)
     $form.BackColor = [System.Drawing.Color]::FromArgb(246, 248, 252)
@@ -286,7 +324,7 @@ function Show-LauncherWindow {
     function Add-ServiceRow([string]$serviceName, [int]$top, [string]$displayName, [string]$hint) {
         $panel = New-Object System.Windows.Forms.Panel
         $panel.Location = New-Object System.Drawing.Point(28, $top)
-        $panel.Size = New-Object System.Drawing.Size(610, 82)
+        $panel.Size = New-Object System.Drawing.Size(690, 82)
         $panel.BackColor = [System.Drawing.Color]::White
         $panel.BorderStyle = "FixedSingle"
         $form.Controls.Add($panel)
@@ -371,7 +409,7 @@ function Show-LauncherWindow {
 
     $openButton = New-Object System.Windows.Forms.Button
     $openButton.Text = $script:Strings.openWorkbench
-    $openButton.Location = New-Object System.Drawing.Point(406, 286)
+    $openButton.Location = New-Object System.Drawing.Point(486, 286)
     $openButton.Size = New-Object System.Drawing.Size(112, 36)
     $openButton.FlatStyle = "Flat"
     $openButton.Add_Click({ Start-Process $script:FrontendUrl })
@@ -379,26 +417,316 @@ function Show-LauncherWindow {
 
     $logsButton = New-Object System.Windows.Forms.Button
     $logsButton.Text = $script:Strings.openLogs
-    $logsButton.Location = New-Object System.Drawing.Point(526, 286)
+    $logsButton.Location = New-Object System.Drawing.Point(606, 286)
     $logsButton.Size = New-Object System.Drawing.Size(112, 36)
     $logsButton.FlatStyle = "Flat"
     $logsButton.Add_Click({ Initialize-LauncherState; Start-Process explorer.exe -ArgumentList ('"' + $script:LogRoot + '"') })
     $form.Controls.Add($logsButton)
 
+    $accessTitle = New-Object System.Windows.Forms.Label
+    $accessTitle.Text = "最近访问设备（本机与局域网）"
+    $accessTitle.Font = New-Object System.Drawing.Font("Microsoft YaHei UI", 10, [System.Drawing.FontStyle]::Bold)
+    $accessTitle.Location = New-Object System.Drawing.Point(31, 340)
+    $accessTitle.AutoSize = $true
+    $form.Controls.Add($accessTitle)
+
+    $clientList = New-Object System.Windows.Forms.ListView
+    $clientList.Location = New-Object System.Drawing.Point(28, 365)
+    $clientList.Size = New-Object System.Drawing.Size(690, 145)
+    $clientList.View = [System.Windows.Forms.View]::Details
+    $clientList.FullRowSelect = $true
+    $clientList.GridLines = $true
+    $clientList.MultiSelect = $false
+    [void]$clientList.Columns.Add("设备 IP", 220)
+    [void]$clientList.Columns.Add("首次访问", 160)
+    [void]$clientList.Columns.Add("最后访问", 160)
+    [void]$clientList.Columns.Add("请求次数", 100)
+    $form.Controls.Add($clientList)
+
+    $accessHint = New-Object System.Windows.Forms.Label
+    $accessHint.ForeColor = [System.Drawing.Color]::FromArgb(105, 115, 132)
+    $accessHint.Location = New-Object System.Drawing.Point(31, 515)
+    $accessHint.Size = New-Object System.Drawing.Size(680, 20)
+    $form.Controls.Add($accessHint)
+
     $footer = New-Object System.Windows.Forms.Label
-    $footer.Text = "访问地址：$($script:FrontendUrl)；同一局域网设备请使用此地址。"
+    $footer.Text = "本机：$($script:FrontendUrl)；同一局域网设备请使用：$($script:LanFrontendUrl)"
     $footer.ForeColor = [System.Drawing.Color]::FromArgb(105, 115, 132)
-    $footer.Location = New-Object System.Drawing.Point(31, 347)
-    $footer.Size = New-Object System.Drawing.Size(600, 30)
+    $footer.Location = New-Object System.Drawing.Point(31, 540)
+    $footer.Size = New-Object System.Drawing.Size(680, 30)
     $form.Controls.Add($footer)
+
+    $lastClientSignature = ""
+    function Update-ClientList {
+        $clients = @(Get-RecentClientAccess)
+        $signature = ($clients | ForEach-Object { "$($_.ip)|$($_.first_seen)|$($_.last_seen)|$($_.request_count)" }) -join "`n"
+        if ($signature -eq $lastClientSignature) { return }
+        $lastClientSignature = $signature
+        $clientList.BeginUpdate()
+        try {
+            $clientList.Items.Clear()
+            foreach ($client in $clients) {
+                $ip = [string]$client.ip
+                $displayIp = if ($ip -eq "127.0.0.1" -or $ip -eq "::1") { "$ip（本机）" } else { $ip }
+                $item = New-Object System.Windows.Forms.ListViewItem($displayIp)
+                [void]$item.SubItems.Add((Format-ClientAccessTime $client.first_seen))
+                [void]$item.SubItems.Add((Format-ClientAccessTime $client.last_seen))
+                [void]$item.SubItems.Add([string]$client.request_count)
+                [void]$clientList.Items.Add($item)
+            }
+        }
+        finally { $clientList.EndUpdate() }
+        $accessHint.Text = if ($clients.Count) { "仅保留最近 24 小时连接；每个 IP 最多每 5 秒更新一次。" } else { "暂无访问记录；同事打开局域网地址后会自动显示在这里。" }
+    }
 
     $timer = New-Object System.Windows.Forms.Timer
     $timer.Interval = 1500
-    $timer.Add_Tick({ Update-StatusLabels })
+    $timer.Add_Tick({ Update-StatusLabels; Update-ClientList })
     $timer.Start()
     Update-StatusLabels
+    Update-ClientList
+    if ($AutoStart) {
+        $form.Add_Shown({
+            try {
+                Invoke-All "restart"
+                Update-StatusLabels
+                Start-Process $script:FrontendUrl
+            }
+            catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:Strings.errorTitle, "OK", "Error") | Out-Null }
+        })
+    }
     [void]$form.ShowDialog()
     $timer.Stop()
+}
+
+function Get-HermesGatewayStates {
+    $profiles = @(
+        @{ Key = "supervisor"; Name = "投研主管" },
+        @{ Key = "financial";  Name = "财报研究员" },
+        @{ Key = "risk";       Name = "风险研究员" },
+        @{ Key = "valuation";  Name = "估值研究员" },
+        @{ Key = "macro";      Name = "宏观研究员" }
+    )
+    try {
+        $gateways = @(Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" -ErrorAction Stop |
+            Where-Object {
+                $_.CommandLine -match "hermes_cli\.main" -and $_.CommandLine -match "gateway run"
+            })
+    }
+    catch { $gateways = @() }
+    $states = @()
+    foreach ($profile in $profiles) {
+        $match = $gateways |
+            Where-Object { $_.CommandLine -match ("--profile\s+hzstock" + $profile.Key) } |
+            Select-Object -First 1
+        $states += [pscustomobject]@{
+            Name = $profile.Name
+            Key = $profile.Key
+            Running = [bool]$match
+            Pid = if ($match) { [int]$match.ProcessId } else { 0 }
+        }
+    }
+    return , $states
+}
+
+function Format-ConsoleStatusRow([string]$Name, [string]$StatusText, [ConsoleColor]$Color, [string]$Port, [string]$PidText) {
+    # 中文按显示宽度 2 补齐，保持三列在控制台里纵向对齐。
+    $nameWidth = 0
+    foreach ($char in $Name.ToCharArray()) { $nameWidth += if ([int]$char -gt 255) { 2 } else { 1 } }
+    $statusWidth = 0
+    foreach ($char in $StatusText.ToCharArray()) { $statusWidth += if ([int]$char -gt 255) { 2 } else { 1 } }
+    $namePad = " " * [Math]::Max(1, 22 - $nameWidth)
+    $statusPad = " " * [Math]::Max(1, 10 - $statusWidth)
+    Write-Host ("   " + $Name + $namePad) -NoNewline
+    Write-Host $StatusText -ForegroundColor $Color -NoNewline
+    Write-Host ($statusPad + $Port + "    " + $PidText)
+}
+
+function Enable-ConsoleVirtualTerminal {
+    # Windows 10+ conhost needs ENABLE_VIRTUAL_TERMINAL_PROCESSING before
+    # ANSI escape sequences take effect; Windows Terminal already enables it.
+    $signature = @'
+[DllImport("kernel32.dll", SetLastError = true)]
+public static extern IntPtr GetStdHandle(int nStdHandle);
+[DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool GetConsoleMode(IntPtr hConsoleHandle, out int lpMode);
+[DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool SetConsoleMode(IntPtr hConsoleHandle, int dwMode);
+'@
+    try {
+        $api = Add-Type -MemberDefinition $signature -Name "ConsoleVT" -Namespace "Hengzhi.Launcher" -PassThru
+        $handle = $api::GetStdHandle(-11)
+        $mode = 0
+        [void]$api::GetConsoleMode($handle, [ref]$mode)
+        return $api::SetConsoleMode($handle, $mode -bor 0x0004)
+    }
+    catch { return $false }
+}
+
+function Format-ConsoleStatusText([string]$Name, [string]$StatusText, [string]$ColorCode, [string]$Port, [string]$PidText) {
+    $esc = [char]27
+    $nameWidth = 0
+    foreach ($char in $Name.ToCharArray()) { $nameWidth += if ([int]$char -gt 255) { 2 } else { 1 } }
+    $namePad = " " * [Math]::Max(1, 22 - $nameWidth)
+    $statusWidth = 0
+    foreach ($char in $StatusText.ToCharArray()) { $statusWidth += if ([int]$char -gt 255) { 2 } else { 1 } }
+    $statusPad = " " * [Math]::Max(1, 10 - $statusWidth)
+    return "   " + $Name + $namePad + "$esc[${ColorCode}m" + $StatusText + "$esc[0m" + $statusPad + $Port + "    " + $PidText
+}
+
+function Show-ConsoleWindow {
+    <#
+    Plain console monitor: one black window that keeps showing service
+    states and stays open while the stack runs.  Services are independent
+    hidden processes, so closing this window never stops them.  Each frame
+    is one single write with inline ANSI colors and a cursor-home prefix,
+    so nothing flickers and nothing overlaps.
+    #>
+    Initialize-LauncherState
+    try { $host.UI.RawUI.WindowTitle = "恒值投资 · 服务监视器" } catch {}
+    if ($AutoStart) {
+        try {
+            Invoke-All "restart"
+            Start-Process $script:FrontendUrl
+        }
+        catch {
+            Write-Host ""
+            Write-Host ("  启动失败: " + $_.Exception.Message) -ForegroundColor Red
+        }
+    }
+    $esc = [char]27
+    $vt = Enable-ConsoleVirtualTerminal
+    if ($vt) { try { [Console]::Out.Write("$esc[?25l") } catch {} }
+    try { [Console]::Clear() } catch {}
+    $lastSize = ""
+
+    while ($true) {
+        $backend = Get-ServiceState "backend"
+        $frontend = Get-ServiceState "frontend"
+        $gateways = Get-HermesGatewayStates
+        $clients = @(Get-RecentClientAccess)
+
+        $lines = [System.Collections.Generic.List[string]]::new()
+        $lines.Add("")
+        $lines.Add("$esc[36m  ══════════════════════════════════════════════════════════$esc[0m")
+        $lines.Add("   恒值投资 · 服务监视器              $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
+        $lines.Add("$esc[36m  ══════════════════════════════════════════════════════════$esc[0m")
+        $lines.Add("")
+        foreach ($state in @($backend, $frontend)) {
+            $displayName = if ($state.Service -eq "backend") { "后端 API" } else { "前端 Web" }
+            $statusText = "○ 已停止"
+            $colorCode = "90"
+            if ($state.Status -in @("running", "workspace")) {
+                $statusText = "● 运行中"
+                $colorCode = "92"
+            }
+            elseif ($state.Status -eq "starting") {
+                $statusText = "◐ 启动中"
+                $colorCode = "93"
+            }
+            elseif ($state.Status -eq "conflict") {
+                $statusText = "▲ 端口冲突"
+                $colorCode = "91"
+            }
+            $pidText = if ($state.Pid -gt 0) { "PID $($state.Pid)" } else { "—" }
+            $lines.Add((Format-ConsoleStatusText $displayName $statusText $colorCode ([string]$state.Service.Port) $pidText))
+        }
+        $lines.Add("$esc[90m   ──────────────────────────────────────────────────────$esc[0m")
+        foreach ($gateway in $gateways) {
+            $statusText = "○ 未运行"
+            $colorCode = "90"
+            if ($gateway.Running) {
+                $statusText = "● 运行中"
+                $colorCode = "92"
+            }
+            $pidText = if ($gateway.Pid -gt 0) { "PID $($gateway.Pid)" } else { "—" }
+            $lines.Add((Format-ConsoleStatusText ($gateway.Name + "网关") $statusText $colorCode "—" $pidText))
+        }
+        $lines.Add("")
+        $lines.Add("   本机工作台:   $esc[96m" + $script:FrontendUrl + "$esc[0m")
+        $lines.Add("   局域网访问:   $esc[96m" + $script:LanFrontendUrl + "$esc[0m")
+        $lines.Add("   日志目录:     " + $script:LogRoot)
+        $lines.Add("")
+        $lines.Add("   最近访问设备（近 24 小时）")
+        if ($clients.Count) {
+            foreach ($client in ($clients | Select-Object -First 8)) {
+                $ip = [string]$client.ip
+                $displayIp = if ($ip -eq "127.0.0.1" -or $ip -eq "::1") { "$ip（本机）" } else { $ip }
+                $lastSeen = Format-ClientAccessTime $client.last_seen
+                $count = [string]$client.request_count
+                $ipWidth = 0
+                foreach ($char in $displayIp.ToCharArray()) { $ipWidth += if ([int]$char -gt 255) { 2 } else { 1 } }
+                $ipPad = " " * [Math]::Max(1, 28 - $ipWidth)
+                $lines.Add("     " + $displayIp + $ipPad + "最后访问 " + $lastSeen + "    次数 " + $count)
+            }
+            if ($clients.Count -gt 8) {
+                $lines.Add(("     …另有 {0} 台未列出" -f ($clients.Count - 8)))
+            }
+        }
+        else {
+            $lines.Add("     暂无记录；打开工作台后会自动记录。")
+        }
+        $lines.Add("")
+        $lines.Add("$esc[90m  ──────────────────────────────────────────────────────────$esc[0m")
+        $lines.Add("   $esc[97m[S]启动  [T]停止  [R]重启  [O]打开工作台  [L]日志目录  [Q]退出监视$esc[0m")
+        $lines.Add("$esc[90m   直接关闭本窗口不会停止服务。$esc[0m")
+
+        if ($vt) {
+            try {
+                $size = [string][Console]::WindowWidth + "x" + [string][Console]::WindowHeight
+                if ($size -ne $lastSize) {
+                    [Console]::Clear()
+                    $lastSize = $size
+                }
+                $width = [Math]::Max(60, [Console]::WindowWidth - 1)
+                $escPattern = [string][char]27 + "\[[0-9;]*m"
+                $frame = ($lines | ForEach-Object {
+                    $visible = ($_ -replace $escPattern, "")
+                    $_ + (" " * [Math]::Max(0, $width - $visible.Length))
+                }) -join "`r`n"
+                [Console]::Out.Write("$esc[H" + $frame)
+            }
+            catch { $vt = $false }
+        }
+        if (-not $vt) {
+            Clear-Host
+            foreach ($line in $lines) { Write-Host $line }
+        }
+
+        $deadline = (Get-Date).AddSeconds(2)
+        while ((Get-Date) -lt $deadline) {
+            try {
+                if (-not [Console]::KeyAvailable) {
+                    Start-Sleep -Milliseconds 150
+                    continue
+                }
+            }
+            catch {
+                Start-Sleep -Seconds 2
+                break
+            }
+            $key = [Console]::ReadKey($true)
+            $handled = $false
+            switch ([char]::ToUpper($key.KeyChar)) {
+                "S" { try { Invoke-All "start" } catch { Show-ConsoleError $_.Exception.Message }; $handled = $true }
+                "T" { try { Invoke-All "stop" } catch { Show-ConsoleError $_.Exception.Message }; $handled = $true }
+                "R" { try { Invoke-All "restart" } catch { Show-ConsoleError $_.Exception.Message }; $handled = $true }
+                "O" { Start-Process $script:FrontendUrl }
+                "L" { Start-Process explorer.exe -ArgumentList ('"' + $script:LogRoot + '"') }
+                "Q" {
+                    if ($vt) { try { [Console]::Out.Write("$esc[?25h$esc[0m") } catch {} }
+                    return
+                }
+            }
+            if ($handled) { break }
+        }
+    }
+}
+
+function Show-ConsoleError([string]$Message) {
+    Write-Host ""
+    Write-Host ("  操作失败: " + $Message) -ForegroundColor Red
+    Start-Sleep -Seconds 3
 }
 
 if ($Action -eq "install-shortcut") { Install-DesktopShortcut; exit 0 }
@@ -416,4 +744,5 @@ if ($Action -in @("start", "stop", "restart")) {
     @((Get-ServiceState "backend"), (Get-ServiceState "frontend")) | ConvertTo-Json
     exit 0
 }
+if ($Action -eq "console") { Show-ConsoleWindow; exit 0 }
 Show-LauncherWindow

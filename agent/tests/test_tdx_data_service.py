@@ -87,6 +87,23 @@ class PartialFundamentalClient(FakeTdxClient):
         return super().call(method, *args, **kwargs)
 
 
+class CapabilityClient(FakeTdxClient):
+    def call(self, method: str, *args, **kwargs):
+        if method == "get_stock_list" and args[0] == "102":
+            return [{"Code": "00700.HK", "Name": "腾讯控股"}, {"Code": "00941.HK", "Name": "中国移动"}]
+        if method == "get_stock_list" and args[0] == "103":
+            return [{"Code": "AAPL.US", "Name": "Apple"}, {"Code": "MSFT.US", "Name": "Microsoft"}]
+        if method == "get_pricevol":
+            return {code: {"LastClose": "100", "Now": "102" if code.startswith("007") else "101", "Volume": "20"} for code in args[0]}
+        if method == "get_market_data":
+            return {"000001": [{"open": 100, "close": 101, "datetime": "20260818"}]}
+        if method == "get_stock_info":
+            return {"Name": "测试公司", "J_zgb": "100"}
+        if method == "get_more_info":
+            return {"StaticPE_TTM": "20", "PB_MRQ": "2"}
+        return super().call(method, *args, **kwargs)
+
+
 def make_service(tmp_path: Path) -> TdxDataService:
     (tmp_path / "vipdoc" / "cw").mkdir(parents=True)
     return TdxDataService(TdxDataStore(tmp_path / "tdx.db"), FakeTdxClient(tmp_path))
@@ -168,7 +185,7 @@ def test_background_job_tracks_progress_and_keeps_module_state(tmp_path: Path) -
         if current and current["status"] not in {"queued", "running"}:
             break
         time.sleep(0.01)
-    assert current and current["status"] == "completed"
+    assert current and current["status"] == "completed", current["error"] if current else "missing job"
     state = {row["module"]: row for row in service.store.module_states()}["quote"]
     assert state["status"] == "ready"
     assert state["item_count"] == 2
@@ -244,3 +261,55 @@ def test_formula_scan_runs_in_background_and_persists_hits(tmp_path: Path) -> No
     assert current and current["status"] == "completed"
     assert current["progress"] == current["total"] == 2
     assert [item["code"] for item in current["results"]] == ["600519.SH"]
+
+
+def test_hk_and_us_capability_probe_uses_in_process_read_only_calls(tmp_path: Path) -> None:
+    service = TdxDataService(TdxDataStore(tmp_path / "tdx.db"), CapabilityClient(tmp_path))
+
+    hk = service.market_capabilities("HK")
+    us = service.market_capabilities("US")
+
+    assert hk["probe_symbol"] == "00700.HK"
+    assert us["probe_symbol"] == "AAPL.US"
+    assert hk["overall_status"] == us["overall_status"] == "ready"
+    assert [row["name"] for row in hk["checks"]] == ["quote", "daily_kline", "company_finance", "company_valuation"]
+    assert hk["universe_status"] == "pending"
+
+
+def test_capability_probe_rejects_unknown_market(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    with pytest.raises(ValueError, match="HK 或 US"):
+        service.market_capabilities("CN")
+
+
+def test_capability_probe_defers_while_a_tdx_refresh_is_running(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    service._active_job = "active-refresh"
+    service.store.create_job("active-refresh", "quote")
+    service.store.update_job("active-refresh", status="running")
+
+    result = service.market_capabilities("HK")
+
+    assert result["overall_status"] == "busy"
+    assert result["checks"] == []
+
+
+def test_market_catalog_refresh_publishes_isolated_hk_snapshot(tmp_path: Path) -> None:
+    service = TdxDataService(TdxDataStore(tmp_path / "tdx.db"), CapabilityClient(tmp_path))
+    job = service.start_market_catalog_refresh("HK")
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        current = service.store.get_job(job["id"])
+        if current and current["status"] not in {"queued", "running"}:
+            break
+        time.sleep(0.01)
+
+    assert current and current["status"] == "completed", current["error"] if current else "missing job"
+    assert service.store.count("hk_securities") == 2
+    assert service.store.count("hk_quotes") == 2
+    status = service.market_catalog_status("HK")
+    assert status["securities"] == status["quotes"] == 2
+    assert status["latest_refresh"]["market"] == "HK"
+    quotes = service.market_catalog_quotes("HK", limit=1)
+    assert quotes["total"] == 2
+    assert quotes["items"][0]["code"] == "00700.HK"

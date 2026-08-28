@@ -1,4 +1,4 @@
-"""Cached data pipeline for Macro -> 881 industry -> Leader Value Line V2."""
+"""Cached inputs and deterministic company scoring used by Value Line L3."""
 
 from __future__ import annotations
 
@@ -21,23 +21,22 @@ from .common.provenance import stable_fingerprint
 from .common.scoring import weighted_score
 from .macro_data import MacroDataService
 from .policy_data import PolicyDataService
-from .value.leader_score_v2 import FORMULA_VERSION as LEADER_VERSION, WEIGHTS as LEADER_WEIGHTS, calculate as leader_calculate
-from .value.macro_sector_v2 import FORMULA_VERSION as MATRIX_VERSION, describe as macro_sector_profile
-from .value.sector_score_v2 import CONTEXT_FIELDS as SECTOR_CONTEXT_FIELDS, FORMULA_VERSION as SECTOR_VERSION, WEIGHTS as SECTOR_WEIGHTS, calculate as sector_calculate
+from .value.leader_score_v2 import (
+    DIMENSION_METRIC_WEIGHTS,
+    FORMULA_VERSION as LEADER_VERSION,
+    METRIC_DEFINITIONS,
+    WEIGHTS as LEADER_WEIGHTS,
+    calculate as leader_calculate,
+)
 from .value_data_store import ValueDataStore, now
 from .value_market_history import BENCHMARK, ValueMarketHistoryService
 
 
-MODULE_ORDER = ("financial_history", "market_history", "macro", "policy", "scores")
+MODULE_ORDER = ("financial_history", "market_history", "macro", "policy")
 MODULE_LABELS = {
     "financial_history": "专业财务", "market_history": "历史行情",
-    "macro": "宏观", "policy": "政策", "scores": "评分",
+    "macro": "宏观", "policy": "政策",
 }
-SECTOR_DATASET = "value_sector_scores_v2"
-LEADER_DATASET = "value_leader_scores_v2"
-# Leader Score is an industry-internal percentile.  A candidate track exposes
-# its own Top5; it must not be used as a cross-industry quality ranking.
-TOTAL_LEADER_POOL_PER_TRACK = 5
 INDUSTRY_DATASET = "value_industries"
 
 
@@ -223,18 +222,6 @@ class ValueLineService:
     def refresh_policy(self) -> dict[str, Any]:
         return PolicyDataService(self.data_store).refresh(self.industries(live_if_missing=True))
 
-    def refresh_scores(self, as_of: str) -> dict[str, Any]:
-        sectors, leaders, quality = self._calculate_scores(as_of)
-        self.cache.upsert_records(SECTOR_DATASET, [
-            {"key": f"{as_of}:{row['sector_code']}", "category": as_of, "name": row["sector_name"], "payload": row}
-            for row in sectors
-        ])
-        self.cache.upsert_records(LEADER_DATASET, [
-            {"key": f"{as_of}:{row['sector_code']}:{row['symbol']}", "category": f"{as_of}:{row['sector_code']}", "name": row["name"], "payload": row}
-            for row in leaders
-        ])
-        return {"status": "ready" if any(row["score"] is not None for row in sectors) else "partial", "sectors": len(sectors), "leaders": len(leaders), "quality": quality}
-
     def _load_financials(self, as_of: str) -> dict[str, list[dict[str, Any]]]:
         rows = self.cache.list_records("financial_history", limit=250_000)["items"]
         latest_by_report: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
@@ -252,206 +239,6 @@ class ValueLineService:
         for values in result.values():
             values.sort(key=lambda row: (row["report_date"], row["announcement_date"]))
         return result
-
-    def _calculate_scores(self, as_of: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-        membership = self.data_store.memberships_as_of(as_of)
-        if membership["status"] != "ready":
-            raise RuntimeError("membership_history_unavailable")
-        macro = self.data_store.get_macro_snapshot(as_of)
-        history_service = ValueMarketHistoryService()
-        history = history_service.read(as_of)
-        if history.empty:
-            raise RuntimeError("market_history_unavailable")
-        fundamentals = {row["key"]: row["payload"] for row in self.cache.list_records("fundamentals", limit=10_000)["items"]}
-        quotes = {row["key"]: row["payload"] for row in self.cache.list_records("quotes", limit=10_000)["items"]}
-        financials = self._load_financials(as_of)
-        member_map: dict[str, list[str]] = defaultdict(list)
-        names: dict[str, str] = {}
-        for row in membership["items"]:
-            member_map[row["sector_code"]].append(row["symbol"])
-            names[row["sector_code"]] = row["sector_name"]
-        market_context = history_service.resolve_complete_market_snapshot(
-            history=history,
-            symbols=sorted({symbol for members in member_map.values() for symbol in members}),
-            requested_as_of=as_of,
-        )
-        # All market-derived sector inputs end on one complete snapshot.
-        # Financial PIT below intentionally remains bound to requested as_of.
-        history = history[history["trade_date"] <= pd.Timestamp(market_context["market_data_as_of"])]
-        price_map: dict[str, pd.DataFrame] = {
-            str(symbol): frame.sort_values("trade_date") for symbol, frame in history.groupby("symbol")
-        }
-        benchmark_frame = price_map.get(BENCHMARK)
-        benchmark_closes = list(benchmark_frame["close"].astype(float)) if benchmark_frame is not None else []
-        benchmark_returns = {period: _return(benchmark_closes, period) for period in (5, 20, 60)}
-        sector_raw: list[dict[str, Any]] = []
-        sector_meta: list[dict[str, Any]] = []
-        policy_service = PolicyDataService(self.data_store)
-        market_latest_amount = 0.0
-        for symbol, frame in price_map.items():
-            if symbol != BENCHMARK and not frame.empty:
-                market_latest_amount += float(frame.iloc[-1].get("amount") or 0)
-        for sector_code in sorted(member_map):
-            members = sorted(set(member_map[sector_code]))
-            returns: dict[int, list[float]] = {5: [], 20: [], 60: []}
-            latest_amounts: list[float] = []
-            amount_accel_5: list[float] = []
-            amount_accel_20: list[float] = []
-            vols20: list[float] = []
-            vols60: list[float] = []
-            drawdowns: list[float] = []
-            member_20d: list[float] = []
-            active = 0
-            for symbol in members:
-                frame = price_map.get(symbol)
-                if frame is None or frame.empty:
-                    continue
-                closes = list(frame["close"].astype(float))
-                amounts = [float(value or 0) for value in frame["amount"].tolist()]
-                symbol_returns: dict[int, float | None] = {}
-                for period in returns:
-                    value = _return(closes, period)
-                    symbol_returns[period] = value
-                    if value is not None:
-                        returns[period].append(value)
-                if symbol_returns[20] is not None:
-                    member_20d.append(float(symbol_returns[20]))
-                latest_amounts.append(amounts[-1] if amounts else 0)
-                if len(amounts) >= 10 and _mean(amounts[-10:-5]) not in {None, 0}:
-                    amount_accel_5.append((_mean(amounts[-5:]) or 0) / (_mean(amounts[-10:-5]) or 1))
-                if len(amounts) >= 40 and _mean(amounts[-40:-20]) not in {None, 0}:
-                    amount_accel_20.append((_mean(amounts[-20:]) or 0) / (_mean(amounts[-40:-20]) or 1))
-                if len(amounts) >= 20 and amounts[-1] > statistics.median(amounts[-20:]):
-                    active += 1
-                if (value := _volatility(closes, 20)) is not None:
-                    vols20.append(value)
-                if (value := _volatility(closes, 60)) is not None:
-                    vols60.append(value)
-                if (value := _max_drawdown(closes)) is not None:
-                    drawdowns.append(value)
-            latest_annual = []
-            for symbol in members:
-                annual = [row for row in financials.get(symbol, []) if row.get("period_type") == "annual"]
-                if annual:
-                    latest_annual.append(annual[-1])
-            revenue_yoy = [row.get("revenue_yoy") for row in latest_annual]
-            profit_yoy = [row.get("net_profit_yoy") for row in latest_annual]
-            roe_improved = []
-            for symbol in members:
-                annual = [row for row in financials.get(symbol, []) if row.get("period_type") == "annual"]
-                if len(annual) >= 2 and annual[-1].get("roe") is not None and annual[-2].get("roe") is not None:
-                    roe_improved.append(annual[-1]["roe"] > annual[-2]["roe"])
-            pe = [fundamentals.get(symbol, {}).get("pe_ttm") for symbol in members]
-            pb = [fundamentals.get(symbol, {}).get("pb_mrq") for symbol in members]
-            dy = [fundamentals.get(symbol, {}).get("dividend_yield") for symbol in members]
-            policy = policy_service.policy_fit(sector_code, as_of)
-            macro_profile = macro_sector_profile(names[sector_code], dict(macro.get("axes") or {})) if macro else None
-            raw = {
-                "relative_5d": (_median(returns[5]) - benchmark_returns[5]) if _median(returns[5]) is not None and benchmark_returns[5] is not None else None,
-                "relative_20d": (_median(returns[20]) - benchmark_returns[20]) if _median(returns[20]) is not None and benchmark_returns[20] is not None else None,
-                "relative_60d": (_median(returns[60]) - benchmark_returns[60]) if _median(returns[60]) is not None and benchmark_returns[60] is not None else None,
-                "up_breadth": sum(value > 0 for value in member_20d) / len(member_20d) * 100 if member_20d else None,
-                "revenue_yoy_median": _median(revenue_yoy), "profit_yoy_median": _median(profit_yoy),
-                "positive_profit_growth": sum((value or 0) > 0 for value in profit_yoy if value is not None) / sum(value is not None for value in profit_yoy) * 100 if any(value is not None for value in profit_yoy) else None,
-                "roe_improvement": sum(roe_improved) / len(roe_improved) * 100 if roe_improved else None,
-                "pe_median": _median(pe, positive=True), "pb_median": _median(pb, positive=True), "dividend_yield_median": _median(dy),
-                "turnover_share": sum(latest_amounts) / market_latest_amount * 100 if market_latest_amount else None,
-                "volume_acceleration": _mean([_mean(amount_accel_5), _mean(amount_accel_20)]),
-                "active_breadth": active / len(members) * 100 if members else None,
-                "volatility_20d": _median(vols20), "volatility_60d": _median(vols60),
-                "max_drawdown": _median(drawdowns), "return_dispersion": statistics.pstdev(member_20d) if len(member_20d) >= 2 else None,
-            }
-            sector_raw.append(raw)
-            sector_meta.append({
-                "sector_code": sector_code, "sector_name": names[sector_code], "members": members,
-                "member_coverage": len({symbol for symbol in members if symbol in price_map}) / len(members) if members else 0,
-                "macro_fit": macro_profile["score"] if macro_profile else None,
-                "macro_group": macro_profile["group"] if macro_profile else "unavailable",
-                "macro_group_name": macro_profile["group_name"] if macro_profile else "不可用",
-                "macro_exposure": macro_profile["exposure"] if macro_profile else {},
-                "macro_stance": macro_profile["stance"] if macro_profile else "unavailable",
-                "macro_drivers": macro_profile["drivers"] if macro_profile else [],
-                "macro_matrix_explicit": bool(macro_profile and macro_profile["explicit"]),
-                "policy_fit": policy["score"], "policy_events": policy["events"],
-            })
-        directions = {
-            "relative_5d": True, "relative_20d": True, "relative_60d": True, "up_breadth": True,
-            "revenue_yoy_median": True, "profit_yoy_median": True, "positive_profit_growth": True, "roe_improvement": True,
-            "pe_median": False, "pb_median": False, "dividend_yield_median": True,
-            "turnover_share": True, "volume_acceleration": True, "active_breadth": True,
-            "volatility_20d": False, "volatility_60d": False, "max_drawdown": False, "return_dispersion": False,
-        }
-        normalized = cross_sectional_percentiles(sector_raw, directions)
-        component_specs = {
-            "momentum": ({"relative_5d": .20, "relative_20d": .30, "relative_60d": .30, "up_breadth": .20}),
-            "earnings_momentum": ({"revenue_yoy_median": .30, "profit_yoy_median": .30, "positive_profit_growth": .25, "roe_improvement": .15}),
-            "valuation": ({"pe_median": .40, "pb_median": .30, "dividend_yield_median": .30}),
-            "capital_flow_proxy": ({"turnover_share": .40, "volume_acceleration": .40, "active_breadth": .20}),
-            "risk_quality": ({"volatility_20d": .30, "volatility_60d": .25, "max_drawdown": .30, "return_dispersion": .15}),
-        }
-        sector_results: list[dict[str, Any]] = []
-        for index, meta in enumerate(sector_meta):
-            components = {name: weighted_score(normalized[index], weights, minimum_coverage=.50).score for name, weights in component_specs.items()}
-            result = sector_calculate(components)
-            effective_score = result.score if meta["member_coverage"] >= .80 else None
-            effective_status = result.status if meta["member_coverage"] >= .80 else "insufficient_data"
-            effective_coverage = min(result.coverage, meta["member_coverage"])
-            missing = [key for key in SECTOR_WEIGHTS if components.get(key) is None]
-            provenance = stable_fingerprint({
-                "as_of": as_of, "market_data_as_of": market_context["market_data_as_of"],
-                "sector": meta["sector_code"], "raw": sector_raw[index], "components": components,
-                "formula": SECTOR_VERSION, "matrix": MATRIX_VERSION, "membership_as_of": membership["as_of"],
-            })
-            sector_results.append({
-                **meta, "as_of": as_of, "requested_as_of": as_of,
-                "market_data_as_of": market_context["market_data_as_of"],
-                "financial_data_as_of": as_of, "market_data_status": market_context["market_data_status"],
-                "market_data_coverage": market_context["market_data_coverage"],
-                "requested_market_data_coverage": market_context["requested_market_data_coverage"],
-                "score": effective_score, "base_score": effective_score,
-                "coverage": effective_coverage, "confidence": _confidence(effective_coverage), "status": effective_status,
-                "raw_features": sector_raw[index], "normalized_features": normalized[index], "component_scores": components,
-                "components": _component_details(components, components, SECTOR_WEIGHTS, result),
-                "missing_fields": missing, "formula_version": SECTOR_VERSION, "matrix_version": MATRIX_VERSION,
-                "ranking_basis": list(SECTOR_WEIGHTS),
-                "context_fields": {
-                    "macro_fit": meta["macro_fit"],
-                    "policy_fit": meta["policy_fit"],
-                    "available": [name for name in SECTOR_CONTEXT_FIELDS if meta.get(name) is not None],
-                    "missing": [name for name in SECTOR_CONTEXT_FIELDS if meta.get(name) is None],
-                },
-                "sources": ["TongDaXin", "AKShare", "国家统计局", "中国人民银行"],
-                "provenance_key": provenance,
-            })
-        sector_results.sort(key=lambda row: (row["score"] is None, -(row["score"] or 0), row["sector_code"]))
-        for rank, row in enumerate(sector_results, 1):
-            row["rank"] = rank
-        macro_order = sorted(
-            sector_results,
-            key=lambda row: (row["macro_fit"] is None, -(row["macro_fit"] or 0), row["sector_code"]),
-        )
-        macro_ranks = {row["sector_code"]: rank for rank, row in enumerate(macro_order, 1)}
-        for row in sector_results:
-            row["macro_rank"] = macro_ranks[row["sector_code"]]
-        leaders: list[dict[str, Any]] = []
-        leader_coverages: list[float] = []
-        missing_reasons: Counter[str] = Counter()
-        for sector in sector_results:
-            rows = self._leader_rows(
-                sector["sector_code"], sector["sector_name"], sector["members"], as_of,
-                financials, fundamentals, quotes, market_context,
-            )
-            leaders.extend(rows)
-            for row in rows:
-                leader_coverages.append(row["coverage"])
-                missing_reasons.update(row["missing_fields"])
-        quality = {
-            "researchable": len(leader_coverages),
-            "coverage_ge_085": sum(value >= .85 for value in leader_coverages) / len(leader_coverages) if leader_coverages else 0,
-            "target_met": bool(leader_coverages) and sum(value >= .85 for value in leader_coverages) / len(leader_coverages) >= .85,
-            "missing_reason_distribution": dict(missing_reasons),
-        }
-        return sector_results, leaders, quality
 
     def _leader_rows(
         self,
@@ -513,20 +300,17 @@ class ValueLineService:
             statuses.append({"revenue_cagr": revenue_cagr["status"], "profit_cagr": profit_cagr["status"]})
         if not candidates:
             return []
-        directions = {key: key not in {"pe", "pb"} for key in candidates[0]}
-        directions["pe"], directions["pb"] = False, False
-        normalized = cross_sectional_percentiles(candidates, directions)
-        specs = {
-            "industry_position": {"market_cap": .40, "revenue": .30, "net_profit": .30},
-            "profitability": {"roe": .40, "gross_margin": .30, "net_margin": .30},
-            "growth_stability": {"revenue_cagr": .30, "profit_cagr": .30, "growth_consistency": .20, "growth_low_volatility": .20},
-            "cash_flow": {"cash_conversion": .30, "ocf_margin": .30, "positive_ocf_years": .20, "ocf_trend": .20},
-            "valuation": {"pe": .40, "pb": .30, "dividend_yield": .30},
-            "governance_risk": {"debt_safety": .40, "shareholder_stability": .30, "low_beta": .30},
+        directions = {
+            key: bool(METRIC_DEFINITIONS[key]["higher_is_better"])
+            for key in candidates[0]
         }
+        normalized = cross_sectional_percentiles(candidates, directions)
         result_rows = []
         for index, identity in enumerate(identities):
-            components = {name: weighted_score(normalized[index], weights, minimum_coverage=.50).score for name, weights in specs.items()}
+            components = {
+                name: weighted_score(normalized[index], weights, minimum_coverage=.50).score
+                for name, weights in DIMENSION_METRIC_WEIGHTS.items()
+            }
             score = leader_calculate(components)
             missing = [key for key in LEADER_WEIGHTS if components.get(key) is None]
             provenance = stable_fingerprint({
@@ -592,24 +376,14 @@ class ValueLineService:
                 elif module == "policy":
                     value = self.refresh_policy()
                 else:
-                    value = self.refresh_scores(as_of)
-                    # Persist the refreshed V2 snapshot for the research workbench.
-                    # The bridge is intentionally part of the score refresh so the
-                    # sector page and downstream research never drift apart.
-                    from src.value_workspace.service import ValueWorkspaceService
-                    workspace = ValueWorkspaceService()
-                    try:
-                        snapshot = workspace.materialize_v2_snapshot(as_of=as_of, force_refresh=True)
-                        value["workbench_run_id"] = (snapshot.get("run") or {}).get("id")
-                    finally:
-                        workspace.close()
+                    raise ValueError(f"unsupported value input module: {module}")
                 results[module] = value
                 state = "partial" if value.get("status") == "partial" else "ready"
                 self.cache.set_module_state(
                     module, status=state, progress=1, total=1,
                     item_count=int(
                         value.get("item_count") or value.get("rows") or value.get("series_rows")
-                        or value.get("sectors") or value.get("events") or 0
+                        or value.get("events") or 0
                     ),
                     message=f"{MODULE_LABELS[module]}更新完成", metadata_json=value,
                     updated_at=utc_now(), last_success_at=utc_now(), error="",
@@ -635,13 +409,9 @@ class ValueLineService:
         states = {row["module"]: row for row in self.cache.module_states()}
         package = FinancialHistoryService(self.cache, get_tdx_service().client).package_status()
         modules = [{"code": code, "label": MODULE_LABELS[code], **states.get(code, {})} for code in MODULE_ORDER]
-        latest_scores = self.cache.list_records(SECTOR_DATASET, limit=100_000)["items"]
-        latest_score_as_of = max(
-            (str(row["payload"].get("as_of") or "") for row in latest_scores), default="",
-        ) or None
         return {
             "professional_finance": package, "modules": modules,
-            "recent_jobs": self.data_store.recent_jobs(), "latest_score_as_of": latest_score_as_of,
+            "recent_jobs": self.data_store.recent_jobs(),
             "schedule_template": {
                 "name": "价值线工作日收盘后更新", "cron": "0 17 * * 1-5",
                 "timezone": "Asia/Shanghai", "modules": list(MODULE_ORDER), "enabled": False,
@@ -653,84 +423,6 @@ class ValueLineService:
 
     def policies(self, status: str | None, limit: int) -> list[dict[str, Any]]:
         return self.data_store.policies(status, limit)
-
-    def sectors(self, as_of: str | None = None, *, status: str | None = None, query: str = "") -> dict[str, Any]:
-        target = as_of or self.status().get("latest_score_as_of")
-        if not target:
-            return {"as_of": as_of, "items": [], "total": 0}
-        items = [row["payload"] for row in self.cache.list_records(SECTOR_DATASET, category=target, limit=500)["items"]]
-        if status:
-            items = [row for row in items if row.get("status") == status]
-        if query:
-            needle = query.lower()
-            items = [row for row in items if needle in str(row.get("sector_name") or "").lower() or needle in str(row.get("sector_code") or "").lower()]
-        items.sort(key=lambda row: (row.get("score") is None, -(row.get("score") or 0), row.get("sector_code") or ""))
-        return {"as_of": target, "items": items, "total": len(items), "formula_version": SECTOR_VERSION}
-
-    def leaders(
-        self,
-        sector_code: str | None = None,
-        as_of: str | None = None,
-        candidate_track_limit: int | None = None,
-    ) -> dict[str, Any]:
-        target = as_of or self.status().get("latest_score_as_of")
-        if not target:
-            return {"as_of": as_of, "sector_code": sector_code, "items": [], "total": 0}
-        category = f"{target}:{sector_code}" if sector_code else None
-        # Keep the current snapshot intact when this table contains multiple
-        # daily runs.  Filtering a 10k page after reading it can otherwise
-        # silently omit older rows from today's complete leader pool.
-        cached = self.cache.list_records(LEADER_DATASET, category=category, limit=100_000)["items"]
-        items = [
-            row["payload"] for row in cached
-            if str(row["payload"].get("as_of") or row["payload"].get("data_as_of") or "") == target
-        ]
-        if sector_code:
-            items = [
-                row for row in items
-                if row.get("score") is not None and int(row.get("rank") or 1) <= TOTAL_LEADER_POOL_PER_TRACK
-            ]
-            items.sort(key=lambda row: (row.get("rank") or 10_000, -(row.get("score") or 0), row.get("symbol") or ""))
-        else:
-            sector_ranks = {
-                str(row["payload"].get("sector_code") or ""): int(row["payload"].get("rank") or 10_000)
-                for row in self.cache.list_records(SECTOR_DATASET, category=target, limit=500)["items"]
-            }
-            # Preserve the industry context: Leader Score orders companies
-            # inside one 881 industry only, while Sector Score orders tracks.
-            items = [
-                {**row, "candidate_sector_rank": sector_ranks.get(str(row.get("sector_code") or ""), 10_000)}
-                for row in items
-                if row.get("score") is not None
-                and (candidate_track_limit is None or sector_ranks.get(str(row.get("sector_code") or ""), 10_000) <= candidate_track_limit)
-            ]
-            items.sort(key=lambda row: (
-                row["candidate_sector_rank"], row.get("rank") or 10_000, row.get("symbol") or "",
-            ))
-            # Be defensive if a future membership source assigns a company to
-            # more than one track: retain its highest-priority appearance only.
-            unique_items: list[dict[str, Any]] = []
-            seen_symbols: set[str] = set()
-            for row in items:
-                symbol = str(row.get("symbol") or "")
-                if symbol and symbol in seen_symbols:
-                    continue
-                if symbol:
-                    seen_symbols.add(symbol)
-                unique_items.append(row)
-            items = [row for row in unique_items if int(row.get("rank") or 10_000) <= TOTAL_LEADER_POOL_PER_TRACK]
-        return {
-            "as_of": target, "sector_code": sector_code, "items": items, "total": len(items),
-            "formula_version": LEADER_VERSION,
-            "pool_rule": {
-                "leaders_per_candidate_track": TOTAL_LEADER_POOL_PER_TRACK,
-                "pool_capacity": candidate_track_limit * TOTAL_LEADER_POOL_PER_TRACK if candidate_track_limit else None,
-                "candidate_track_limit": candidate_track_limit,
-                "scored_only": True,
-                "deduplicated_by_symbol": True,
-                "ordering": "sector_rank_then_leader_rank",
-            },
-        }
 
 
 _service: ValueLineService | None = None

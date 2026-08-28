@@ -35,7 +35,7 @@ describe("双策略 Layout", () => {
     window.localStorage.clear();
   });
 
-  it("shows six business entries, three system entries, search and main landmark", () => {
+  it("shows six business entries, three system entries and the main landmark", () => {
     renderLayout();
     expect(screen.getByRole("complementary", { name: "恒值投资侧边栏" })).toBeInTheDocument();
     const primary = screen.getByRole("navigation", { name: "主导航" });
@@ -44,7 +44,7 @@ describe("双策略 Layout", () => {
     expect(within(utility).getAllByRole("link")).toHaveLength(3);
     expect(within(primary).getByRole("link", { name: "价值投资" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "恒值投资" })).toHaveAttribute("href", "/value");
-    expect(screen.getByRole("textbox", { name: "搜索证券" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "搜索证券" })).not.toBeInTheDocument();
     expect(screen.getByRole("main")).toHaveAttribute("id", "main");
     expect(screen.getByText("跳到主要内容")).toHaveAttribute("href", "#main");
   });
@@ -64,7 +64,7 @@ describe("双策略 Layout", () => {
   it.each([
     ["/market/ranks", "市场行情", "市场行情二级导航", "行情榜单"],
     ["/market/sectors", "市场行情", "市场行情二级导航", "板块行情"],
-    ["/value", "价值投资", "价值投资二级导航", "行业龙头"],
+    ["/value", "价值投资", "价值投资二级导航", "低估龙头池"],
     ["/emotion/swing", "情绪交易", "情绪交易二级导航", "波段候选"],
     ["/global", "全球策略", "全球策略二级导航", "全球全景"],
     ["/simulation/compare", "模拟验证", "模拟验证二级导航", "归因对比"],
@@ -97,7 +97,9 @@ describe("双策略 Layout", () => {
     expect(within(utility).getByRole("link", { name: "设置" })).toHaveAttribute("href", "/settings");
     expect(within(utility).getByRole("link", { name: "研究员设置" })).toHaveAttribute("href", "/settings/researchers");
     expect(screen.getAllByRole("link", { name: "设置" })).toHaveLength(1);
-    expect(within(screen.getByRole("navigation", { name: "数据与模型二级导航" })).getAllByRole("link")).toHaveLength(6);
+    const modelsNavigation = within(screen.getByRole("navigation", { name: "数据与模型二级导航" }));
+    expect(modelsNavigation.getAllByRole("link")).toHaveLength(7);
+    expect(modelsNavigation.getByRole("link", { name: "价值线资料" })).toHaveAttribute("href", "/models/value-line-data");
   });
 
   it("moves researcher settings out of AI tabs and into the system navigation", () => {
@@ -128,10 +130,10 @@ describe("双策略 Layout", () => {
     expect(screen.queryByText("最近会话")).not.toBeInTheDocument();
   });
 
-  it("supports market switching without exposing a language selector", () => {
+  it("keeps market selection inside business pages instead of the global shell", () => {
     renderLayout("/market/overview");
-    fireEvent.click(screen.getByRole("button", { name: "港股" }));
-    expect(window.localStorage.getItem("hengzhi-market")).toBe("HK");
+    expect(screen.queryByRole("button", { name: "港股" })).not.toBeInTheDocument();
+    expect(window.localStorage.getItem("hengzhi-market")).toBeNull();
     expect(screen.queryByRole("button", { name: "语言" })).not.toBeInTheDocument();
   });
 

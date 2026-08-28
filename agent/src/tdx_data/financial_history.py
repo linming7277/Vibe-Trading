@@ -20,9 +20,13 @@ from .store import TdxDataStore
 
 
 FINANCIAL_HISTORY_DATASET = "financial_history"
-FORMULA_INPUT_VERSION = "tdx-professional-finance-v1.0.0"
+FORMULA_INPUT_VERSION = "tdx-professional-finance-v1.1.0"
 DEFAULT_FIELDS = (
-    "FN40", "FN63", "FN72", "FN114", "FN183", "FN184", "FN197",
+    # Balance-sheet fields below are deliberately kept in the PIT history,
+    # rather than reading today's fundamental snapshot in later risk rules.
+    # This makes receivables, inventory and liquidity checks reproducible at
+    # the report announcement date.
+    "FN8", "FN11", "FN17", "FN21", "FN40", "FN54", "FN63", "FN69", "FN72", "FN114", "FN183", "FN184", "FN197",
     "FN199", "FN202", "FN210", "FN228", "FN230", "FN232", "FN234",
     "FN238", "FN242", "FN271", "FN281", "FN314", "FN327", "FN329",
 )
@@ -40,8 +44,14 @@ class FinancialField:
 # Confirmed against the official TQ field table and sampled from the local
 # 2020-2026 professional-finance package on 2026-08-13.
 FIELD_MAP: dict[str, FinancialField] = {
+    "FN8": FinancialField("FN8", "cash_and_equivalents", "CNY"),
+    "FN11": FinancialField("FN11", "accounts_receivable", "CNY"),
+    "FN17": FinancialField("FN17", "inventory", "CNY", "non_financial"),
+    "FN21": FinancialField("FN21", "current_assets", "CNY"),
     "FN40": FinancialField("FN40", "total_assets", "CNY"),
+    "FN54": FinancialField("FN54", "current_liabilities", "CNY"),
     "FN63": FinancialField("FN63", "liabilities", "CNY"),
+    "FN69": FinancialField("FN69", "non_current_liabilities", "CNY"),
     "FN72": FinancialField("FN72", "equity", "CNY"),
     "FN114": FinancialField("FN114", "capex", "CNY"),
     "FN183": FinancialField("FN183", "revenue_yoy", "percent"),
@@ -122,6 +132,13 @@ def normalize_financial_row(symbol: str, row: dict[str, Any], raw_version: str) 
         "parent_equity": _number(row.get("FN271")),
         "assets": _number(row.get("FN40")),
         "liabilities": _number(row.get("FN63")),
+        "cash_and_equivalents": _number(row.get("FN8")),
+        "accounts_receivable": _number(row.get("FN11")),
+        "inventory": _number(row.get("FN17")),
+        "current_assets": _number(row.get("FN21")),
+        "current_liabilities": _number(row.get("FN54")),
+        "non_current_liabilities": _number(row.get("FN69")),
+        "interest_bearing_debt_ratio": _number(row.get("FN327")),
         "gross_profit": gross_profit,
         "gross_margin": gross_margin,
         "net_margin": _number(row.get("FN199")),
@@ -260,12 +277,14 @@ class FinancialHistoryService:
         if package["status"] != "ready":
             raise RuntimeError("needs_professional_finance")
         universe = sorted(set(symbol.upper() for symbol in symbols if symbol))
-        records: list[dict[str, Any]] = []
+        item_count = 0
         covered: set[str] = set()
         errors: list[str] = []
         invalid_rows = 0
         for offset in range(0, len(universe), batch_size):
             batch = universe[offset:offset + batch_size]
+            batch_records: list[dict[str, Any]] = []
+            batch_covered: set[str] = set()
             try:
                 result = self.client.call(
                     "get_financial_data", stock_list=batch, field_list=list(DEFAULT_FIELDS),
@@ -274,6 +293,15 @@ class FinancialHistoryService:
             except Exception as exc:
                 result = {}
                 errors.append(f"{batch[0]}-{batch[-1]}:{exc}")
+            finally:
+                # The vendor bridge is a local DLL process.  Releasing the
+                # handle after a bounded batch avoids carrying a stale session
+                # through a long all-pool refresh; the next batch reconnects
+                # lazily.  This never affects records already persisted.
+                try:
+                    self.client.close()
+                except Exception:
+                    pass
             for symbol in batch:
                 rows, invalid = _financial_rows(result.get(symbol) if isinstance(result, dict) else None)
                 invalid_rows += invalid
@@ -281,18 +309,28 @@ class FinancialHistoryService:
                     normalized = normalize_financial_row(symbol, raw, str(package["raw_version"]))
                     if not normalized:
                         continue
-                    records.append({
+                    batch_records.append({
                         "key": f"{symbol}:{normalized['report_date']}:{normalized['announcement_date']}",
                         "category": symbol, "name": symbol, "payload": normalized,
                     })
-                    covered.add(symbol)
+                    batch_covered.add(symbol)
+            # Persist every completed batch.  The research universe can be
+            # large and a local TDX bridge may be interrupted; retaining
+            # earlier batches makes the next run safely resumable because
+            # records are upserted by symbol/report/announcement key.
+            if batch_records:
+                try:
+                    self.store.upsert_records(FINANCIAL_HISTORY_DATASET, batch_records)
+                    item_count += len(batch_records)
+                    covered.update(batch_covered)
+                except Exception as exc:
+                    errors.append(f"{batch[0]}-{batch[-1]}:store:{type(exc).__name__}:{exc}")
             if progress:
                 progress(min(offset + len(batch), len(universe)), len(universe), "更新研究池专业财务")
-        self.store.upsert_records(FINANCIAL_HISTORY_DATASET, records)
         coverage = len(covered) / len(universe) if universe else 0.0
         return {
             "status": "ready" if coverage == 1 and not errors else "partial",
-            "item_count": len(records), "symbols": len(covered), "total_symbols": len(universe),
+            "item_count": item_count, "symbols": len(covered), "total_symbols": len(universe),
             "coverage": coverage, "raw_version": package["raw_version"],
             "invalid_rows": invalid_rows, "batch_errors": errors[:50],
         }

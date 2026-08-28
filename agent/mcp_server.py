@@ -495,6 +495,383 @@ def _risk_tier_from_text(value: str):
 
 
 @mcp.tool
+def ask_investment_research_supervisor(question: str, as_of: str = "") -> str:
+    """Ask the local Investment Research Supervisor using saved, read-only research data.
+
+    The supervisor resolves A-share companies, classifies the question, and
+    reads the same persisted financial, business, valuation, risk, and
+    low-value-leader snapshots used by the web application.  It does not run
+    a new research job, modify research data, or produce trading instructions.
+
+    Args:
+        question: The user's complete Chinese research question. Include the
+            company name or six-digit A-share code for company questions.
+        as_of: Optional point-in-time date in YYYY-MM-DD format. Leave blank to
+            use the latest qualified TongDaXin close snapshot.
+    """
+    text = str(question or "").strip()
+    if not text:
+        return _json_error("question is required", error_type="validation")
+    try:
+        from dataclasses import asdict
+
+        from src.investment_research_supervisor import (
+            get_investment_research_supervisor_service,
+        )
+
+        brief = get_investment_research_supervisor_service().handle_question(
+            question=text,
+            as_of=_blank_to_none(as_of),
+        )
+        return _json_ok(brief=asdict(brief))
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        return _json_error(str(exc), error_type="supervisor_unavailable")
+
+
+@mcp.tool
+def compose_company_research_summary(question: str, as_of: str = "") -> str:
+    """Compose one comprehensive company research summary from saved research only.
+
+    Unlike calling the three researcher tools separately and stitching their
+    replies, this renders a single deterministic template (supervisor-composite-v1)
+    with a conclusion line, a key-numbers table, per-researcher sections
+    (financial / valuation / risk), and a tiered data-boundary section that
+    separates "not integrated", "missing for this company", "research not
+    established", and "not materialized for non-pool companies".  It never
+    refreshes market data, runs a research job, or emits trading instructions.
+
+    Args:
+        question: The user's complete Chinese research question. Include the
+            company name or six-digit A-share code.
+        as_of: Optional point-in-time date in YYYY-MM-DD format. Leave blank to
+            use the latest qualified TongDaXin close snapshot.
+    """
+    text = str(question or "").strip()
+    if not text:
+        return _json_error("question is required", error_type="validation")
+    try:
+        from dataclasses import asdict
+
+        from src.investment_research_supervisor import (
+            get_investment_research_supervisor_service,
+        )
+
+        brief = get_investment_research_supervisor_service().handle_question(
+            question=f"综合分析 {text}",
+            as_of=_blank_to_none(as_of),
+        )
+        return _json_ok(brief=asdict(brief))
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        return _json_error(str(exc), error_type="supervisor_unavailable")
+
+
+@mcp.tool
+def get_investment_research_daily_brief(as_of: str = "") -> str:
+    """Read the latest completed Investment Research Supervisor daily brief.
+
+    This tool only reads a previously generated brief.  It never starts a
+    refresh, model run, notification, or market-data update.
+
+    Args:
+        as_of: Optional research date in YYYY-MM-DD format. Leave blank for the
+            newest completed brief.
+    """
+    try:
+        from src.investment_research_supervisor import (
+            get_investment_research_daily_brief_service,
+        )
+
+        brief = get_investment_research_daily_brief_service().get_completed(
+            _blank_to_none(as_of),
+        )
+        if brief is None:
+            return _json_error(
+                "completed daily research brief not found",
+                error_type="not_found",
+            )
+        return _json_ok(brief=brief)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        return _json_error(str(exc), error_type="daily_brief_unavailable")
+
+
+def _company_answer_fingerprint(question: str) -> dict[str, Any] | None:
+    """Cache dimensions for a company-scoped specialist answer (plan §6, basic).
+
+    ``input_fingerprint`` currently covers the dominant narrative inputs — the
+    financial and business snapshot hashes plus the current thesis version —
+    while ``research_as_of`` (latest qualified close) bounds same-day reuse.
+    Sprint 2's research manifests will refine this per module.
+    """
+    try:
+        from src.financial_analysis.service import (
+            FinancialAnalysisService, get_financial_analysis_service,
+        )
+        from src.tdx_data import get_tdx_service
+
+        security = FinancialAnalysisService._resolve_cached_security(question, "")
+        if not security:
+            return None
+        stock_code = str(security.get("code") or "").upper()
+        if not stock_code:
+            return None
+        _ready, _reason, snapshot = get_tdx_service().latest_qualified_close_snapshot()
+        research_as_of = str((snapshot or {}).get("market_date") or "")[:10]
+        if not research_as_of:
+            return None
+        financial = get_financial_analysis_service()
+        fin_row = financial.store.latest(stock_code)
+        if not fin_row:
+            return None
+        # The snapshot's source_hash churns intraday (identity embeds live
+        # quote updated_at, and a chat run itself refreshes quotes via
+        # prepare/collect_incremental), which would let one run invalidate its
+        # own cache key.  Key on announcement-level facts instead: they only
+        # move when a real filing lands.  (Plan §9.1: dates drift must not
+        # create fingerprints; quote drift must not either.)
+        fin_fp = "|".join((
+            str(fin_row.get("as_of") or "")[:10],
+            str(fin_row.get("financial_feature_version") or ""),
+            str(fin_row.get("forecast_version") or ""),
+        ))
+        try:
+            history_result = dict(financial.history.query(stock_code, as_of=research_as_of) or {})
+            history_rows = list(
+                history_result.get("items") if "items" in history_result else history_result.get("history") or []
+            )
+            if history_rows:
+                last = history_rows[-1]
+                fin_fp += f"|{str(last.get('report_date') or '')[:10]}@{str(last.get('announcement_date') or '')[:10]}"
+        except Exception:  # noqa: BLE001 - history read must not break caching
+            fin_fp += "|history_unavailable"
+        biz_hash = ""
+        thesis_version = ""
+        try:
+            from src.business_research import get_business_research_service
+
+            biz_row = get_business_research_service().store.latest(stock_code)
+            biz_hash = str((biz_row or {}).get("source_hash") or "")
+        except Exception:  # noqa: BLE001 - business layer absence must not block caching
+            biz_hash = ""
+        try:
+            from src.risk_research import get_risk_research_service
+
+            thesis = get_risk_research_service().thesis_repository.get_current_thesis("CN", stock_code)
+            thesis_version = str((thesis or {}).get("version") or "")
+        except Exception:  # noqa: BLE001
+            thesis_version = ""
+        input_fingerprint = "|".join(("v2", fin_fp, biz_hash, thesis_version))
+        if not fin_fp:
+            return None
+        return {
+            "market": "CN",
+            "stock_code": stock_code,
+            "research_as_of": research_as_of,
+            "input_fingerprint": input_fingerprint,
+        }
+    except Exception:  # noqa: BLE001 - fingerprinting must never break the tool
+        return None
+
+
+def _specialist_answer_fingerprint(agent: str, question: str) -> dict[str, Any] | None:
+    try:
+        from src.research_specialist_chat import ROLE_SPECS, SPECIALIST_CHAT_PROMPT_VERSION
+        from src.research_tasks.store import ResearchTaskStore
+
+        dims = None
+        if agent == "macro_policy_researcher":
+            from src.strategy_engines.macro_data import MacroDataService
+
+            macro = dict(MacroDataService().get() or {})
+            as_of = str(macro.get("as_of") or "")[:10]
+            if not as_of:
+                return None
+            dims = {
+                "market": "CN",
+                "stock_code": "",
+                "research_as_of": as_of,
+                "input_fingerprint": "|".join((
+                    "macro-v1", as_of, str(macro.get("regime") or ""), str(macro.get("score") or ""),
+                )),
+            }
+        else:
+            dims = _company_answer_fingerprint(question)
+        if dims is None:
+            return None
+        config = ResearchTaskStore().get_runtime_config(ROLE_SPECS[agent]["model_role"])
+        dims["prompt_version"] = SPECIALIST_CHAT_PROMPT_VERSION
+        dims["model_version"] = str(config.get("model") or "")
+        return dims
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _financial_answer_fingerprint(question: str) -> dict[str, Any] | None:
+    dims = _company_answer_fingerprint(question)
+    if dims is None:
+        return None
+    try:
+        from src.financial_analysis.service import FINANCIAL_CHAT_PROMPT_VERSION
+        from src.research_tasks.store import ResearchTaskStore
+
+        config = ResearchTaskStore().get_runtime_config("financial_analyst")
+        dims["prompt_version"] = FINANCIAL_CHAT_PROMPT_VERSION
+        dims["model_version"] = str(config.get("model") or "")
+    except Exception:  # noqa: BLE001
+        dims["prompt_version"] = ""
+        dims["model_version"] = ""
+    return dims
+
+
+@mcp.tool
+def ask_financial_analyst(question: str) -> str:
+    """Ask the local Financial Analyst using saved A-share financial research data.
+
+    This reads the existing TongDaXin security cache and saved company financial,
+    business, valuation, and evidence snapshots. It may use the configured
+    Financial Analyst model to explain those saved facts, but never refreshes
+    market data, starts a research job, changes a thesis, or emits trade orders.
+    Repeat questions with unchanged research inputs are served from the shared
+    answer cache; explicit re-analysis or assumption questions bypass it.
+
+    Args:
+        question: The complete Chinese question. Include an A-share company name
+            or six-digit code for company-specific analysis.
+    """
+    text = str(question or "").strip()
+    if not text:
+        return _json_error("question is required", error_type="validation")
+
+    def _run() -> str:
+        try:
+            from src.financial_analysis.service import get_financial_analysis_service
+
+            result = get_financial_analysis_service().chat_current_leader_pool(
+                question=text,
+                history=[],
+            )
+            return _json_ok(result=result)
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            return _json_error(str(exc), error_type="financial_analyst_unavailable")
+
+    from src.mcp_answer_cache import get_mcp_answer_cache, run_with_answer_cache
+
+    return run_with_answer_cache(
+        tool_name="ask_financial_analyst",
+        question=text,
+        fingerprint_fn=_financial_answer_fingerprint,
+        run_fn=_run,
+        store=get_mcp_answer_cache(),
+    )
+
+
+def _ask_research_specialist(*, agent: str, question: str) -> str:
+    """Run one existing specialist against saved local research snapshots only."""
+    text = str(question or "").strip()
+    if not text:
+        return _json_error("question is required", error_type="validation")
+
+    def _run() -> str:
+        try:
+            from dataclasses import asdict
+
+            from src.research_specialist_chat import get_research_specialist_chat_service
+
+            brief = get_research_specialist_chat_service().handle_question(
+                agent=agent,
+                question=text,
+                history=[],
+            )
+            return _json_ok(brief=asdict(brief))
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            return _json_error(str(exc), error_type="research_specialist_unavailable")
+
+    from src.mcp_answer_cache import get_mcp_answer_cache, run_with_answer_cache
+
+    return run_with_answer_cache(
+        tool_name=f"ask_{agent}",
+        question=text,
+        fingerprint_fn=lambda q, _agent=agent: _specialist_answer_fingerprint(_agent, q),
+        run_fn=_run,
+        store=get_mcp_answer_cache(),
+    )
+
+
+@mcp.tool
+def ask_macro_policy_researcher(question: str) -> str:
+    """Ask the Macro Policy Researcher using saved macro and policy snapshots only."""
+    return _ask_research_specialist(agent="macro_policy_researcher", question=question)
+
+
+@mcp.tool
+def ask_valuation_researcher(question: str) -> str:
+    """Ask the Valuation Researcher using saved company valuation research only."""
+    return _ask_research_specialist(agent="valuation_researcher", question=question)
+
+
+@mcp.tool
+def ask_risk_researcher(question: str) -> str:
+    """Ask the Risk Researcher using saved company risk research only."""
+    return _ask_research_specialist(agent="risk_researcher", question=question)
+
+
+@mcp.tool
+def get_cio_report(stock_code: str, as_of: str = "") -> str:
+    """Read the persisted Company CIO Deep Research Report (cache-first).
+
+    Returns the unified 14-section deep research product built from already
+    saved results.  This is the default entry for company questions: it
+    performs no LLM call and never refreshes market data.  Use
+    refresh_cio_report when the boss explicitly asks to rebuild.
+    """
+    try:
+        from src.cio_report import get_cio_report_service
+
+        report = get_cio_report_service().get_report("CN", stock_code, as_of=as_of or None)
+        if report is None:
+            return _json_error(
+                "该公司尚未生成 CIO 报告；可先调用 refresh_cio_report 生成（或直接用 ask_investment_research_supervisor 读取综合研究）",
+                error_type="cio_report_not_found",
+            )
+        return _json_ok(report={
+            key: report.get(key) for key in (
+                "stock_code", "research_as_of", "status", "overall_freshness",
+                "input_fingerprint", "narrative_report_md", "synthesis_source",
+            )
+        } | {"sections": [
+            {"section_type": s.get("section_type"), "title": s.get("title"),
+             "narrative_md": s.get("narrative_md"), "freshness_status": s.get("freshness_status")}
+            for s in report.get("sections") or []
+        ]})
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        return _json_error(str(exc), error_type="cio_report_unavailable")
+
+
+@mcp.tool
+def refresh_cio_report(stock_code: str, as_of: str = "", force_synthesis: bool = False) -> str:
+    """Rebuild the CIO deep research report for one company.
+
+    Classify-first: deterministic sections are always rebuilt (cheap, pure
+    reads); the single synthesis LLM only reruns when the report fingerprint
+    actually changed.  Never triggers market-data refreshes or research jobs.
+    """
+    try:
+        from src.cio_report import get_cio_report_service
+
+        result = get_cio_report_service().build_report(
+            "CN", stock_code, as_of=as_of or None, force_synthesis=force_synthesis,
+        )
+        return _json_ok(report={
+            "stock_code": result.get("stock_code"), "research_as_of": result.get("research_as_of"),
+            "status": result.get("status"), "overall_freshness": result.get("overall_freshness"),
+            "synthesis_source": result.get("synthesis_source"),
+            "idempotent_reuse": result.get("idempotent_reuse"),
+            "module_freshness": result.get("module_freshness"),
+        })
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        return _json_error(str(exc), error_type="cio_report_refresh_failed")
+
+
+@mcp.tool
 def list_skills() -> str:
     """List all available finance skills with names and descriptions.
 

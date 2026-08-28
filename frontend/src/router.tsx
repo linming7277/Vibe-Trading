@@ -1,19 +1,18 @@
 import { Suspense, lazy, type ComponentType } from "react";
-import { Navigate, createBrowserRouter } from "react-router";
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Navigate, createBrowserRouter, useRouteError } from "react-router";
 import { Layout } from "@/components/layout/Layout";
 
 const Today = lazy(() => import("@/pages/Today").then((m) => ({ default: m.Today })));
 const ValueStrategy = lazy(() => import("@/pages/ValueStrategy").then((m) => ({ default: m.ValueStrategy })));
-const ValueOverview = lazy(() => import("@/pages/ValueResearchWorkspace").then((m) => ({ default: m.ValueOverview })));
-const ValueProfiles = lazy(() => import("@/pages/ValueResearchWorkspace").then((m) => ({ default: m.ValueProfiles })));
 const ValueResearchQueue = lazy(() => import("@/pages/ValueResearchWorkspace").then((m) => ({ default: m.ValueResearchQueue })));
-const ValueValuationCenter = lazy(() => import("@/pages/ValueResearchWorkspace").then((m) => ({ default: m.ValueValuationCenter })));
-const ValueMonitorCenter = lazy(() => import("@/pages/ValueResearchWorkspace").then((m) => ({ default: m.ValueMonitorCenter })));
-const ValuePlans = lazy(() => import("@/pages/ValueResearchWorkspace").then((m) => ({ default: m.ValuePlans })));
+const ValueOpportunitiesCenter = lazy(() => import("@/pages/ValueFocusSelection").then((m) => ({ default: m.ValueFocusSelectionPage })));
+const ValueFocusPage = lazy(() => import("@/pages/ValueFocusPage").then((m) => ({ default: m.ValueFocusPage })));
 const EmotionStrategy = lazy(() => import("@/pages/EmotionStrategy").then((m) => ({ default: m.EmotionStrategy })));
 const SimulationHub = lazy(() => import("@/pages/SimulationHub").then((m) => ({ default: m.SimulationHub })));
 const ModelsHub = lazy(() => import("@/pages/ModelsHub").then((m) => ({ default: m.ModelsHub })));
 const DataCenter = lazy(() => import("@/pages/DataCenter").then((m) => ({ default: m.DataCenter })));
+const ValueLineDataRequirements = lazy(() => import("@/pages/ValueLineDataRequirements").then((m) => ({ default: m.ValueLineDataRequirements })));
 const CompanyResearch = lazy(() => import("@/pages/CompanyResearch").then((m) => ({ default: m.CompanyResearch })));
 const Committee = lazy(() => import("@/pages/Committee").then((m) => ({ default: m.Committee })));
 const ResearchReports = lazy(() => import("@/pages/ResearchReports").then((m) => ({ default: m.ResearchReports })));
@@ -35,35 +34,74 @@ const MarketRanks = lazy(() => import("@/pages/MarketRanks").then((m) => ({ defa
 const SectorRanking = lazy(() => import("@/pages/SectorRanking").then((m) => ({ default: m.SectorRanking })));
 const Screener = lazy(() => import("@/pages/Screener").then((m) => ({ default: m.Screener })));
 const GlobalOverview = lazy(() => import("@/pages/GlobalOverview").then((m) => ({ default: m.GlobalOverview })));
-const FineTrackManager = lazy(() => import("@/pages/FineTrackManager").then((m) => ({ default: m.FineTrackManager })));
+const ValueLeaderPoolPage = lazy(() => import("@/pages/ValueLeaderPool").then((m) => ({ default: m.ValueLeaderPoolPage })));
+const ValueLeaderMethodology = lazy(() => import("@/pages/ValueLeaderMethodology").then((m) => ({ default: m.ValueLeaderMethodology })));
 const FinancialAnalysis = lazy(() => import("@/pages/FinancialAnalysis").then((m) => ({ default: m.FinancialAnalysis })));
 
 function PageLoader() { return <div className="flex h-[60vh] items-center justify-center text-sm text-muted-foreground">正在加载工作台…</div>; }
 function wrap(Component: ComponentType) { return <Suspense fallback={<PageLoader />}><Component /></Suspense>; }
 const redirect = (to: string) => <Navigate to={to} replace />;
 
+function RouteErrorFallback() {
+  const error = useRouteError();
+  const detail = error instanceof Error ? error.message : "页面加载时发生未知错误。";
+  const moduleLoadFailed = /dynamically imported module|failed to fetch/i.test(detail);
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+          <div className="space-y-2">
+            <h1 className="text-base font-semibold">页面暂时未能加载</h1>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {moduleLoadFailed
+                ? "前端刚更新，浏览器正在使用旧页面资源。刷新后会加载最新版本。"
+                : "请刷新页面重试；如果仍然出现，请联系系统管理员。"}
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
+            >
+              <RefreshCw className="h-4 w-4" />
+              刷新页面
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export const router = createBrowserRouter([{
   element: <Layout />,
+  errorElement: <RouteErrorFallback />,
   children: [
     { path: "/", element: redirect("/value") },
     { path: "/today", element: wrap(Today) },
 
     { path: "/value", element: wrap(ValueStrategy), children: [
-      { index: true, element: wrap(FineTrackManager) },
-      { path: "legacy-workbench", element: wrap(ValueOverview) },
-      { path: "profiles", element: wrap(ValueProfiles) },
+      { index: true, element: wrap(ValueFocusPage) },
+      { path: "leaders", element: wrap(ValueLeaderPoolPage) },
+      { path: "methodology", element: wrap(ValueLeaderMethodology) },
       { path: "research", element: wrap(ValueResearchQueue) },
-      { path: "valuation", element: wrap(ValueValuationCenter) },
-      { path: "monitor", element: wrap(ValueMonitorCenter) },
-      { path: "plans", element: wrap(ValuePlans) },
-      { path: "fine-tracks", element: redirect("/value") },
+      { path: "operations", element: redirect("/value/research") },
+      { path: "opportunities", element: wrap(ValueOpportunitiesCenter) },
+      // Deprecated compatibility addresses: keep them available while the new default is /value.
+      { path: "focus", element: redirect("/value") },
+      { path: "plans", element: redirect("/value") },
+      { path: "valuation", element: redirect("/value/opportunities") },
+      { path: "monitor", element: redirect("/value/opportunities") },
+      { path: "legacy-workbench", element: redirect("/value") },
+      { path: "profiles", element: redirect("/value") },
+      { path: "fine-tracks", element: redirect("/value/leaders") },
       { path: "company/:stockCode/financial", element: wrap(FinancialAnalysis) },
     ] },
-    { path: "/value/macro", element: redirect("/value?focus=macro") },
-    { path: "/value/sectors", element: redirect("/value?focus=tracks") },
-    { path: "/value/leaders", element: redirect("/value") },
+    { path: "/value/macro", element: redirect("/value") },
+    { path: "/value/sectors", element: redirect("/value") },
     { path: "/value/company", element: redirect("/value/research") },
-    { path: "/value/timing", element: redirect("/value/monitor") },
+    { path: "/value/timing", element: redirect("/value/opportunities") },
     { path: "/company", element: redirect("/value/research") },
     { path: "/company/:market/:symbol", element: wrap(CompanyResearch) },
 
@@ -94,6 +132,7 @@ export const router = createBrowserRouter([{
     { path: "/ai/scheduled", element: wrap(Scheduled) },
 
     { path: "/models/data", element: wrap(DataCenter) },
+    { path: "/models/value-line-data", element: wrap(ValueLineDataRequirements) },
     { path: "/models/factors", element: wrap(AlphaZoo) },
     { path: "/models/factors/bench", element: wrap(AlphaZoo) },
     { path: "/models/factors/compare", element: wrap(AlphaZoo) },

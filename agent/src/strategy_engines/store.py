@@ -91,8 +91,7 @@ class StrategyEngineStore:
         as_of: str,
         symbols: list[str],
         formula_version: str,
-        profile_id: str | None = None,
-        profile_version: int | None = None,
+        data_snapshot_id: str | None = None,
         force_refresh: bool = False,
     ) -> tuple[dict[str, Any], bool]:
         with self._lock:
@@ -103,9 +102,9 @@ class StrategyEngineStore:
             run_id = _id("engine")
             self._conn.execute(
                 """INSERT INTO engine_runs
-                   (id,idempotency_key,strategy_line,market,as_of,symbols_json,formula_version,status,source_status,message,started_at,profile_id,profile_version)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (run_id, effective_key, strategy_line, market, as_of, _json(symbols), formula_version, "running", "unavailable", "", _now(), profile_id, profile_version),
+                   (id,idempotency_key,strategy_line,market,as_of,symbols_json,formula_version,status,source_status,message,started_at,data_snapshot_id)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (run_id, effective_key, strategy_line, market, as_of, _json(symbols), formula_version, "running", "unavailable", "", _now(), data_snapshot_id),
             )
             self._conn.execute(
                 """INSERT INTO decision_chain_runs

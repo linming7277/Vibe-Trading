@@ -65,15 +65,21 @@ def _write_raw_config(path: Path, value: dict[str, Any]) -> None:
     finally:
         if tmp_path.exists():
             tmp_path.unlink()
-def get_feishu_settings(
+def get_feishu_channel_settings(
+    channel_name: str,
     *,
     include_secret: bool = False,
     config_path: Path | None = None,
 ) -> dict[str, Any]:
+    """Read one named Feishu bot instance without exposing its secret by default."""
+    if channel_name not in {
+        "feishu", "feishu_supervisor", "feishu_risk", "feishu_valuation", "feishu_macro_policy",
+    }:
+        raise ValueError(f"unsupported Feishu channel: {channel_name}")
     path = get_config_path(config_path)
     raw = _read_raw_config(path)
     channels = raw.get("channels") if isinstance(raw.get("channels"), dict) else {}
-    section = channels.get("feishu") if isinstance(channels.get("feishu"), dict) else {}
+    section = channels.get(channel_name) if isinstance(channels.get(channel_name), dict) else {}
     config = FeishuConfig.model_validate(section)
     result: dict[str, Any] = {
         "auto_start": bool(channels.get("auto_start", False)),
@@ -86,6 +92,18 @@ def get_feishu_settings(
         "streaming": config.streaming,
         "topic_isolation": config.topic_isolation,
         "default_agent": config.default_agent,
+        "low_value_leader_notification": {
+            "enabled": config.low_value_leader_notification.enabled,
+            "target_configured": bool(config.low_value_leader_notification.target_id),
+            "web_base_url": config.low_value_leader_notification.web_base_url,
+            "dry_run": config.low_value_leader_notification.dry_run,
+        },
+        "daily_research_brief_notification": {
+            "enabled": config.daily_research_brief_notification.enabled,
+            "target_configured": bool(config.daily_research_brief_notification.target_id),
+            "web_base_url": config.daily_research_brief_notification.web_base_url,
+            "dry_run": config.daily_research_brief_notification.dry_run,
+        },
         "allow_from_count": len(config.allow_from),
         "config_path": str(path),
     }
@@ -95,18 +113,35 @@ def get_feishu_settings(
     return result
 
 
-def save_feishu_settings(
+def get_feishu_settings(
+    *,
+    include_secret: bool = False,
+    config_path: Path | None = None,
+) -> dict[str, Any]:
+    """Backward-compatible reader for the existing financial Feishu bot."""
+    return get_feishu_channel_settings(
+        "feishu", include_secret=include_secret, config_path=config_path,
+    )
+
+
+def save_feishu_channel_settings(
+    channel_name: str,
     values: dict[str, Any],
     *,
     config_path: Path | None = None,
 ) -> dict[str, Any]:
+    """Persist one named Feishu bot instance while preserving sibling bots."""
+    if channel_name not in {
+        "feishu", "feishu_supervisor", "feishu_risk", "feishu_valuation", "feishu_macro_policy",
+    }:
+        raise ValueError(f"unsupported Feishu channel: {channel_name}")
     path = get_config_path(config_path)
     raw = _read_raw_config(path)
     channels = raw.get("channels")
     if not isinstance(channels, dict):
         channels = {}
         raw["channels"] = channels
-    existing = channels.get("feishu")
+    existing = channels.get(channel_name)
     merged = dict(existing) if isinstance(existing, dict) else {}
     merged.update(values)
     auto_start = bool(merged.pop("auto_start", channels.get("auto_start", False)))
@@ -116,17 +151,29 @@ def save_feishu_settings(
     # generic runtime rather than FeishuConfig itself.
     if isinstance(existing, dict) and "operators" in existing:
         normalized["operators"] = existing["operators"]
-    channels["feishu"] = normalized
+    channels[channel_name] = normalized
     channels["auto_start"] = auto_start
     AgentConfig.model_validate(raw)
     _write_raw_config(path, raw)
-    return get_feishu_settings(config_path=path)
+    return get_feishu_channel_settings(channel_name, config_path=path)
+
+
+def save_feishu_settings(
+    values: dict[str, Any],
+    *,
+    config_path: Path | None = None,
+) -> dict[str, Any]:
+    """Backward-compatible writer for the existing financial Feishu bot."""
+    return save_feishu_channel_settings("feishu", values, config_path=config_path)
 
 
 def verify_feishu_credentials(app_id: str, app_secret: str) -> dict[str, str]:
     """Verify credentials and return non-secret bot identity metadata."""
     try:
-        with httpx.Client(timeout=12.0) as client:
+        # Feishu is a domestic control-plane dependency.  Do not inherit the
+        # workstation's optional external research proxy, which can terminate
+        # TLS handshakes and make valid bot credentials look broken.
+        with httpx.Client(timeout=12.0, trust_env=False) as client:
             token_response = client.post(
                 "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
                 json={"app_id": app_id, "app_secret": app_secret},

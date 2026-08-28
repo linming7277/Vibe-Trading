@@ -25,7 +25,7 @@ function Change({ value }: { value: unknown }) {
 
 function PanelHeader({ title, description, asOf, to }: { title: string; description: string; asOf?: string | null; to?: string }) {
   const resolvedTo = to === "/emotion/temperature" ? "/market/overview"
-    : to === "/value/sectors" ? "/market/sectors"
+    : to === "/market/sectors" ? "/market/sectors"
       : to === "/value/leaders" ? "/screener"
         : to === "/emotion/short" ? "/market/ranks" : to;
   return <div className="flex flex-col gap-3 border-b p-5 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex items-center gap-2"><span className="text-xs font-semibold text-primary">REAL-TIME OBSERVATION</span><span className="rounded-full border border-warning/30 bg-warning/5 px-2 py-0.5 text-[10px] text-warning">不参与评分</span></div><h2 className="mt-1 text-lg font-semibold">{title}</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p></div><div className="shrink-0 text-right text-xs text-muted-foreground"><div>{time(asOf)}</div>{resolvedTo ? <Link to={resolvedTo} className="mt-2 inline-flex items-center gap-1 text-primary">查看完整数据<ArrowRight className="h-3.5 w-3.5" /></Link> : null}</div></div>;
@@ -44,7 +44,7 @@ function MarketPanel({ observations }: { observations: StrategyObservations }) {
 function SectorPanel({ observations }: { observations: StrategyObservations }) {
   const data = observations.sectors;
   if (!data?.items.length) return <EmptyObservation market="CN" />;
-  return <section className="overflow-hidden rounded-xl border bg-card shadow-sm"><PanelHeader title="行业实时强度" description="按通达信板块行情展示当前强弱，仅作为待研究赛道或情绪热点观察池，不等于赛道评分。" asOf={data.as_of} to="/value/sectors" /><div className="divide-y">{data.items.slice(0, 10).map((item: TdxSector) => <Link key={item.code} to={`/market/sectors/${item.code}`} className="grid grid-cols-[1fr_84px_100px] items-center gap-3 px-5 py-3 text-sm hover:bg-muted/40"><div><div className="font-medium">{item.name}</div><div className="mt-0.5 text-[11px] text-muted-foreground">{item.category} · {item.member_count} 个成分 · 领涨 {item.leader?.name || "—"}</div></div><Change value={item.change_pct} /><span className="text-right text-xs text-muted-foreground">宽度 {pct(item.breadth_pct)}</span></Link>)}</div></section>;
+  return <section className="overflow-hidden rounded-xl border bg-card shadow-sm"><PanelHeader title="行业实时强度" description="按通达信板块行情展示当前强弱，仅作为行情观察，不参与价值线三级行业龙头排序。" asOf={data.as_of} to="/market/sectors" /><div className="divide-y">{data.items.slice(0, 10).map((item: TdxSector) => <Link key={item.code} to={`/market/sectors/${item.code}`} className="grid grid-cols-[1fr_84px_100px] items-center gap-3 px-5 py-3 text-sm hover:bg-muted/40"><div><div className="font-medium">{item.name}</div><div className="mt-0.5 text-[11px] text-muted-foreground">{item.category} · {item.member_count} 个成分 · 领涨 {item.leader?.name || "—"}</div></div><Change value={item.change_pct} /><span className="text-right text-xs text-muted-foreground">宽度 {pct(item.breadth_pct)}</span></Link>)}</div></section>;
 }
 
 function SecurityPanel({ observations, kind }: { observations: StrategyObservations; kind: "value" | "momentum" }) {

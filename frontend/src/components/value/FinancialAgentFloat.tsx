@@ -3,6 +3,7 @@ import { Bot, Loader2, Send, X } from "lucide-react";
 import { api, type FinancialAgentProgress, type Level3Leader } from "@/lib/api";
 
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
+export type FinancialAgentTarget = Pick<Level3Leader, "stock_code" | "stock_name" | "as_of" | "level3_name">;
 
 export function FinancialAgentFloat({
   open,
@@ -11,7 +12,7 @@ export function FinancialAgentFloat({
   onClose,
 }: {
   open: boolean;
-  target: Level3Leader | null;
+  target: FinancialAgentTarget | null;
   candidates?: Level3Leader[];
   onClose: () => void;
 }) {

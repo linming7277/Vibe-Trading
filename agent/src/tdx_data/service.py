@@ -8,11 +8,12 @@ import statistics
 import threading
 import uuid
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from .client import TdxClient
+from .close_snapshot import close_snapshot_provenance_error
 from .store import TdxDataStore, utc_now
 
 
@@ -25,6 +26,38 @@ MODULES: dict[str, dict[str, str]] = {
     "formula": {"label": "公式选股", "description": "指标、条件选股、专家系统和K线形态公式"},
     "history": {"label": "历史行情", "description": "本地K线可用性、交易日和重点指数历史"},
     "fundamental": {"label": "财务估值", "description": "全A股基础财务、扩展估值和业务信息"},
+}
+
+# ``all`` remains an explicit, manual recovery path.  Scheduled work uses only
+# the bounded profiles below so intraday collection never accidentally triggers
+# a 5,000-stock financial sweep or historical file scan.
+REFRESH_PROFILES: dict[str, tuple[str, ...]] = {
+    "market_intraday": ("quote", "rank"),
+    "market_close": ("quote", "rank", "index", "sector"),
+    "reference_daily": ("index", "sector", "fund"),
+    "fundamental_weekly": ("fundamental",),
+    "history_nightly": ("history",),
+    "all": tuple(MODULES),
+}
+
+PROFILE_META: dict[str, dict[str, str]] = {
+    "market_intraday": {"label": "A股盘中行情", "description": "行情和榜单；不读取财务或历史文件"},
+    "market_close": {"label": "A股收盘快照", "description": "行情、榜单、指数和板块形成同一收盘版本"},
+    "reference_daily": {"label": "日度参考数据", "description": "指数、板块、基金与新股参考数据"},
+    "fundamental_weekly": {"label": "基础财务周更新", "description": "全市场基础财务与估值，非每日任务"},
+    "history_nightly": {"label": "历史夜间检查", "description": "交易日与本地历史文件可用性检查"},
+    "all": {"label": "全部数据（人工）", "description": "人工应急入口，不由自动调度器调用"},
+}
+
+MODULE_DATASETS: dict[str, tuple[str, ...]] = {
+    "quote": ("securities", "quotes"),
+    "rank": ("ranks",),
+    "index": ("indices", "index_members", "index_etfs"),
+    "sector": ("sectors", "sector_members"),
+    "fund": ("funds", "convertible_bonds", "ipo"),
+    "formula": ("formulas",),
+    "history": ("trading_dates", "history_availability"),
+    "fundamental": ("fundamentals",),
 }
 
 SPECIAL_RANKS = (
@@ -53,6 +86,22 @@ RANK_SORT_FIELDS = {
 QUOTE_BATCH_SIZE = 1_000
 MIN_QUOTE_COVERAGE = 0.90
 MIN_FUNDAMENTAL_COVERAGE = 0.90
+
+# These are deliberately small, well-known symbols.  They let us prove the
+# local TDX entitlement and the wire format before building a full HK/US
+# refresh profile (whose universe/list codes must be discovered separately).
+MARKET_CAPABILITY_PROBES: dict[str, tuple[str, ...]] = {
+    "HK": ("00700.HK",),
+    "US": ("AAPL.US",),
+}
+
+# List identifiers are documented by the installed TDX bridge.  HK/US data is
+# deliberately kept in separate datasets so it can never replace the CN cache.
+MARKET_CATALOGS: dict[str, dict[str, str]] = {
+    "HK": {"list_id": "102", "symbol_suffix": ".HK", "label": "港股"},
+    "US": {"list_id": "103", "symbol_suffix": ".US", "label": "美股"},
+}
+TDX_BRIDGE_LOCK = "tdx:bridge"
 
 
 def _number(value: Any) -> float | None:
@@ -113,8 +162,10 @@ class TdxDataService:
         self.store.ensure_modules(MODULES)
         self._job_lock = threading.RLock()
         self._active_job: str | None = None
+        self._active_snapshot_id: str | None = None
         self._formula_lock = threading.RLock()
         self._active_formula_scan: str | None = None
+        self._capability_lock = threading.RLock()
         self._collectors: dict[str, Callable[[Callable[[int, int, str], None]], dict[str, Any]]] = {
             "quote": self._collect_quote,
             "rank": self._collect_rank,
@@ -137,8 +188,180 @@ class TdxDataService:
             "tdx_home": str(self.client.home),
             "client_process_running": self._client_running(),
             "active_job": active,
+            "active_snapshot_id": self._active_snapshot_id,
             "modules": modules,
             "recent_jobs": self.store.latest_jobs(),
+            "refresh_profiles": [{"code": code, **meta, "modules": list(REFRESH_PROFILES[code])} for code, meta in PROFILE_META.items()],
+            "active_close_snapshot": self.store.active_snapshot(),
+            "refresh_lock": self.store.refresh_lock(TDX_BRIDGE_LOCK),
+            "recent_refresh_runs": self.store.latest_refresh_runs(10),
+            "market_catalogs": [self.market_catalog_status(market) for market in MARKET_CATALOGS],
+        }
+
+    def market_catalog_status(self, market: str) -> dict[str, Any]:
+        code = market.strip().upper()
+        config = MARKET_CATALOGS.get(code)
+        if not config:
+            raise ValueError("仅支持 HK 或 US 市场目录")
+        securities = self.store.list_records(f"{code.lower()}_securities", limit=1)
+        quotes = self.store.list_records(f"{code.lower()}_quotes", limit=1)
+        return {
+            "market": code, "label": config["label"], "list_id": config["list_id"],
+            "securities": securities["total"], "quotes": quotes["total"],
+            "latest_refresh": self.store.latest_refresh_run_for_market("market_catalog", code),
+        }
+
+    def market_catalog_quotes(self, market: str, *, limit: int = 20) -> dict[str, Any]:
+        code = market.strip().upper()
+        if code not in MARKET_CATALOGS:
+            raise ValueError("仅支持 HK 或 US 市场行情")
+        rows = self.store.list_records(f"{code.lower()}_quotes", limit=20_000)["items"]
+        quotes = [row["payload"] for row in rows if isinstance(row.get("payload"), dict)]
+        quotes.sort(
+            key=lambda row: (_number(row.get("change_pct")) is not None, _number(row.get("change_pct")) or -10_000),
+            reverse=True,
+        )
+        as_of = max((str(row.get("data_as_of") or "") for row in quotes), default="") or None
+        return {
+            "market": code, "label": MARKET_CATALOGS[code]["label"], "total": len(quotes),
+            "as_of": as_of, "items": quotes[:limit],
+        }
+
+    def global_security_overview(self, market: str, symbol: str) -> dict[str, Any] | None:
+        """Read one HK/US research fact set from the isolated TDX market cache.
+
+        Quotes come from the published market snapshot.  Company finance and
+        valuation are refreshed through the same read-only client when no TDX
+        bulk refresh owns the bridge; they are not written into CN datasets.
+        """
+        code = market.strip().upper()
+        if code not in MARKET_CATALOGS:
+            raise ValueError("仅支持 HK 或 US 通达信证券")
+        ticker = symbol.strip().upper()
+        security = self.store.get_record(f"{code.lower()}_securities", ticker)
+        quote_row = self.store.get_record(f"{code.lower()}_quotes", ticker)
+        if not security and not quote_row:
+            return None
+        identity = dict(security["payload"]) if security else {"Code": ticker, "Name": ""}
+        quote = dict(quote_row["payload"]) if quote_row else _quote_payload(identity, {})
+        base: dict[str, Any] = {}
+        more: dict[str, Any] = {}
+        with self._job_lock:
+            active = self.store.get_job(self._active_job) if self._active_job else None
+        if not active or active.get("status") not in {"queued", "running"}:
+            try:
+                base = self.client.call("get_stock_info", ticker, field_list=[]) or {}
+                more = self.client.call("get_more_info", ticker, field_list=[]) or {}
+            except Exception:
+                # The published quote snapshot remains valid research evidence;
+                # a per-company finance miss must not silently switch sources.
+                base, more = {}, {}
+        name = str(base.get("Name") or identity.get("Name") or quote.get("name") or ticker)
+        finance = _fundamental_payload({"Code": ticker, "Name": name}, base, more)
+        snapshot_id = (quote_row or security or {}).get("snapshot_id")
+        return {
+            "market": code, "symbol": ticker, "name": name, "quote": quote,
+            "finance": finance, "snapshot_id": snapshot_id,
+            "data_as_of": quote.get("data_as_of") or utc_now(), "source": "通达信客户端",
+        }
+
+    @staticmethod
+    def _probe_result(name: str, read: Callable[[], Any]) -> dict[str, Any]:
+        """Return a compact, diagnostic-only result without leaking raw data."""
+        started = datetime.now(timezone.utc)
+        try:
+            value = read()
+            elapsed_ms = round((datetime.now(timezone.utc) - started).total_seconds() * 1000)
+            if isinstance(value, dict):
+                nonempty = bool(value)
+                fields = sorted(str(field) for field in value.keys())[:40]
+                return {
+                    "name": name, "status": "available" if nonempty else "empty",
+                    "elapsed_ms": elapsed_ms, "result_type": "object",
+                    "item_count": len(value), "fields": fields,
+                }
+            if isinstance(value, (list, tuple)):
+                fields = sorted(str(field) for field in value[0].keys())[:40] if value and isinstance(value[0], dict) else []
+                return {
+                    "name": name, "status": "available" if value else "empty",
+                    "elapsed_ms": elapsed_ms, "result_type": "list",
+                    "item_count": len(value), "fields": fields,
+                }
+            return {
+                "name": name, "status": "available" if value is not None else "empty",
+                "elapsed_ms": elapsed_ms, "result_type": type(value).__name__,
+                "item_count": 1 if value is not None else 0, "fields": [],
+            }
+        except Exception as exc:
+            elapsed_ms = round((datetime.now(timezone.utc) - started).total_seconds() * 1000)
+            return {
+                "name": name, "status": "error", "elapsed_ms": elapsed_ms,
+                "error": f"{type(exc).__name__}: {exc}", "item_count": 0, "fields": [],
+            }
+
+    def market_capabilities(self, market: str) -> dict[str, Any]:
+        """Run a read-only, in-process entitlement and field probe for HK/US.
+
+        A full-market list is intentionally *not* guessed here: TDX list
+        identifiers are vendor/product specific.  This probe first establishes
+        that the installed client can serve a representative symbol, daily
+        history and available company fields through the same API process that
+        owns normal TDX access.
+        """
+        code = market.strip().upper()
+        symbols = MARKET_CAPABILITY_PROBES.get(code)
+        if not symbols:
+            raise ValueError("仅支持 HK 或 US 的通达信能力检测")
+        symbol = symbols[0]
+        if not self.client.available:
+            return {
+                "market": code, "probe_symbol": symbol, "available": False,
+                "overall_status": "unavailable", "reason": "未检测到通达信客户端或数据桥",
+                "checks": [],
+            }
+
+        # A full CN refresh makes thousands of synchronous bridge calls.  Do
+        # not queue a diagnostic read in the middle of that run: it could make
+        # the probe look slow/empty and, more importantly, delay the published
+        # market snapshot.  The caller can retry once the current run ends.
+        with self._job_lock:
+            active = self.store.get_job(self._active_job) if self._active_job else None
+        if active and active.get("status") in {"queued", "running"}:
+            return {
+                "market": code, "probe_symbol": symbol, "available": True,
+                "overall_status": "busy", "reason": "通达信正在执行数据刷新；请在该任务完成后重试检测。",
+                "active_job": active.get("id"), "checks": [],
+            }
+
+        # Keep this test in the existing backend process.  TdxClient serialises
+        # individual DLL calls; this additional lock keeps the diagnostic
+        # sequence coherent and avoids a second Python process competing for a
+        # plugin run id.
+        with self._capability_lock:
+            checks = [
+                self._probe_result("quote", lambda: self.client.call("get_pricevol", [symbol])),
+                self._probe_result(
+                    "daily_kline",
+                    lambda: self.client.call(
+                        "get_market_data", stock_list=[symbol], period="1d", count=5,
+                        dividend_type="none", field_list=[], start_time="", end_time="", fill_data=True,
+                    ),
+                ),
+                self._probe_result("company_finance", lambda: self.client.call("get_stock_info", symbol, field_list=[])),
+                self._probe_result("company_valuation", lambda: self.client.call("get_more_info", symbol, field_list=[])),
+            ]
+        available_checks = sum(check["status"] == "available" for check in checks)
+        return {
+            "market": code,
+            "probe_symbol": symbol,
+            "available": True,
+            "overall_status": "ready" if available_checks == len(checks) else "partial" if available_checks else "unavailable",
+            "available_checks": available_checks,
+            "total_checks": len(checks),
+            "universe_status": "pending",
+            "universe_note": "尚未探测通达信该市场的证券列表标识；不会猜测并写入正式快照。",
+            "checks": checks,
+            "checked_at": utc_now(),
         }
 
     @staticmethod
@@ -156,64 +379,282 @@ class TdxDataService:
             return False
 
     def start_update(self, module: str = "all") -> dict[str, Any]:
-        if module != "all" and module not in MODULES:
-            raise ValueError(f"未知数据模块：{module}")
+        if module not in MODULES and module not in REFRESH_PROFILES:
+            raise ValueError(f"未知数据模块或刷新计划：{module}")
+        modules = list(REFRESH_PROFILES.get(module, (module,)))
         with self._job_lock:
             if self._active_job:
                 active = self.store.get_job(self._active_job)
                 if active and active["status"] in {"queued", "running"}:
                     raise RuntimeError(f"已有更新任务正在运行：{self._active_job}")
             job_id = f"tdx_{uuid.uuid4().hex[:16]}"
-            self.store.create_job(job_id, module)
+            now = datetime.now(timezone.utc)
+            market_date = datetime.now().astimezone().date().isoformat()
+            snapshot_id = f"cn-{market_date.replace('-', '')}-{uuid.uuid4().hex[:10]}"
+            retry_count = self.store.refresh_attempt_count(module, "CN", market_date)
+            lock_until = (now + timedelta(hours=3)).isoformat()
+            if not self.store.acquire_refresh_lock(TDX_BRIDGE_LOCK, job_id, expires_at=lock_until, now_value=now.isoformat()):
+                lock = self.store.refresh_lock(TDX_BRIDGE_LOCK) or {}
+                raise RuntimeError(f"已有其他进程正在采集通达信数据：{lock.get('owner', 'unknown')}")
+            try:
+                self.store.create_job(job_id, module)
+                self.store.create_refresh_run(
+                    job_id, profile=module, market="CN", market_date=market_date,
+                    snapshot_id=snapshot_id, modules=modules, retry_count=retry_count,
+                )
+            except Exception:
+                self.store.release_refresh_lock(TDX_BRIDGE_LOCK, job_id)
+                raise
             self._active_job = job_id
-            thread = threading.Thread(target=self._run_job, args=(job_id, module), daemon=True, name=f"tdx-update-{module}")
+            self._active_snapshot_id = snapshot_id
+            thread = threading.Thread(target=self._run_job, args=(job_id, module, modules, snapshot_id, market_date), daemon=True, name=f"tdx-update-{module}")
             thread.start()
-            return self.store.get_job(job_id) or {"id": job_id, "module": module, "status": "queued"}
+            value = self.store.get_job(job_id) or {"id": job_id, "module": module, "status": "queued"}
+            value["refresh_run"] = self.store.get_refresh_run(job_id)
+            return value
 
-    def _run_job(self, job_id: str, requested: str) -> None:
+    def start_market_catalog_refresh(self, market: str) -> dict[str, Any]:
+        """Build an isolated HK/US universe plus quote snapshot from TDX."""
+        code = market.strip().upper()
+        config = MARKET_CATALOGS.get(code)
+        if not config:
+            raise ValueError("仅支持 HK 或 US 市场目录刷新")
+        with self._job_lock:
+            if self._active_job:
+                active = self.store.get_job(self._active_job)
+                if active and active["status"] in {"queued", "running"}:
+                    raise RuntimeError(f"已有更新任务正在运行：{self._active_job}")
+            job_id = f"tdx_{code.lower()}_{uuid.uuid4().hex[:14]}"
+            now = datetime.now(timezone.utc)
+            market_date = datetime.now().astimezone().date().isoformat()
+            snapshot_id = f"{code.lower()}-{market_date.replace('-', '')}-{uuid.uuid4().hex[:10]}"
+            retry_count = self.store.refresh_attempt_count("market_catalog", code, market_date)
+            lock_until = (now + timedelta(hours=3)).isoformat()
+            if not self.store.acquire_refresh_lock(TDX_BRIDGE_LOCK, job_id, expires_at=lock_until, now_value=now.isoformat()):
+                lock = self.store.refresh_lock(TDX_BRIDGE_LOCK) or {}
+                raise RuntimeError(f"已有其他进程正在采集通达信数据：{lock.get('owner', 'unknown')}")
+            try:
+                self.store.create_job(job_id, f"market_catalog:{code}")
+                self.store.create_refresh_run(
+                    job_id, profile="market_catalog", market=code, market_date=market_date,
+                    snapshot_id=snapshot_id, modules=["securities", "quotes"], retry_count=retry_count,
+                )
+            except Exception:
+                self.store.release_refresh_lock(TDX_BRIDGE_LOCK, job_id)
+                raise
+            self._active_job = job_id
+            self._active_snapshot_id = snapshot_id
+            thread = threading.Thread(
+                target=self._run_market_catalog, args=(job_id, code, config, snapshot_id, market_date),
+                daemon=True, name=f"tdx-{code.lower()}-catalog",
+            )
+            thread.start()
+            value = self.store.get_job(job_id) or {"id": job_id, "module": f"market_catalog:{code}", "status": "queued"}
+            value["refresh_run"] = self.store.get_refresh_run(job_id)
+            return value
+
+    def _run_market_catalog(
+        self, job_id: str, market: str, config: dict[str, str], snapshot_id: str, market_date: str,
+    ) -> None:
+        label = config["label"]
+        security_dataset = f"{market.lower()}_securities"
+        quote_dataset = f"{market.lower()}_quotes"
+        module = f"market_{market.lower()}"
         started = utc_now()
-        modules = list(MODULES) if requested == "all" else [requested]
-        module_errors: list[str] = []
-        self.store.update_job(job_id, status="running", started_at=started, total=len(modules), message="正在连接通达信客户端")
+        self.store.update_job(job_id, status="running", started_at=started, total=2, message=f"正在读取通达信{label}证券目录")
+        self.store.update_refresh_run(job_id, status="running", started_at=started, total=2, message=f"正在建立{label}市场快照")
+        self.store.set_module_state(module, status="running", progress=0, total=2, message=f"正在读取通达信{label}", error="", started_at=started)
         try:
             self.client.connect()
-            for index, module in enumerate(modules):
-                self.store.update_job(job_id, progress=index, message=f"正在更新：{MODULES[module]['label']}")
-                self.store.set_module_state(
-                    module, status="running", progress=0, total=0, message="正在读取通达信", error="", started_at=utc_now()
-                )
+            with self.store.snapshot_context(snapshot_id):
+                stocks = list(self.client.call("get_stock_list", config["list_id"], list_type=1) or [])
+                suffix = config["symbol_suffix"]
+                stocks = [row for row in stocks if isinstance(row, dict) and str(row.get("Code", "")).upper().endswith(suffix)]
+                if not stocks:
+                    raise RuntimeError(f"通达信未返回有效{label}证券列表（列表标识 {config['list_id']}）")
+                codes = [str(row["Code"]).upper() for row in stocks]
+                self.store.update_job(job_id, progress=0, message=f"已取得 {len(stocks):,} 只{label}证券，正在读取行情")
+                self.store.update_refresh_run(job_id, progress=0, message=f"已取得 {len(stocks):,} 只{label}证券，正在读取行情")
 
-                def progress(done: int, total: int, message: str) -> None:
-                    self.store.set_module_state(module, progress=done, total=total, message=message)
+                def progress(_done: int, _total: int, message: str) -> None:
+                    self.store.extend_refresh_lock(TDX_BRIDGE_LOCK, job_id, expires_at=(datetime.now(timezone.utc) + timedelta(hours=3)).isoformat())
+                    self.store.update_job(job_id, progress=1, total=2, message=message)
+                    self.store.update_refresh_run(job_id, progress=1, total=2, message=message)
 
-                try:
-                    result = self._collectors[module](progress)
-                    self.store.set_module_state(
-                        module, status="ready", progress=int(result.get("total", result.get("item_count", 0))),
-                        total=int(result.get("total", result.get("item_count", 0))), item_count=int(result.get("item_count", 0)),
-                        message=str(result.get("message", "更新完成")), metadata_json=result.get("metadata", {}),
-                        error="", updated_at=utc_now(),
+                pricevol = self._get_pricevol_batched(codes, progress=progress)
+                quotes = [_quote_payload(row, pricevol.get(str(row["Code"]).upper(), {})) for row in stocks]
+                valid = [row for row in quotes if row["price"] is not None and row["last_close"] is not None]
+                minimum = max(1, math.ceil(len(stocks) * MIN_QUOTE_COVERAGE))
+                if len(valid) < minimum:
+                    raise RuntimeError(
+                        f"{label}行情仅返回 {len(valid):,}/{len(stocks):,} 条有效报价，"
+                        "低于90%完整性门槛，未发布市场快照"
                     )
-                except Exception as exc:
-                    self.store.set_module_state(module, status="failed", message="更新失败，已保留上次成功缓存", error=str(exc), updated_at=utc_now())
-                    if requested != "all":
-                        raise
-                    module_errors.append(f"{MODULES[module]['label']}：{exc}")
+                for row in stocks:
+                    row["Code"] = str(row["Code"]).upper()
+                    row["Market"] = market
+                for row in valid:
+                    row["market"] = market
+                self.store.replace_dataset(security_dataset, [
+                    {"key": row["Code"], "name": row.get("Name", ""), "payload": row} for row in stocks
+                ])
+                self.store.replace_dataset(quote_dataset, [
+                    {"key": row["code"], "name": row["name"], "payload": row} for row in valid
+                ])
+                coverage = len(valid) / len(stocks)
+                for dataset, item_count in ((security_dataset, len(stocks)), (quote_dataset, len(valid))):
+                    self.store.record_dataset_snapshot(
+                        snapshot_id=snapshot_id, refresh_run_id=job_id, dataset=dataset, market=market,
+                        market_date=market_date, source="tdx", coverage=coverage, item_count=item_count,
+                        expected_count=len(stocks), status="ready",
+                    )
+            published = self.store.publish_snapshot(snapshot_id)
+            metadata = {
+                "market": market, "list_id": config["list_id"], "securities": len(stocks),
+                "valid_quotes": len(valid), "coverage_pct": round(coverage * 100, 2), "snapshot_id": snapshot_id,
+            }
+            self.store.set_module_state(module, status="ready", progress=2, total=2, item_count=len(valid), message=f"{label}市场快照已发布", metadata_json=metadata, error="", updated_at=utc_now(), last_success_at=utc_now())
+            self.store.update_job(job_id, status="completed", progress=2, total=2, message=f"{label}市场数据更新完成", completed_at=utc_now())
+            self.store.update_refresh_run(job_id, status="completed", progress=2, total=2, message=f"数据快照已发布（{len(published)} 个数据集）", completed_at=utc_now())
+        except Exception as exc:
+            self.store.set_module_state(module, status="failed", message=f"{label}市场更新失败，已保留上次成功缓存", error=str(exc), updated_at=utc_now())
+            self.store.update_job(job_id, status="failed", error=str(exc), message=f"{label}市场更新失败，已保留上次成功缓存", completed_at=utc_now())
+            self.store.update_refresh_run(job_id, status="failed", error=str(exc), message="刷新失败，未发布快照", completed_at=utc_now())
+        finally:
+            self.store.release_refresh_lock(TDX_BRIDGE_LOCK, job_id)
+            with self._job_lock:
+                if self._active_job == job_id:
+                    self._active_job = None
+                    self._active_snapshot_id = None
+
+    def _run_job(self, job_id: str, requested: str, modules: list[str], snapshot_id: str, market_date: str) -> None:
+        started = utc_now()
+        module_errors: list[str] = []
+        self.store.update_job(job_id, status="running", started_at=started, total=len(modules), message="正在连接通达信客户端")
+        self.store.update_refresh_run(job_id, status="running", started_at=started, total=len(modules), message="正在建立数据刷新快照")
+        try:
+            self.client.connect()
+            with self.store.snapshot_context(snapshot_id):
+                for index, module in enumerate(modules):
+                    self.store.extend_refresh_lock(TDX_BRIDGE_LOCK, job_id, expires_at=(datetime.now(timezone.utc) + timedelta(hours=3)).isoformat())
+                    self.store.update_job(job_id, progress=index, message=f"正在更新：{MODULES[module]['label']}")
+                    self.store.update_refresh_run(job_id, progress=index, message=f"正在更新：{MODULES[module]['label']}")
+                    self.store.set_module_state(
+                        module, status="running", progress=0, total=0, message="正在读取通达信", error="", started_at=utc_now()
+                    )
+
+                    def progress(done: int, total: int, message: str) -> None:
+                        self.store.set_module_state(module, progress=done, total=total, message=message)
+
+                    try:
+                        result = self._collectors[module](progress)
+                        total = int(result.get("total", result.get("item_count", 0)))
+                        item_count = int(result.get("item_count", 0))
+                        metadata = {**dict(result.get("metadata", {})), "snapshot_id": snapshot_id, "market_date": market_date, "source": "tdx"}
+                        self.store.set_module_state(
+                            module, status="ready", progress=total, total=total, item_count=item_count,
+                            message=str(result.get("message", "更新完成")), metadata_json=metadata,
+                            error="", updated_at=utc_now(), last_success_at=utc_now(),
+                        )
+                        coverage = self._module_coverage(module, result)
+                        for dataset in MODULE_DATASETS[module]:
+                            self.store.record_dataset_snapshot(
+                                snapshot_id=snapshot_id, refresh_run_id=job_id, dataset=dataset, market="CN",
+                                market_date=market_date, source="tdx", coverage=coverage, item_count=item_count,
+                                expected_count=total, status="ready",
+                            )
+                    except Exception as exc:
+                        self.store.set_module_state(module, status="failed", message="更新失败，已保留上次成功缓存", error=str(exc), updated_at=utc_now())
+                        for dataset in MODULE_DATASETS[module]:
+                            self.store.record_dataset_snapshot(
+                                snapshot_id=snapshot_id, refresh_run_id=job_id, dataset=dataset, market="CN",
+                                market_date=market_date, source="tdx", coverage=None, item_count=0,
+                                expected_count=0, status="failed", error=str(exc),
+                            )
+                        if requested != "all":
+                            raise
+                        module_errors.append(f"{MODULES[module]['label']}：{exc}")
             if module_errors:
                 self.store.update_job(
                     job_id, status="partial", progress=len(modules), message="部分模块更新失败，成功缓存已保留",
                     error="；".join(module_errors), completed_at=utc_now(),
                 )
+                self.store.update_refresh_run(
+                    job_id, status="partial", progress=len(modules), message="部分数据集更新失败，未发布为统一快照",
+                    error="；".join(module_errors), completed_at=utc_now(),
+                )
             else:
+                published = self.store.publish_snapshot(snapshot_id)
                 self.store.update_job(
                     job_id, status="completed", progress=len(modules), message="通达信数据更新完成", completed_at=utc_now()
                 )
+                self.store.update_refresh_run(
+                    job_id, status="completed", progress=len(modules),
+                    message=f"数据快照已发布（{len(published)} 个数据集）", completed_at=utc_now(),
+                )
         except Exception as exc:
             self.store.update_job(job_id, status="failed", error=str(exc), message="更新失败，已保留上次成功缓存", completed_at=utc_now())
+            self.store.update_refresh_run(job_id, status="failed", error=str(exc), message="刷新失败，未发布快照", completed_at=utc_now())
         finally:
+            self.store.release_refresh_lock(TDX_BRIDGE_LOCK, job_id)
             with self._job_lock:
                 if self._active_job == job_id:
                     self._active_job = None
+                    self._active_snapshot_id = None
+
+    @staticmethod
+    def _module_coverage(module: str, result: dict[str, Any]) -> float | None:
+        metadata = result.get("metadata") or {}
+        if module == "quote":
+            total = int(metadata.get("securities") or result.get("total") or 0)
+            valid = int(metadata.get("valid_quotes") or result.get("item_count") or 0)
+            return valid / total if total else None
+        if module == "fundamental":
+            value = metadata.get("coverage_pct")
+            return float(value) / 100 if value is not None else None
+        return 1.0
+
+    @staticmethod
+    def _validate_close_snapshot(snapshot: dict[str, Any] | None) -> tuple[bool, str, dict[str, Any] | None]:
+        """Validate one published close snapshot without changing any data."""
+        if not snapshot:
+            return False, "尚无合格收盘数据快照", None
+        rows = {row["dataset"]: row for row in snapshot.get("datasets", [])}
+        required = ("quotes", "ranks", "indices", "sectors", "sector_members")
+        missing = [dataset for dataset in required if rows.get(dataset, {}).get("status") != "ready"]
+        if missing:
+            return False, f"收盘快照缺少：{'、'.join(missing)}", snapshot
+        quote_coverage = rows["quotes"].get("coverage")
+        if quote_coverage is None or float(quote_coverage) < MIN_QUOTE_COVERAGE:
+            return False, f"收盘行情覆盖率不足（{float(quote_coverage or 0):.1%}）", snapshot
+        provenance_error = close_snapshot_provenance_error(snapshot)
+        if provenance_error:
+            return False, provenance_error, snapshot
+        return True, "", snapshot
+
+    def close_snapshot_ready(self, market_date: str) -> tuple[bool, str, dict[str, Any] | None]:
+        """Return only a complete, quality-gated same-date close snapshot."""
+        snapshot = self.store.active_snapshot(market="CN", market_date=market_date, profile="market_close")
+        return self._validate_close_snapshot(snapshot)
+
+    def latest_qualified_close_snapshot(self) -> tuple[bool, str, dict[str, Any] | None]:
+        """Resolve the EOD target from the latest completed qualified close.
+
+        This is intentionally not based on the wall-clock date.  On weekends,
+        holidays, or during an incomplete close update it returns the latest
+        *published* close date rather than fabricating a new research date.
+        """
+        candidates = self.store.completed_snapshots(market="CN", profile="market_close")
+        if not candidates:
+            return False, "尚无合格收盘数据快照", None
+        latest_reason = ""
+        for snapshot in candidates:
+            ready, reason, value = self._validate_close_snapshot(snapshot)
+            if ready:
+                return True, "", value
+            if not latest_reason:
+                latest_reason = reason
+        return False, latest_reason or "尚无合格收盘数据快照", candidates[0]
 
     def _securities(self) -> list[dict[str, Any]]:
         rows = self.store.list_records("securities", limit=10_000)["items"]
@@ -484,10 +925,30 @@ class TdxDataService:
         row = self.store.get_record("security_details", symbol.strip().upper())
         return row["payload"] if row else None
 
-    def kline(self, symbol: str, *, period: str = "1d", count: int = 300, dividend_type: str = "front") -> dict[str, Any]:
+    def fetch_kline(
+        self, symbol: str, *, period: str = "1d", count: int = 300, dividend_type: str = "front",
+        start_time: str = "", end_time: str = "",
+    ) -> dict[str, Any]:
+        """Fetch a K-line response without changing the legacy ad-hoc cache."""
         code = symbol.strip().upper()
-        value = self.client.call("get_market_data", stock_list=[code], count=count, period=period, dividend_type=dividend_type, field_list=[], start_time="", end_time="", fill_data=True)
-        payload = {"code": code, "period": period, "dividend_type": dividend_type, "data": value, "updated_at": utc_now()}
+        value = self.client.call(
+            "get_market_data", stock_list=[code], count=count, period=period,
+            dividend_type=dividend_type, field_list=[], start_time=start_time, end_time=end_time, fill_data=True,
+        )
+        return {
+            "code": code, "period": period, "dividend_type": dividend_type, "data": value,
+            "start_time": start_time, "end_time": end_time, "updated_at": utc_now(),
+        }
+
+    def kline(
+        self, symbol: str, *, period: str = "1d", count: int = 300, dividend_type: str = "front",
+        start_time: str = "", end_time: str = "",
+    ) -> dict[str, Any]:
+        payload = self.fetch_kline(
+            symbol, period=period, count=count, dividend_type=dividend_type,
+            start_time=start_time, end_time=end_time,
+        )
+        code = str(payload["code"])
         self.store.upsert_records("klines", [{"key": f"{code}:{period}:{dividend_type}", "name": code, "payload": payload}])
         return payload
 
@@ -730,6 +1191,29 @@ class TdxDataService:
                 if len(result) >= limit:
                     break
         return result
+
+    def find_security_named_in(self, text: str, *, min_chars: int = 3) -> dict[str, Any] | None:
+        """Return the longest cached security name contained in *text*.
+
+        Deterministic company extraction for name-only questions, so chat
+        routing and answer-cache fingerprinting do not depend on the model
+        router.  Names shorter than *min_chars* never qualify, keeping
+        generic two-character words from matching by accident.
+        """
+        if len(text) < min_chars:
+            return None
+        quote_map = self._quote_map()
+        best: dict[str, Any] | None = None
+        best_len = min_chars - 1
+        for item in self._records("securities", 10_000):
+            name = str(item.get("name") or "")
+            if len(name) > best_len and name in text:
+                best = {
+                    "code": item.get("key"), "name": name,
+                    "quote": quote_map.get(item.get("key")), "updated_at": item.get("updated_at"),
+                }
+                best_len = len(name)
+        return best
 
     def security_overview(
         self, symbol: str, *, include_related: bool = True, include_history: bool = True,

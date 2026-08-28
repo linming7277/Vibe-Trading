@@ -16,9 +16,8 @@ from src.strategy_engines.service import StrategyEngineService
 from src.strategy_engines.store import StrategyEngineStore
 from src.strategy_engines.formula_registry import formula_manifest, sync_formula_artifacts
 from src.strategy_engines.history import HistoricalFeatureStore, MultiSourceHistoryAdapter
-from src.value_workspace.service import ValueWorkspaceService
-from src.value_workspace.store import ValueWorkspaceStore
 from src.strategy_engines.value_line import get_value_line_service
+from src.tdx_data.service import get_tdx_service
 
 AuthDep = Callable[..., Awaitable[Any] | Any]
 _engine_store: StrategyEngineStore | None = None
@@ -46,11 +45,10 @@ class StrategyRunRequest(BaseModel):
     symbols: list[str] = Field(default_factory=list)
     force_refresh: bool = False
     inputs: dict[str, Any] | None = None
-    profile_id: str | None = None
 
 
 class ValueRefreshRequest(BaseModel):
-    modules: list[Literal["financial_history", "market_history", "macro", "policy", "scores", "all"]] = Field(default_factory=lambda: ["all"])
+    modules: list[Literal["financial_history", "market_history", "macro", "policy", "all"]] = Field(default_factory=lambda: ["all"])
     as_of: str = Field(default_factory=lambda: date.today().isoformat())
 
 
@@ -91,15 +89,9 @@ class PaperOrderRequest(BaseModel):
     board_lot: int | None = Field(default=None, gt=0)
 
 
-def _background_run(run: dict[str, Any], inputs: dict[str, Any] | None, profile: dict[str, Any] | None = None) -> None:
+def _background_run(run: dict[str, Any], inputs: dict[str, Any] | None) -> None:
     service = StrategyEngineService(get_engine_store())
-    result = service.execute_prepared(run, inputs=inputs)
-    if result.get("strategy_line") == "value" and result.get("market") == "CN" and profile:
-        workspace = ValueWorkspaceService()
-        try:
-            workspace.materialize_run(result["id"], profile)
-        finally:
-            workspace.close()
+    service.execute_prepared(run, inputs=inputs)
 
 
 def register_strategy_routes(app: FastAPI, require_auth: AuthDep | None = None) -> None:
@@ -114,27 +106,29 @@ def register_strategy_routes(app: FastAPI, require_auth: AuthDep | None = None) 
     async def create_strategy_run(payload: StrategyRunRequest, background_tasks: BackgroundTasks):
         try:
             symbols = [normalize_symbol(payload.market, symbol) for symbol in payload.symbols]
-            profile = None
-            if payload.strategy_line == "value":
-                profile_store = ValueWorkspaceStore()
-                try:
-                    profile = profile_store.get_profile(payload.profile_id)
-                finally:
-                    profile_store.close()
-                if not profile:
-                    raise ValueError("calculation profile not found")
+            data_snapshot_id = None
+            # Live A-share engines read the published TDX cache.  Refuse to
+            # label a mix of partial or stale collections as a current-day
+            # strategy run; offline/replay callers can still supply explicit
+            # inputs, which are independent of this live cache.
+            if payload.market == "CN" and payload.inputs is None:
+                ready, reason, snapshot = get_tdx_service().close_snapshot_ready(payload.as_of)
+                if not ready:
+                    raise RuntimeError(f"A股收盘快照不可用：{reason}")
+                data_snapshot_id = str((snapshot or {}).get("snapshot_id") or "") or None
             service = StrategyEngineService(get_engine_store())
             run, created = service.prepare(
                 strategy_line=payload.strategy_line, market=payload.market, as_of=payload.as_of,
                 symbols=symbols, force_refresh=payload.force_refresh,
-                profile_id=profile["id"] if profile else None,
-                profile_version=profile["version"] if profile else None,
+                data_snapshot_id=data_snapshot_id,
             )
             if created:
-                background_tasks.add_task(_background_run, run, payload.inputs, profile)
+                background_tasks.add_task(_background_run, run, payload.inputs)
             return {**run, "created": created}
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @app.get("/strategy-runs/{run_id}", dependencies=[Depends(require_auth)])
     async def strategy_run(run_id: str):
@@ -193,49 +187,12 @@ def register_strategy_routes(app: FastAPI, require_auth: AuthDep | None = None) 
     async def value_policies(status: str | None = None, limit: int = Query(100, ge=1, le=500)):
         return {"items": get_value_line_service().policies(status, limit)}
 
-    @app.get("/strategy/value/sectors", dependencies=[Depends(require_auth)])
-    async def value_sectors(
-        market: str = Query("CN"), as_of: str | None = None,
-        status: str | None = None, query: str = "",
-    ):
-        normalized = normalize_market(market)
-        if normalized == "CN":
-            cached = get_value_line_service().sectors(as_of, status=status, query=query)
-            return {"market": normalized, **cached, "run": None}
-        store = get_engine_store()
-        dashboard = store.dashboard("value", normalized)
-        return {"market": normalized, "items": store.list_scores("value", normalized, engine="value_sector", limit=500), "run": dashboard["latest_run"]}
-
-    @app.get("/strategy/value/leaders", dependencies=[Depends(require_auth)])
-    async def value_leaders(
-        market: str = Query("CN"), sector_code: str | None = None, as_of: str | None = None,
-        candidate_track_limit: int | None = Query(None, ge=1, le=128),
-    ):
-        normalized = normalize_market(market)
-        if normalized == "CN":
-            return {
-                "market": normalized,
-                **get_value_line_service().leaders(sector_code, as_of, candidate_track_limit),
-                "run": None,
-            }
-        store = get_engine_store()
-        dashboard = store.dashboard("value", normalized)
-        return {"market": normalized, "items": store.list_scores("value", normalized, engine="value_leader", limit=500), "run": dashboard["latest_run"]}
-
     @app.get("/strategy/value/signals", dependencies=[Depends(require_auth)])
     async def value_signals(
         market: str = Query("CN"), scope: str = Query("strategy"),
         status: str | None = Query(default=None), symbol: str | None = Query(default=None),
         limit: int = Query(default=200, ge=1, le=1000),
     ):
-        if scope == "monitoring":
-            store = ValueWorkspaceStore()
-            try:
-                return {"items": store.list_signal_evaluations(
-                    signal_state=status, symbol=symbol.upper() if symbol else None, limit=limit,
-                )}
-            finally:
-                store.close()
         return get_engine_store().list_signals(strategy_line="value", market=normalize_market(market))
 
     @app.get("/strategy/value/companies/{market}/{symbol}", dependencies=[Depends(require_auth)])

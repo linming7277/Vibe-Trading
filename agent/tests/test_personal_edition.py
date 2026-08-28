@@ -15,7 +15,10 @@ from src.tools import build_registry
 
 
 def test_only_feishu_and_weixin_channels_are_exposed() -> None:
-    assert discover_channel_names() == ["feishu", "weixin"]
+    assert discover_channel_names() == [
+        "feishu", "feishu_macro_policy", "feishu_risk", "feishu_supervisor",
+        "feishu_valuation", "weixin",
+    ]
 
 
 def test_agent_registry_exposes_no_broker_or_live_trading_tools() -> None:

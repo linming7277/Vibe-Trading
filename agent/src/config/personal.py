@@ -8,7 +8,17 @@ automatic module discovery or a newly added UI/API registration.
 from __future__ import annotations
 
 
-SUPPORTED_CHANNELS = frozenset({"feishu", "weixin"})
+# ``feishu`` remains the existing financial-research bot.  Additional
+# first-party Feishu roles are separate channel instances, not aliases that
+# replace the financial bot's default agent.
+SUPPORTED_CHANNELS = frozenset({
+    "feishu",
+    "feishu_supervisor",
+    "feishu_risk",
+    "feishu_valuation",
+    "feishu_macro_policy",
+    "weixin",
+})
 
 # India (NSE/BSE) and Korea (KRX/KOSPI/KOSDAQ) are intentionally outside this
 # personal research workspace.  Keep both the market names and their dedicated

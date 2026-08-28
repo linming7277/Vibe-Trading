@@ -14,6 +14,9 @@ from src.channels.bus.events import InboundMessage, OutboundMessage
 from src.channels.bus.queue import MessageBus
 from src.channels.manager import ChannelManager
 from src.channels.feishu import _LarkCredentialFilter
+from src.channels.feishu import FeishuChannel
+from src.channels.feishu_supervisor import FeishuSupervisorChannel
+from src.channels.pairing import format_pairing_reply
 from src.channels.registry import discover_channel_names, inspect_channels
 from src.config.schema import ChannelsConfig
 from src.channelsui.cli_apps_api import normalize_cli_app_mentions
@@ -29,6 +32,21 @@ from src.session.webui_turns import (
     websocket_turn_wall_started_at,
 )
 from src.utils.media_decode import FileSizeExceeded, save_base64_data_url
+
+
+def test_feishu_pairing_reply_uses_the_channel_role_name() -> None:
+    financial_reply = format_pairing_reply(
+        "ABCD-EFGH",
+        role_name=FeishuChannel.pairing_role_name,
+    )
+    supervisor_reply = format_pairing_reply(
+        "ABCD-EFGH",
+        role_name=FeishuSupervisorChannel.pairing_role_name,
+    )
+
+    assert "财报研究员只响应已授权用户" in financial_reply
+    assert "投研主管只响应已授权用户" in supervisor_reply
+    assert "财报研究员" not in supervisor_reply
 
 
 def test_lark_sdk_logs_redact_temporary_connection_credentials() -> None:
@@ -103,7 +121,33 @@ class FakeFinancialAgent:
         return {
             "answer": "已基于本地财务快照回答。", "scope": "company",
             "stock_code": "002371.SZ", "stock_name": "北方华创", "as_of": "2026-08-17",
+            "data_dates": {
+                "quote_as_of": "2026-08-21T11:05:00+08:00", "valuation_as_of": "2026-08-19T09:48:00+08:00",
+                "financial_report_date": "2026-03-31", "financial_announcement_date": "2026-04-30",
+                "leader_as_of": "2026-08-17",
+            },
             "leader_snapshot_as_of": "2026-08-17",
+        }
+
+
+class FakeStreamingFinancialAgent(FakeFinancialAgent):
+    def chat_current_leader_pool(self, *, question: str, history: list[dict[str, str]], progress=None) -> dict[str, Any]:
+        self.calls.append({"question": question, "history": history})
+        if progress is not None:
+            progress("financial_snapshot_loaded", "已读取测试财务快照", {"as_of": "2026-08-17"})
+            progress(
+                "model_output_delta", "正在输出财报正文（已生成 4 字）",
+                {"text_delta": "流式正文", "stock_code": "600460.SH", "stock_name": "士兰微"},
+            )
+        return {
+            "answer": "流式正文", "scope": "company",
+            "stock_code": "600460.SH", "stock_name": "士兰微", "as_of": "2026-08-17",
+            "data_dates": {
+                "quote_as_of": "2026-08-21T11:05:00+08:00", "valuation_as_of": "2026-08-19T09:48:00+08:00",
+                "financial_report_date": "2026-03-31", "financial_announcement_date": "2026-04-30",
+                "leader_as_of": "2026-08-17",
+            },
+            "leader_snapshot_status": "not_requested",
         }
 
 
@@ -127,7 +171,10 @@ def test_channel_manager_rejects_removed_websocket_adapter() -> None:
 
 
 def test_registry_reports_only_personal_edition_channels() -> None:
-    expected = {"feishu", "weixin"}
+    expected = {
+        "feishu", "feishu_supervisor", "feishu_risk", "feishu_valuation",
+        "feishu_macro_policy", "weixin",
+    }
 
     assert expected == set(discover_channel_names())
     assert {"config", "runtime"}.isdisjoint(set(discover_channel_names()))
@@ -179,7 +226,10 @@ def test_channel_manager_status_excludes_removed_configured_adapters() -> None:
 
     assert "send_max_retries" not in status
     assert "reply_timeout_s" not in status
-    assert set(status) == {"feishu", "weixin"}
+    assert set(status) == {
+        "feishu", "feishu_supervisor", "feishu_risk", "feishu_valuation",
+        "feishu_macro_policy", "weixin",
+    }
 
 
 def test_registry_marks_lazy_sdk_adapter_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -345,6 +395,42 @@ def test_channel_runtime_routes_explicit_feishu_financial_request(tmp_path: Path
     asyncio.run(scenario())
 
 
+def test_feishu_financial_stream_does_not_duplicate_final_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        import src.financial_analysis.service as financial_service
+        from src.channels.runtime import ChannelRuntime
+
+        financial = FakeStreamingFinancialAgent()
+        monkeypatch.setattr(financial_service, "get_financial_analysis_service", lambda: financial)
+        bus = MessageBus()
+        runtime = ChannelRuntime(
+            bus=bus, session_service=FakeSessionService(), manager=None,
+            session_map_path=tmp_path / "sessions.json",
+        )
+        await runtime.start(start_manager=False)
+        try:
+            await bus.publish_inbound(InboundMessage(
+                channel="feishu", sender_id="user-1", chat_id="chat-1",
+                content="/财报 分析600460", metadata={"message_id": "msg-stream"},
+            ))
+            content, outbound = await consume_stream(bus)
+        finally:
+            await runtime.stop()
+
+        assert content.count("流式正文") == 1
+        assert "财报研究员 · 士兰微" in content
+        assert "行情 2026-08-21 11:05" in content
+        assert "估值 2026-08-19 09:48" in content
+        assert "财报期 2026-03-31" in content
+        assert "龙头排名 2026-08-17" in content
+        assert "数据截至 2026-08-17" not in content
+        assert outbound[-1].metadata["_stream_end"] is True
+
+    asyncio.run(scenario())
+
+
 def test_dedicated_feishu_bot_routes_plain_questions_to_financial_agent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -378,6 +464,181 @@ def test_dedicated_feishu_bot_routes_plain_questions_to_financial_agent(
         assert financial.calls[0]["question"] == "贵州茅台近五年的现金流质量怎么样？"
         assert "财报研究过程" in content
         assert outbound[-1].metadata["financial_agent"] is True
+
+    asyncio.run(scenario())
+
+
+def test_dedicated_feishu_bot_routes_plain_questions_to_investment_research_supervisor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        import src.investment_research_supervisor as supervisor_module
+        from src.channels.runtime import ChannelRuntime
+
+        class FakeSupervisor:
+            def __init__(self) -> None:
+                self.calls: list[dict[str, Any]] = []
+
+            def handle_question(self, *, question: str, history: list[dict[str, str]]):
+                from src.investment_research_supervisor import ResearchBrief
+                self.calls.append({"question": question, "history": history})
+                return ResearchBrief(
+                    intent="FINANCIAL", research_as_of="2026-08-25", answer="财务依据：已读取保存快照。",
+                    capabilities=("FINANCIAL",), stock_code="600519.SH", stock_name="贵州茅台",
+                )
+
+        supervisor = FakeSupervisor()
+        monkeypatch.setattr(supervisor_module, "get_investment_research_supervisor_service", lambda: supervisor)
+        bus = MessageBus()
+        general = FakeSessionService()
+        runtime = ChannelRuntime(
+            bus=bus, session_service=general, manager=None, session_map_path=tmp_path / "sessions.json",
+            default_agents={"feishu_supervisor": "investment_research_supervisor"},
+        )
+        await runtime.start(start_manager=False)
+        try:
+            await bus.publish_inbound(InboundMessage(
+                channel="feishu_supervisor", sender_id="owner", chat_id="chat-1", content="看一下贵州茅台财务",
+                metadata={"message_id": "msg-supervisor"},
+            ))
+            content, outbound = await consume_stream(bus)
+        finally:
+            await runtime.stop()
+
+        assert general.sent == []
+        assert supervisor.calls == [{"question": "看一下贵州茅台财务", "history": []}]
+        assert "投研主管 · 贵州茅台" in content
+        assert "财务依据" in content
+        assert outbound[-1].metadata["investment_research_supervisor"] is True
+        assert outbound[-1].metadata["_stream_end"] is True
+
+    asyncio.run(scenario())
+
+
+def test_supervisor_self_intro_is_not_formatted_as_company_research(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        import src.investment_research_supervisor as supervisor_module
+        from src.channels.runtime import ChannelRuntime
+
+        class FakeSupervisor:
+            def handle_question(self, *, question: str, history: list[dict[str, str]]):
+                from src.investment_research_supervisor import ResearchBrief
+
+                assert question == "你是什么模型，有什么功能"
+                assert history == []
+                return ResearchBrief(
+                    intent="SELF_INTRO",
+                    research_as_of=None,
+                    answer="我是投研主管，当前模型为 test-model。",
+                    capabilities=("COMPANY_OVERVIEW", "FINANCIAL"),
+                )
+
+        monkeypatch.setattr(
+            supervisor_module,
+            "get_investment_research_supervisor_service",
+            lambda: FakeSupervisor(),
+        )
+        bus = MessageBus()
+        runtime = ChannelRuntime(
+            bus=bus,
+            session_service=FakeSessionService(),
+            manager=None,
+            session_map_path=tmp_path / "sessions.json",
+            default_agents={"feishu_supervisor": "investment_research_supervisor"},
+        )
+        await runtime.start(start_manager=False)
+        try:
+            await bus.publish_inbound(InboundMessage(
+                channel="feishu_supervisor",
+                sender_id="owner",
+                chat_id="chat-1",
+                content="你是什么模型，有什么功能",
+                metadata={"message_id": "msg-supervisor-intro"},
+            ))
+            content, _outbound = await consume_stream(bus)
+        finally:
+            await runtime.stop()
+
+        assert "我是投研主管" in content
+        assert "投研主管 · 公司研究" not in content
+        assert "研究基准日" not in content
+        assert "未能识别出具体公司" not in content
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("channel", "agent", "title"),
+    [
+        ("feishu_risk", "risk_researcher", "风险研究员"),
+        ("feishu_valuation", "valuation_researcher", "估值研究员"),
+        ("feishu_macro_policy", "macro_policy_researcher", "宏观政策研究员"),
+    ],
+)
+def test_dedicated_feishu_specialists_keep_independent_routes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    channel: str,
+    agent: str,
+    title: str,
+) -> None:
+    async def scenario() -> None:
+        import src.research_specialist_chat as specialist_module
+        from src.channels.runtime import ChannelRuntime
+
+        class FakeSpecialist:
+            def __init__(self) -> None:
+                self.calls: list[dict[str, Any]] = []
+
+            def handle_question(self, *, agent: str, question: str, history: list[dict[str, str]]):
+                from src.research_specialist_chat import SpecialistBrief
+
+                self.calls.append({"agent": agent, "question": question, "history": history})
+                return SpecialistBrief(
+                    agent=agent,
+                    title=title,
+                    answer=f"{title}独立回答。",
+                    research_as_of="2026-08-25",
+                    model_name="test-model",
+                    stock_code=None if agent == "macro_policy_researcher" else "600519.SH",
+                    stock_name=None if agent == "macro_policy_researcher" else "贵州茅台",
+                )
+
+        specialist = FakeSpecialist()
+        monkeypatch.setattr(
+            specialist_module,
+            "get_research_specialist_chat_service",
+            lambda: specialist,
+        )
+        bus = MessageBus()
+        general = FakeSessionService()
+        runtime = ChannelRuntime(
+            bus=bus,
+            session_service=general,
+            manager=None,
+            session_map_path=tmp_path / "sessions.json",
+            default_agents={channel: agent},
+        )
+        await runtime.start(start_manager=False)
+        try:
+            await bus.publish_inbound(InboundMessage(
+                channel=channel,
+                sender_id="owner",
+                chat_id="chat-1",
+                content="测试问题",
+                metadata={"message_id": f"msg-{agent}"},
+            ))
+            content, outbound = await consume_stream(bus)
+        finally:
+            await runtime.stop()
+
+        assert general.sent == []
+        assert specialist.calls == [{"agent": agent, "question": "测试问题", "history": []}]
+        assert title in content
+        assert outbound[-1].metadata["research_specialist"] == agent
+        assert outbound[-1].metadata["_stream_end"] is True
 
     asyncio.run(scenario())
 

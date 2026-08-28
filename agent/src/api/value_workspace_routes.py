@@ -1,594 +1,162 @@
-"""HTTP API for the A-share value research workbench."""
+"""Focused HTTP API for the Value Line L3 leader pool and research state."""
 
 from __future__ import annotations
 
-from datetime import date
-from typing import Any, Awaitable, Callable, Literal
+import asyncio
+from typing import Any, Awaitable, Callable
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel
 
-from src.strategy_engines.store import StrategyEngineStore
-from src.value_workspace.service import RESEARCH_TEMPLATE_VERSION, ValueWorkspaceService
-from src.value_workspace.store import ValueWorkspaceStore
+from src.financial_analysis.service import get_financial_analysis_service
+from src.level3_leaders.service import get_level3_leader_service
+from src.level3_leaders.store import Level3LeaderStore
 
 AuthDep = Callable[..., Awaitable[Any] | Any]
-
-
-class ProfilePayload(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
-    mode: Literal["single", "composite"]
-    model_weights: dict[str, float]
-
-
-class ResearchBatchPayload(BaseModel):
-    run_id: str
-    track_id: str
-    symbols: list[str] = Field(min_length=1, max_length=20)
-    concurrency: int = Field(default=3, ge=1, le=5)
-    template_version: str = Field(default=RESEARCH_TEMPLATE_VERSION, min_length=1, max_length=100)
-
-
-class MonitorPayload(BaseModel):
-    research_job_id: str | None = None
-    universe_id: str | None = None
-    symbol: str | None = None
-    position_state: Literal["watching", "holding"] = "watching"
-    risk_preset: Literal["balanced"] = "balanced"
-    conditions: dict[str, Any] = Field(default_factory=dict)
-    channels: list[Literal["in_app", "feishu", "weixin"]] = Field(default_factory=lambda: ["in_app"])
-
-
-class MonitorPatch(BaseModel):
-    status: Literal["active", "paused", "closed"] | None = None
-    conditions: dict[str, Any] | None = None
-    channels: list[Literal["in_app", "feishu", "weixin"]] | None = None
-    position_state: Literal["watching", "holding"] | None = None
-    risk_preset: Literal["balanced"] | None = None
-    thesis_invalidated: bool | None = None
-
-
-class ResearchMonitorPatch(BaseModel):
-    status: Literal["research_watching", "paused"] | None = None
-    is_priority: bool | None = None
-
-
-class UniversePayload(BaseModel):
-    run_id: str
-    candidate_limit: Literal[5, 10, 20, 50] = 20
-    leader_limit: Literal[5] = 5
-
-
-class OperationPayload(BaseModel):
-    universe_id: str | None = None
-    as_of: str | None = None
-
-
-class Level3LeaderBootstrapPayload(BaseModel):
-    as_of: str | None = None
-    leader_limit: Literal[2] = 2
-
-
-class EventAcknowledgePayload(BaseModel):
-    status: Literal["acknowledged", "closed"] = "acknowledged"
-    note: str = Field(default="", max_length=2000)
 
 
 class AutomationPatch(BaseModel):
     enabled: bool
 
 
-def _run_batch(batch_id: str) -> None:
-    service = ValueWorkspaceService()
-    try:
-        service.run_batch(batch_id)
-    finally:
-        service.close()
-
-
-def _run_operation(run_id: str) -> None:
-    import asyncio
-    import sys
-
-    service = ValueWorkspaceService()
-    try:
-        result = service.run_operation(run_id)
-        events = list(result.get("generated_events") or [])
-        if events:
-            host = sys.modules.get("api_server") or sys.modules.get("agent.api_server")
-            try:
-                runtime = host._get_channel_runtime() if host else None
-            except Exception:
-                runtime = None
-            asyncio.run(service.deliver_notifications(events, getattr(runtime, "manager", None)))
-    finally:
-        service.close()
+class ResearchStatePatch(BaseModel):
+    is_priority: bool
 
 
 def register_value_workspace_routes(app: FastAPI, require_auth: AuthDep) -> None:
-    @app.get("/strategy/value/profiles", dependencies=[Depends(require_auth)])
-    async def list_profiles():
-        store = ValueWorkspaceStore()
-        try:
-            return {"items": store.list_profiles()}
-        finally:
-            store.close()
+    auth = [Depends(require_auth)]
 
-    @app.post("/strategy/value/profiles", dependencies=[Depends(require_auth)])
-    async def create_profile(payload: ProfilePayload):
-        store = ValueWorkspaceStore()
+    @app.get("/strategy/value/research-states", dependencies=auth)
+    async def value_research_states():
         try:
-            return store.save_profile(name=payload.name, mode=payload.mode, weights=payload.model_weights)
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        finally:
-            store.close()
-
-    @app.get("/strategy/value/profiles/{profile_id}", dependencies=[Depends(require_auth)])
-    async def get_profile(profile_id: str):
-        store = ValueWorkspaceStore()
-        try:
-            value = store.get_profile(profile_id)
-            if not value:
-                raise HTTPException(404, "calculation profile not found")
-            return value
-        finally:
-            store.close()
-
-    @app.patch("/strategy/value/profiles/{profile_id}", dependencies=[Depends(require_auth)])
-    async def patch_profile(profile_id: str, payload: ProfilePayload):
-        store = ValueWorkspaceStore()
-        try:
-            return store.save_profile(profile_id=profile_id, name=payload.name, mode=payload.mode, weights=payload.model_weights)
+            pool = await asyncio.to_thread(get_level3_leader_service().ensure_current_pool)
         except KeyError as exc:
             raise HTTPException(404, str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        finally:
-            store.close()
+        return {
+            "pool_id": pool["id"], "as_of": pool["as_of"],
+            "items": [
+                item for item in pool.get("research_states", [])
+                if item.get("lifecycle_status") != "OUT_OF_TOP2"
+            ],
+        }
 
-    @app.delete("/strategy/value/profiles/{profile_id}", dependencies=[Depends(require_auth)])
-    async def delete_profile(profile_id: str):
-        store = ValueWorkspaceStore()
+    @app.patch("/strategy/value/research-states/{stock_code}", dependencies=auth)
+    async def patch_value_research_state(stock_code: str, payload: ResearchStatePatch):
+        service = get_level3_leader_service()
+        pool = await asyncio.to_thread(service.ensure_current_pool)
+        store = Level3LeaderStore()
         try:
-            store.delete_profile(profile_id)
-            return {"status": "deleted"}
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(409, str(exc)) from exc
-        finally:
-            store.close()
-
-    @app.get("/strategy/value/workbench", dependencies=[Depends(require_auth)])
-    async def workbench(profile_id: str | None = Query(default=None)):
-        service = ValueWorkspaceService()
-        try:
-            profile = service.store.get_profile(profile_id)
-            if not profile:
-                raise HTTPException(404, "calculation profile not found")
-            snapshot = service.materialize_v2_snapshot(profile["id"])
-            batches = service.store.list_batches(10)
-            monitors = service.store.list_monitors()
-            return {
-                "profile": profile, "latest_run": snapshot["run"], "macro": snapshot["macro"],
-                "tracks": snapshot["tracks"], "sector_scores": snapshot.get("sectors", []),
-                "research_batches": batches,
-                "monitor_summary": {"active": sum(item["status"] == "active" for item in monitors), "events": len(service.store.list_events(200))},
-            }
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        finally:
-            service.close()
-
-    @app.get("/strategy/value/tracks", dependencies=[Depends(require_auth)])
-    async def tracks(run_id: str):
-        store = ValueWorkspaceStore()
-        try:
-            return {"run_id": run_id, "items": store.list_tracks(run_id)}
-        finally:
-            store.close()
-
-    @app.get("/strategy/value/tracks/{track_id}/leaders", dependencies=[Depends(require_auth)])
-    async def leaders(track_id: str, run_id: str):
-        service = ValueWorkspaceService()
-        try:
-            return {"run_id": run_id, "track_id": track_id, "items": service.ensure_track_leaders(run_id, track_id)}
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        finally:
-            service.close()
-
-    @app.get("/strategy/value/research-universes", dependencies=[Depends(require_auth)])
-    async def list_research_universes(profile_id: str | None = Query(default=None)):
-        store = ValueWorkspaceStore()
-        try:
-            return {"items": store.list_universes(profile_id)}
-        finally:
-            store.close()
-
-    @app.post("/strategy/value/research-universes", dependencies=[Depends(require_auth)])
-    async def create_research_universe(payload: UniversePayload):
-        service = ValueWorkspaceService()
-        try:
-            universe, created = service.create_research_universe(
-                payload.run_id, payload.candidate_limit, payload.leader_limit,
+            cursor = store._conn.execute(
+                """UPDATE l3_company_research_states SET is_priority=?,updated_at=datetime('now')
+                   WHERE pool_id=? AND stock_code=?""",
+                (int(payload.is_priority), pool["id"], stock_code.upper()),
             )
-            return {**universe, "created": created}
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        finally:
-            service.close()
-
-    @app.get("/strategy/value/research-universes/{universe_id}", dependencies=[Depends(require_auth)])
-    async def get_research_universe(universe_id: str):
-        store = ValueWorkspaceStore()
-        try:
-            universe = store.get_universe(universe_id)
-            if not universe:
-                raise HTTPException(404, "research universe not found")
-            return universe
+            store._conn.commit()
+            if cursor.rowcount != 1:
+                raise HTTPException(404, "company is not in the current leader pool")
+            row = store._conn.execute(
+                "SELECT * FROM l3_company_research_states WHERE pool_id=? AND stock_code=?",
+                (pool["id"], stock_code.upper()),
+            ).fetchone()
+            return dict(row)
         finally:
             store.close()
 
-    @app.get("/strategy/value/research-universes/{universe_id}/analysis", dependencies=[Depends(require_auth)])
-    async def get_research_universe_analysis(universe_id: str):
-        service = ValueWorkspaceService()
+    @app.post("/strategy/value/research-states/{stock_code}/refresh", dependencies=auth)
+    async def refresh_value_company_research(stock_code: str):
+        service = get_level3_leader_service()
+        pool = await asyncio.to_thread(service.ensure_current_pool)
+        state = next(
+            (item for item in pool.get("research_states", []) if item["stock_code"] == stock_code.upper()),
+            None,
+        )
+        if not state or state.get("lifecycle_status") == "OUT_OF_TOP2":
+            raise HTTPException(404, "company is not in the current leader pool")
+        snapshot = await asyncio.to_thread(
+            get_financial_analysis_service().prepare, stock_code.upper(), as_of=str(pool["as_of"]),
+        )
+        store = Level3LeaderStore()
         try:
-            return service.universe_analysis(universe_id)
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        finally:
-            service.close()
-
-    @app.get("/strategy/value/research-monitors", dependencies=[Depends(require_auth)])
-    async def list_research_monitors(universe_id: str | None = Query(default=None)):
-        store = ValueWorkspaceStore()
-        try:
-            return {"items": store.list_research_monitors(universe_id)}
-        finally:
-            store.close()
-
-    @app.patch("/strategy/value/research-monitors/{monitor_id}", dependencies=[Depends(require_auth)])
-    async def patch_research_monitor(monitor_id: str, payload: ResearchMonitorPatch):
-        store = ValueWorkspaceStore()
-        try:
-            monitor = store.get_research_monitor(monitor_id)
-            if not monitor:
-                raise HTTPException(404, "research monitor not found")
-            fields = payload.model_dump(exclude_none=True)
-            return store.update_research_monitor(monitor["universe_id"], monitor["symbol"], **fields)
-        finally:
-            store.close()
-
-    @app.get("/strategy/value/valuations", dependencies=[Depends(require_auth)])
-    async def list_company_valuations(
-        universe_id: str = Query(...), queue: str = Query(default="all"), limit: int = Query(default=500, ge=1, le=1000),
-    ):
-        service = ValueWorkspaceService()
-        try:
-            items = service.universe_analysis(universe_id)["items"]
-            if queue == "priority":
-                items = [item for item in items if item.get("is_priority")]
-            elif queue == "entry":
-                items = [item for item in items if item.get("decision_status") == "entry_candidate"]
-            elif queue == "review_exit":
-                items = [item for item in items if item.get("decision_status") in {"holding_review", "exit_candidate", "thesis_invalidated"}]
-            return {"universe_id": universe_id, "queue": queue, "total": len(items), "items": items[:limit]}
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        finally:
-            service.close()
-
-    @app.get("/strategy/value/valuations/{symbol}", dependencies=[Depends(require_auth)])
-    async def get_company_valuation(symbol: str, universe_id: str = Query(...)):
-        store = ValueWorkspaceStore()
-        try:
-            value = store.latest_valuation(universe_id, symbol.upper())
-            if not value:
-                raise HTTPException(404, "valuation snapshot not found")
-            return value
-        finally:
-            store.close()
-
-    @app.post("/strategy/value/valuations/{valuation_id}/confirm", dependencies=[Depends(require_auth)])
-    async def confirm_company_valuation(valuation_id: str):
-        store = ValueWorkspaceStore()
-        try:
-            return store.confirm_valuation(valuation_id)
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        finally:
-            store.close()
-
-    @app.post("/strategy/value/research-universes/{universe_id}/bootstrap", dependencies=[Depends(require_auth)])
-    async def bootstrap_research_universe(
-        universe_id: str, background_tasks: BackgroundTasks, payload: OperationPayload | None = None,
-    ):
-        service = ValueWorkspaceService()
-        try:
-            operation, created = service.create_operation(
-                universe_id, run_kind="bootstrap", as_of=(payload.as_of if payload else None) or date.today().isoformat(),
+            store.update_research_state(
+                pool["id"], stock_code.upper(),
+                status="READY" if snapshot.get("feature_status") in {"READY", "PARTIAL"} else "PARTIAL",
+                snapshot_id=snapshot.get("id"), researched_at=snapshot.get("updated_at"),
             )
-            if created:
-                background_tasks.add_task(_run_operation, operation["id"])
-            return {**operation, "created": created}
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        finally:
-            service.close()
-
-    @app.post("/strategy/value/industry-leader-universe/bootstrap", dependencies=[Depends(require_auth)])
-    async def bootstrap_industry_leader_universe(
-        background_tasks: BackgroundTasks, payload: Level3LeaderBootstrapPayload | None = None,
-    ):
-        """Create and archive the same Top-2 pool rendered by the industry-leader page."""
-        service = ValueWorkspaceService()
-        try:
-            universe, universe_created = service.create_level3_leader_research_universe(
-                as_of=payload.as_of if payload else None,
-                leader_limit=payload.leader_limit if payload else 2,
-            )
-            operation, created = service.create_operation(
-                universe["id"], run_kind="bootstrap", as_of=str(universe["data_as_of"]),
-            )
-            if created:
-                background_tasks.add_task(_run_operation, operation["id"])
-            return {**operation, "created": created, "universe": universe, "universe_created": universe_created}
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        finally:
-            service.close()
-
-    @app.post("/strategy/value/research-universes/{universe_id}/activate", dependencies=[Depends(require_auth)])
-    async def activate_research_universe(universe_id: str):
-        store = ValueWorkspaceStore()
-        try:
-            return store.activate_universe(universe_id)
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(409, str(exc)) from exc
         finally:
             store.close()
+        return snapshot
 
-    @app.get("/strategy/value/company-archives/{symbol}", dependencies=[Depends(require_auth)])
-    async def company_research_archive(symbol: str):
-        service = ValueWorkspaceService()
-        try:
-            archive = service.company_archive(symbol.upper())
-            if not archive["memberships"] and not archive["snapshots"]:
-                raise HTTPException(404, "company research archive not found")
-            return archive
-        finally:
-            service.close()
-
-    @app.post("/strategy/value/incremental-runs", dependencies=[Depends(require_auth)])
-    async def create_incremental_run(payload: OperationPayload, background_tasks: BackgroundTasks):
-        if not payload.universe_id:
-            raise HTTPException(422, "universe_id is required")
-        service = ValueWorkspaceService()
-        try:
-            operation, created = service.create_operation(
-                payload.universe_id, run_kind="incremental", as_of=payload.as_of or date.today().isoformat(),
-            )
-            if created:
-                background_tasks.add_task(_run_operation, operation["id"])
-            return {**operation, "created": created}
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        finally:
-            service.close()
-
-    @app.get("/strategy/value/incremental-runs/{run_id}", dependencies=[Depends(require_auth)])
-    async def get_incremental_run(run_id: str):
-        store = ValueWorkspaceStore()
-        try:
-            operation = store.get_incremental_run(run_id)
-            if not operation:
-                raise HTTPException(404, "incremental run not found")
-            return operation
-        finally:
-            store.close()
-
-    @app.post("/strategy/value/incremental-runs/{run_id}/cancel", dependencies=[Depends(require_auth)])
-    async def cancel_incremental_run(run_id: str):
-        store = ValueWorkspaceStore()
-        try:
-            if not store.get_incremental_run(run_id):
-                raise HTTPException(404, "incremental run not found")
-            store.update_incremental_run(run_id, cancel_requested=1)
-            return store.get_incremental_run(run_id)
-        finally:
-            store.close()
-
-    @app.post("/strategy/value/incremental-runs/{run_id}/retry", dependencies=[Depends(require_auth)])
-    async def retry_incremental_run(run_id: str, background_tasks: BackgroundTasks):
-        store = ValueWorkspaceStore()
-        try:
-            operation = store.retry_incremental_run(run_id)
-            background_tasks.add_task(_run_operation, run_id)
-            return operation
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        finally:
-            store.close()
-
-    @app.post("/strategy/value/research-batches", dependencies=[Depends(require_auth)])
-    async def create_batch(payload: ResearchBatchPayload, background_tasks: BackgroundTasks):
-        store = ValueWorkspaceStore()
-        engine = StrategyEngineStore(store.db_path)
-        try:
-            run = engine.get_run(payload.run_id)
-            if not run or run.get("strategy_line") != "value" or run.get("market") != "CN":
-                raise HTTPException(404, "A-share value strategy run not found")
-            leaders = {item["symbol"]: item for item in store.list_leaders(payload.run_id, payload.track_id)}
-            symbols = list(dict.fromkeys(symbol.strip().upper() for symbol in payload.symbols))
-            if any(symbol not in leaders for symbol in symbols):
-                raise HTTPException(422, "research symbols must belong to the selected track leader snapshot")
-            companies = [{"symbol": symbol, "name": leaders[symbol]["name"]} for symbol in symbols]
-            batch, created = store.create_batch(
-                run_id=payload.run_id, profile_id=str(run.get("profile_id") or "profile_balanced"), track_id=payload.track_id,
-                companies=companies, template_version=payload.template_version, concurrency=payload.concurrency,
-            )
-            if created:
-                background_tasks.add_task(_run_batch, batch["id"])
-            return {**batch, "created": created}
-        finally:
-            engine.close()
-            store.close()
-
-    @app.get("/strategy/value/research-batches", dependencies=[Depends(require_auth)])
-    async def list_batches():
-        store = ValueWorkspaceStore()
-        try:
-            return {"items": store.list_batches()}
-        finally:
-            store.close()
-
-    @app.get("/strategy/value/research-batches/{batch_id}", dependencies=[Depends(require_auth)])
-    async def get_batch(batch_id: str):
-        store = ValueWorkspaceStore()
-        try:
-            value = store.get_batch(batch_id)
-            if not value:
-                raise HTTPException(404, "research batch not found")
-            return value
-        finally:
-            store.close()
-
-    @app.post("/strategy/value/research-batches/{batch_id}/cancel", dependencies=[Depends(require_auth)])
-    async def cancel_batch(batch_id: str):
-        store = ValueWorkspaceStore()
-        try:
-            if not store.get_batch(batch_id):
-                raise HTTPException(404, "research batch not found")
-            store.update_batch(batch_id, cancel_requested=1)
-            return store.get_batch(batch_id)
-        finally:
-            store.close()
-
-    @app.post("/strategy/value/research-batches/{batch_id}/retry", dependencies=[Depends(require_auth)])
-    async def retry_batch(batch_id: str, background_tasks: BackgroundTasks):
-        service = ValueWorkspaceService()
-        try:
-            batch = service.retry_failed_jobs(batch_id)
-            background_tasks.add_task(_run_batch, batch_id)
-            return batch
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        finally:
-            service.close()
-
-    @app.get("/strategy/value/monitors", dependencies=[Depends(require_auth)])
-    async def list_monitors():
-        store = ValueWorkspaceStore()
-        try:
-            return {"items": store.list_monitors()}
-        finally:
-            store.close()
-
-    @app.post("/strategy/value/monitors", dependencies=[Depends(require_auth)])
-    async def create_monitor(payload: MonitorPayload):
-        service = ValueWorkspaceService()
-        try:
-            channels = list(dict.fromkeys(payload.channels))
-            if payload.universe_id and payload.symbol:
-                return service.create_universe_monitor(
-                    universe_id=payload.universe_id, symbol=payload.symbol.upper(),
-                    conditions=payload.conditions, channels=channels,
-                    position_state=payload.position_state, risk_preset=payload.risk_preset,
-                )
-            if not payload.research_job_id:
-                raise HTTPException(422, "research_job_id or universe_id + symbol is required")
-            return service.store.create_monitor(
-                job_id=payload.research_job_id, conditions=payload.conditions, channels=channels,
-                position_state=payload.position_state, risk_preset=payload.risk_preset,
-            )
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        finally:
-            service.close()
-
-    @app.patch("/strategy/value/monitors/{monitor_id}", dependencies=[Depends(require_auth)])
-    async def patch_monitor(monitor_id: str, payload: MonitorPatch):
-        store = ValueWorkspaceStore()
-        try:
-            return store.update_monitor(monitor_id, **payload.model_dump(exclude_none=True))
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        finally:
-            store.close()
-
-    @app.post("/strategy/value/monitors/evaluate", dependencies=[Depends(require_auth)])
-    async def evaluate_monitors():
-        service = ValueWorkspaceService()
-        try:
-            events = service.evaluate_monitors()
-            import sys
-            host = sys.modules.get("api_server") or sys.modules.get("agent.api_server")
-            try:
-                runtime = host._get_channel_runtime() if host else None
-            except Exception:
-                runtime = None
-            await service.deliver_notifications(events, getattr(runtime, "manager", None))
-            return {"items": service.store.list_events(len(events) or 1) if events else []}
-        finally:
-            service.close()
-
-    @app.get("/strategy/value/monitor-events", dependencies=[Depends(require_auth)])
-    async def monitor_events(
-        limit: int = Query(default=200, ge=1, le=1000),
-        event_type: str | None = Query(default=None), status: str | None = Query(default=None),
-    ):
-        store = ValueWorkspaceStore()
-        try:
-            return {"items": store.list_events(limit, event_type=event_type, status=status)}
-        finally:
-            store.close()
-
-    @app.post("/strategy/value/monitor-events/{event_id}/acknowledge", dependencies=[Depends(require_auth)])
-    async def acknowledge_monitor_event(event_id: str, payload: EventAcknowledgePayload):
-        store = ValueWorkspaceStore()
-        try:
-            return store.acknowledge_event(event_id, status=payload.status, note=payload.note)
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        finally:
-            store.close()
-
-    @app.get("/strategy/value/automation", dependencies=[Depends(require_auth)])
-    async def get_value_automation():
-        store = ValueWorkspaceStore()
+    @app.get("/strategy/value/automation", dependencies=auth)
+    async def value_automation():
+        store = Level3LeaderStore()
         try:
             return store.get_automation()
         finally:
             store.close()
 
-    @app.patch("/strategy/value/automation", dependencies=[Depends(require_auth)])
+    @app.patch("/strategy/value/automation", dependencies=auth)
     async def patch_value_automation(payload: AutomationPatch):
-        from src.value_workspace.automation import get_value_research_scheduler
-
-        store = ValueWorkspaceStore()
+        store = Level3LeaderStore()
         try:
             value = store.update_automation(enabled=payload.enabled)
-            get_value_research_scheduler().wake()
-            return value
         finally:
             store.close()
+        from src.value_workspace.automation import get_value_research_scheduler
+        get_value_research_scheduler().wake()
+        return value
+
+    @app.post("/strategy/value/automation/run-now", dependencies=auth)
+    async def run_value_automation_now():
+        """Manually resume the normal Value Line pipeline from one qualified close.
+
+        This deliberately consumes the latest published close instead of
+        synthesising a natural-day snapshot, so a manual click cannot label
+        intraday or incomplete data as a completed Value Line result.
+        """
+        from src.tdx_data.service import get_tdx_service
+        from src.value_workspace.automation import get_value_research_scheduler
+
+        # A historical repair can legitimately materialize a newer Value Line
+        # version before the ordinary TDX `market_close` snapshot catches up.
+        # Never let a click on this operational recovery button overwrite that
+        # newer result with an older qualified-close version.
+        ready, _reason, snapshot = get_tdx_service().latest_qualified_close_snapshot()
+        target_as_of = str((snapshot or {}).get("market_date") or "")[:10]
+        store = Level3LeaderStore()
+        try:
+            latest_run = store.latest_run()
+        finally:
+            store.close()
+        if ready and target_as_of and latest_run and str(latest_run.get("as_of") or "") > target_as_of:
+            from src.investment_research_supervisor import get_daily_brief_bitable_publisher
+
+            # A historical repair may have already created the newer report.
+            # The normal scheduler is intentionally not allowed to roll that
+            # result back to an older qualified close, but the managed Feishu
+            # table must still be brought to the same research date.
+            bitable = await asyncio.to_thread(
+                get_daily_brief_bitable_publisher().publish,
+                research_as_of=str(latest_run["as_of"]),
+            )
+            if bitable.get("status") != "READY":
+                return {
+                    "status": "PARTIAL",
+                    "as_of": latest_run["as_of"],
+                    "pool_id": latest_run["id"],
+                    "stages": {"FEISHU_BITABLE": "FAILED"},
+                    "error": str(bitable.get("error") or "Feishu Bitable synchronization failed"),
+                }
+            return {
+                "status": "UP_TO_DATE",
+                "as_of": latest_run["as_of"],
+                "pool_id": latest_run["id"],
+                "stages": {"FEISHU_BITABLE": "READY"},
+                "reason": "当前价值线结果已比最近合格收盘快照更新，保留较新的结果。",
+            }
+
+        result = await asyncio.to_thread(
+            get_value_research_scheduler().recover_latest_completed,
+        )
+        if result.get("status") == "DISABLED":
+            raise HTTPException(409, "value research automation is disabled")
+        return result

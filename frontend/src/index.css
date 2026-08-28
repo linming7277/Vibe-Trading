@@ -108,6 +108,23 @@
   overflow-anchor: none;
 }
 
+.capital-fact-table th,
+.capital-fact-table td {
+  padding: 0.75rem 1rem;
+  white-space: nowrap;
+}
+.capital-fact-table td:not(:first-child),
+.capital-fact-table th:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.capital-fact-table small {
+  display: block;
+  margin-top: 0.125rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.6875rem;
+}
+
 .katex-display {
   max-width: 100%;
   overflow-x: auto;

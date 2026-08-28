@@ -111,6 +111,37 @@ class FinancialAnalysisStore:
             ).fetchone()
         return self._snapshot(row)
 
+    def recent(self, stock_code: str, *, as_of: str | None = None, limit: int = 2) -> list[dict[str, Any]]:
+        """Read the most recent persisted snapshots without preparing new data.
+
+        Risk Research uses this only to compare two already-completed deterministic
+        forecast snapshots.  Keeping the query here prevents the read-only risk
+        path from accidentally invoking FinancialAnalysisService.prepare().
+        """
+        clauses = ["stock_code=?"]
+        args: list[Any] = [stock_code.upper()]
+        if as_of:
+            clauses.append("as_of<=?")
+            args.append(as_of)
+        args.append(max(1, min(int(limit), 20)))
+        rows = self._conn.execute(
+            f"""SELECT * FROM company_financial_analysis_snapshots
+                WHERE {' AND '.join(clauses)}
+                ORDER BY as_of DESC,created_at DESC,rowid DESC LIMIT ?""",
+            args,
+        ).fetchall()
+        return [self._snapshot(row) or {} for row in rows]
+
+    def latest_completed(self, stock_code: str) -> dict[str, Any] | None:
+        """Return the newest successfully completed Financial Agent snapshot only."""
+        row = self._conn.execute(
+            """SELECT * FROM company_financial_analysis_snapshots
+               WHERE stock_code=? AND analysis_status='COMPLETED'
+               ORDER BY as_of DESC,created_at DESC,rowid DESC LIMIT 1""",
+            (stock_code.upper(),),
+        ).fetchone()
+        return self._snapshot(row)
+
     def save_python_snapshot(self, payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         existing = self.by_source_hash(payload["stock_code"], payload["source_hash"])
         if existing:

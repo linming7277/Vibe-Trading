@@ -33,6 +33,7 @@ if str(AGENT_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENT_ROOT))
 
 from src.financial_analysis.service import FinancialAnalysisService  # noqa: E402
+from src.level3_leaders.constants import VALUE_LINE_LEADER_LIMIT  # noqa: E402
 from src.level3_leaders.service import get_level3_leader_service  # noqa: E402
 
 
@@ -50,12 +51,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--as-of", help="Leader snapshot date (YYYY-MM-DD); defaults to latest snapshot")
     parser.add_argument("--workers", type=int, default=3, help="Local worker count (default: 3, max: 4)")
-    parser.add_argument("--limit", type=int, default=2, help="Leaders per Level-3 industry (default: 2)")
     args = parser.parse_args()
     workers = max(1, min(args.workers, 4))
-    leader_limit = max(1, args.limit)
 
-    leaders = get_level3_leader_service().get_all_level3_top_leaders(as_of=args.as_of, limit=leader_limit)
+    leaders = get_level3_leader_service().get_all_level3_top_leaders(
+        as_of=args.as_of, limit=VALUE_LINE_LEADER_LIMIT,
+    )
     if leaders.get("snapshot_status") != "ready":
         raise RuntimeError("level3_leader_snapshot_not_ready")
     as_of = str(leaders.get("as_of") or args.as_of or "")

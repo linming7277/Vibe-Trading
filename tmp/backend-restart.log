@@ -1,0 +1,59 @@
+Not migrating D:\AI\hzstock\agent\runs\safe_run: C:\Users\Administrator\.vibe-trading\runs\safe_run already exists. Reconcile or delete the old copy manually.
+INFO:     Started server process [37912]
+INFO:     Waiting for application startup.
+Not migrating D:\AI\hzstock\agent\runs\safe_run: C:\Users\Administrator\.vibe-trading\runs\safe_run already exists. Reconcile or delete the old copy manually.
+[prod] Frontend served from D:\AI\hzstock\frontend\dist
+==================================================
+  恒值投资服务
+  API internal port: 8899 (use the frontend LAN address shown by the launcher)
+==================================================
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_37912.py
+获取跟踪指数的ETF信息失败: server return none
+
+Preflight Check
+ OK   │ LLM (openrouter)   │ deepseek/deepseek-v4-pro via                      
+      │                    │ https://openrouter.ai |                           
+      │                    │ base=https://openrouter.ai timeout=120s retries=2 
+      │                    │ proxy=none                                        
+ OK   │ OKX API            │ reachable                                         
+ FAIL │ yfinance           │ YFRateLimitError: Too Many Requests. Rate         
+      │                    │ limited. Try after a while. (US/HK equity         
+      │                    │ backtest unavailable)                             
+ N/A  │ Tushare            │ TUSHARE_TOKEN not set (optional) (A-share data    
+      │                    │ unavailable)                                      
+ OK   │ akshare            │ installed                                         
+ OK   │ ccxt               │ installed                                         
+ OK   │ Content Filter     │ 5% (set via CONTENT_FILTER_WARNING_THRESHOLD)     
+      │ Threshold          │                                                   
+
+5/7 services ready
+
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8899 (Press CTRL+C to quit)
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_37912.py
+获取跟踪指数的ETF信息失败: server return none
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_37912.py
+[Lark] [2026-08-28 16:00:45,757] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678989365360102380&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678989365360102380]
+[Lark] [2026-08-28 16:00:45,770] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678989363217107897&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678989363217107897]
+[Lark] [2026-08-28 16:00:45,826] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678989377079249850&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678989377079249850]
+[Lark] [2026-08-28 16:00:45,830] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678989368468556762&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678989368468556762]
+[Lark] [2026-08-28 16:00:45,863] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678989361032301532&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678989361032301532]
+INFO:     127.0.0.1:59756 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59775 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59860 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59905 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59971 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59980 - "POST /strategy/value/automation/run-now HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60015 - "GET /strategy/value/signals?market=CN HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60016 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60017 - "GET /strategy/value/signals?market=CN HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60018 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60014 - "GET /api/value/focus-selection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60021 - "GET /strategy/value/signals?market=CN HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60023 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60026 - "GET /strategy/value/signals?market=CN HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60028 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60024 - "GET /api/value/focus-selection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60030 - "GET /api/value/focus-selection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60032 - "GET /api/value/focus-selection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60274 - "GET /health HTTP/1.1" 200 OK

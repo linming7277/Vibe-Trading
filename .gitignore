@@ -70,8 +70,19 @@ data/.duckdb_tmp/
 data/parquet/
 data/backup/
 
-# Internal docs (plans, specs)
-docs/
+# Internal docs (plans, specs). Keep the Value Line migration audit deliverable.
+docs/*
+!docs/value-line-l3-cleanup-and-dynamic-pool-v1.md
+!docs/company-thesis-v1-step1-core-model.md
+!docs/company-thesis-v1-step2-evidence.md
+!docs/company-thesis-v1-step3-history.md
+!docs/company-thesis-v1-step4-review-service.md
+!docs/company-thesis-v1-step5-review-apply.md
+!docs/company-thesis-v1-step6-deterministic-evidence.md
+!docs/financial-agent-step7a3-validator-diagnostics.md
+!docs/financial-agent-step7b-citation-traceability.md
+!docs/company-thesis-step8-financial-agent-evidence.md
+!docs/company-thesis-step9-review-refresh.md
 !wiki/docs/
 !wiki/docs/**
 docs/screenshots/agent-run.png

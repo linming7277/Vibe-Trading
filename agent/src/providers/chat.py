@@ -284,6 +284,10 @@ class ChatLLM:
         provider_name: Optional[str] = None,
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
+        timeout_seconds: Optional[int] = None,
+        max_retries: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Initialize ChatLLM.
 
@@ -299,6 +303,10 @@ class ChatLLM:
             model_name=model_name,
             provider_name=provider_name,
             credential_override=credential_override,
+            request_timeout_seconds=timeout_seconds,
+            request_max_retries=max_retries,
+            request_max_tokens=max_tokens,
+            request_extra_body=extra_body,
         )
         runtime_cfg = get_env_config().llm
         configured_model = (

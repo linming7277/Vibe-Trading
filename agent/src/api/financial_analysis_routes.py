@@ -20,6 +20,7 @@ AuthDep = Callable[..., Awaitable[Any] | Any]
 class FinancialAnalyzeRequest(BaseModel):
     as_of: str | None = None
     refresh: bool = True
+    force: bool = False
 
 
 class FinancialChatRequest(BaseModel):
@@ -71,8 +72,13 @@ def register_financial_analysis_routes(app: FastAPI, require_auth: AuthDep) -> N
     async def chat_financial_agent(payload: FinancialChatRequest):
         try:
             return await asyncio.to_thread(
-                get_financial_analysis_service().chat_workspace,
-                question=payload.question, history=payload.history, candidates=payload.candidates,
+                # The floating web agent is not limited to the browser's
+                # currently-rendered leader cards.  Use the same entry point
+                # as the dedicated Feishu researcher: explicit codes/names
+                # resolve through the complete persisted TDX A-share cache;
+                # only industry/leader-pool questions load that pool.
+                get_financial_analysis_service().chat_current_leader_pool,
+                question=payload.question, history=payload.history,
             )
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
@@ -81,17 +87,16 @@ def register_financial_analysis_routes(app: FastAPI, require_auth: AuthDep) -> N
 
     @app.post("/api/value/financial-agent/chat/stream", dependencies=auth)
     async def stream_financial_agent_chat(payload: FinancialChatRequest):
-        return stream_chat(lambda progress: get_financial_analysis_service().chat_workspace(
+        return stream_chat(lambda progress: get_financial_analysis_service().chat_current_leader_pool(
             question=payload.question,
             history=payload.history,
-            candidates=payload.candidates,
             progress=progress,
         ))
 
     @app.get("/api/value/companies/{stock_code}/financial", dependencies=auth)
     async def get_company_financial_analysis(stock_code: str, as_of: str | None = Query(default=None)):
         try:
-            return await asyncio.to_thread(get_financial_analysis_service().get, stock_code, as_of=as_of)
+            return await asyncio.to_thread(get_financial_analysis_service().get_resolved_analysis, stock_code, as_of=as_of)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 
@@ -105,10 +110,12 @@ def register_financial_analysis_routes(app: FastAPI, require_auth: AuthDep) -> N
     @app.post("/api/value/companies/{stock_code}/financial/analyze", dependencies=auth)
     async def analyze_company_financials(stock_code: str, payload: FinancialAnalyzeRequest):
         try:
-            return await asyncio.to_thread(
-                get_financial_analysis_service().analyze, stock_code,
-                as_of=payload.as_of, refresh=payload.refresh,
+            service = get_financial_analysis_service()
+            snapshot = await asyncio.to_thread(
+                service.analyze, stock_code,
+                as_of=payload.as_of, refresh=payload.refresh, force=payload.force,
             )
+            return await asyncio.to_thread(service.resolve_citations, snapshot)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 

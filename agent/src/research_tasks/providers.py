@@ -85,8 +85,6 @@ def _role_model_options(
     candidates: dict[str, list[tuple[str, bool]]] = {}
     for source in catalog:
         provider = str(source["provider"])
-        if role == "track_classifier" and provider == "ollama":
-            continue
         for model in source["models"]:
             candidates.setdefault(str(model), []).append((provider, bool(source["configured"])))
 

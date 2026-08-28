@@ -81,7 +81,7 @@ class ResearchWorkspaceStore:
     only contains queryable product state and references to those artifacts.
     """
 
-    SCHEMA_VERSION = 13
+    SCHEMA_VERSION = 21
 
     def __init__(self, db_path: Path | None = None, *, seed: bool = False) -> None:
         self.db_path = Path(db_path or (get_runtime_root() / "research.db"))
@@ -184,6 +184,166 @@ class ResearchWorkspaceStore:
                     UNIQUE(market, symbol),
                     FOREIGN KEY(market, symbol) REFERENCES securities(market, symbol)
                 );
+                CREATE TABLE IF NOT EXISTS company_theses (
+                    thesis_id TEXT PRIMARY KEY,
+                    market TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    core_thesis TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN (
+                        'FORMING','STRENGTHENING','UNCHANGED','WEAKENING','FALSIFIED'
+                    )),
+                    confidence TEXT NOT NULL CHECK(confidence IN ('LOW','MEDIUM','HIGH')),
+                    invalid_conditions_json TEXT NOT NULL DEFAULT '[]',
+                    change_reason TEXT,
+                    version INTEGER NOT NULL CHECK(version >= 1),
+                    is_current INTEGER NOT NULL CHECK(is_current IN (0,1)),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    created_by TEXT NOT NULL,
+                    updated_by TEXT NOT NULL,
+                    source_data_as_of TEXT,
+                    UNIQUE(market, stock_code, version)
+                );
+                CREATE INDEX IF NOT EXISTS idx_company_theses_company
+                    ON company_theses(market, stock_code);
+                CREATE INDEX IF NOT EXISTS idx_company_theses_company_version
+                    ON company_theses(market, stock_code, version DESC);
+                CREATE INDEX IF NOT EXISTS idx_company_theses_current
+                    ON company_theses(is_current, market, stock_code);
+                CREATE INDEX IF NOT EXISTS idx_company_theses_updated
+                    ON company_theses(updated_at DESC);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_company_theses_one_current
+                    ON company_theses(market, stock_code) WHERE is_current=1;
+                CREATE TABLE IF NOT EXISTS company_thesis_evidence (
+                    evidence_id TEXT PRIMARY KEY,
+                    thesis_id TEXT NOT NULL,
+                    market TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    evidence_type TEXT NOT NULL CHECK(evidence_type IN (
+                        'FINANCIAL','BUSINESS','INDUSTRY','MACRO_POLICY',
+                        'VALUATION','RISK','MANAGEMENT','OTHER'
+                    )),
+                    effect TEXT NOT NULL CHECK(effect IN ('SUPPORT','CHALLENGE','NEUTRAL')),
+                    claim TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    source_type TEXT NOT NULL CHECK(source_type IN (
+                        'TDX','FINANCIAL_SNAPSHOT','COMPANY_RESEARCH_SNAPSHOT',
+                        'FINANCIAL_ANALYSIS','COMPANY_DOSSIER','MANUAL','EXTERNAL','SYSTEM'
+                    )),
+                    source_id TEXT,
+                    source_ref TEXT,
+                    source_title TEXT,
+                    source_date TEXT,
+                    data_as_of TEXT,
+                    confidence TEXT NOT NULL CHECK(confidence IN ('LOW','MEDIUM','HIGH')),
+                    is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+                    deactivation_reason TEXT,
+                    deactivated_at TEXT,
+                    deactivated_by TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    created_by TEXT NOT NULL,
+                    evidence_fingerprint TEXT,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    FOREIGN KEY(thesis_id) REFERENCES company_theses(thesis_id) ON DELETE RESTRICT
+                );
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_evidence_thesis
+                    ON company_thesis_evidence(thesis_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_evidence_company
+                    ON company_thesis_evidence(market, stock_code, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_evidence_active
+                    ON company_thesis_evidence(thesis_id, is_active, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_evidence_effect
+                    ON company_thesis_evidence(thesis_id, effect, is_active);
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_evidence_type
+                    ON company_thesis_evidence(thesis_id, evidence_type, is_active);
+                CREATE TABLE IF NOT EXISTS company_thesis_history (
+                    history_id TEXT PRIMARY KEY,
+                    market TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    from_thesis_id TEXT NOT NULL,
+                    to_thesis_id TEXT NOT NULL UNIQUE,
+                    from_version INTEGER NOT NULL CHECK(from_version >= 1),
+                    to_version INTEGER NOT NULL CHECK(to_version >= 2),
+                    old_status TEXT NOT NULL,
+                    new_status TEXT NOT NULL,
+                    old_confidence TEXT NOT NULL,
+                    new_confidence TEXT NOT NULL,
+                    change_type TEXT NOT NULL,
+                    change_reason TEXT NOT NULL,
+                    trigger_type TEXT NOT NULL,
+                    trigger_ref TEXT,
+                    evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+                    created_by TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    FOREIGN KEY(from_thesis_id) REFERENCES company_theses(thesis_id) ON DELETE RESTRICT,
+                    FOREIGN KEY(to_thesis_id) REFERENCES company_theses(thesis_id) ON DELETE RESTRICT,
+                    UNIQUE(market, stock_code, from_version, to_version)
+                );
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_history_company
+                    ON company_thesis_history(market, stock_code, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_history_from
+                    ON company_thesis_history(from_thesis_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_history_to
+                    ON company_thesis_history(to_thesis_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_history_created
+                    ON company_thesis_history(created_at DESC);
+                CREATE TABLE IF NOT EXISTS company_thesis_reviews (
+                    review_id TEXT PRIMARY KEY,
+                    market TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    thesis_id TEXT NOT NULL,
+                    thesis_version INTEGER NOT NULL CHECK(thesis_version >= 1),
+                    review_status TEXT NOT NULL CHECK(review_status IN (
+                        'PENDING','REVIEWED','APPLIED','DISMISSED'
+                    )),
+                    current_status TEXT NOT NULL,
+                    recommended_status TEXT NOT NULL,
+                    current_confidence TEXT NOT NULL,
+                    recommended_confidence TEXT NOT NULL,
+                    support_count INTEGER NOT NULL DEFAULT 0 CHECK(support_count >= 0),
+                    challenge_count INTEGER NOT NULL DEFAULT 0 CHECK(challenge_count >= 0),
+                    neutral_count INTEGER NOT NULL DEFAULT 0 CHECK(neutral_count >= 0),
+                    support_evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+                    challenge_evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+                    neutral_evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+                    evidence_set_hash TEXT NOT NULL,
+                    review_reason TEXT NOT NULL,
+                    review_summary TEXT NOT NULL,
+                    trigger_type TEXT NOT NULL,
+                    trigger_ref TEXT,
+                    is_stale INTEGER NOT NULL DEFAULT 0 CHECK(is_stale IN (0,1)),
+                    created_by TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    reviewed_at TEXT,
+                    reviewed_by TEXT,
+                    dismissed_at TEXT,
+                    dismissed_by TEXT,
+                    dismissal_reason TEXT,
+                    applied_at TEXT,
+                    applied_by TEXT,
+                    applied_thesis_id TEXT,
+                    applied_thesis_version INTEGER,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    FOREIGN KEY(thesis_id) REFERENCES company_theses(thesis_id) ON DELETE RESTRICT
+                );
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_reviews_company
+                    ON company_thesis_reviews(market, stock_code, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_reviews_thesis
+                    ON company_thesis_reviews(thesis_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_reviews_status
+                    ON company_thesis_reviews(review_status, is_stale, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_reviews_created
+                    ON company_thesis_reviews(created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_reviews_evidence_hash
+                    ON company_thesis_reviews(evidence_set_hash);
+                CREATE INDEX IF NOT EXISTS idx_company_thesis_reviews_thesis_hash
+                    ON company_thesis_reviews(thesis_id, evidence_set_hash, created_at DESC);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_company_thesis_reviews_open_idempotency
+                    ON company_thesis_reviews(thesis_id, evidence_set_hash)
+                    WHERE review_status IN ('PENDING','REVIEWED');
                 CREATE TABLE IF NOT EXISTS reports (
                     id TEXT PRIMARY KEY, report_type TEXT NOT NULL, title TEXT NOT NULL,
                     summary TEXT NOT NULL, content_md TEXT NOT NULL, market TEXT, symbol TEXT,
@@ -267,7 +427,7 @@ class ResearchWorkspaceStore:
                     symbols_json TEXT NOT NULL, formula_version TEXT NOT NULL,
                     status TEXT NOT NULL, source_status TEXT NOT NULL DEFAULT 'unavailable',
                     message TEXT NOT NULL DEFAULT '', started_at TEXT NOT NULL, completed_at TEXT,
-                    profile_id TEXT, profile_version INTEGER
+                    data_snapshot_id TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_engine_runs_lookup
                     ON engine_runs(strategy_line, market, as_of DESC, started_at DESC);
@@ -411,133 +571,7 @@ class ResearchWorkspaceStore:
                     source TEXT NOT NULL, created_at TEXT NOT NULL,
                     PRIMARY KEY(as_of, sector_code, symbol)
                 );
-                CREATE TABLE IF NOT EXISTS company_business_profiles (
-                    parent_industry_code TEXT NOT NULL,
-                    parent_industry_name TEXT NOT NULL,
-                    stock_code TEXT NOT NULL,
-                    stock_name TEXT NOT NULL,
-                    business_scope TEXT NOT NULL DEFAULT '',
-                    main_business TEXT NOT NULL DEFAULT '',
-                    company_description TEXT NOT NULL DEFAULT '',
-                    main_products TEXT NOT NULL DEFAULT '',
-                    source_json TEXT NOT NULL,
-                    data_status TEXT NOT NULL,
-                    source_hash TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY(parent_industry_code, stock_code)
-                );
-                CREATE INDEX IF NOT EXISTS idx_company_business_profiles_status
-                    ON company_business_profiles(parent_industry_code,data_status,stock_code);
-                CREATE TABLE IF NOT EXISTS fine_grained_tracks (
-                    track_id TEXT PRIMARY KEY,
-                    track_name TEXT NOT NULL,
-                    normalized_name TEXT NOT NULL,
-                    parent_industry_code TEXT NOT NULL,
-                    parent_industry_name TEXT NOT NULL,
-                    description TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    classification_version TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    UNIQUE(parent_industry_code, normalized_name)
-                );
-                CREATE INDEX IF NOT EXISTS idx_fine_grained_tracks_parent
-                    ON fine_grained_tracks(parent_industry_code,status,track_name);
-                CREATE TABLE IF NOT EXISTS company_track_memberships (
-                    membership_id TEXT PRIMARY KEY,
-                    stock_code TEXT NOT NULL,
-                    stock_name TEXT NOT NULL,
-                    track_id TEXT NOT NULL,
-                    parent_industry_code TEXT NOT NULL,
-                    membership_type TEXT NOT NULL,
-                    classification_reason TEXT NOT NULL,
-                    confidence REAL NOT NULL,
-                    confidence_level TEXT NOT NULL,
-                    classification_source TEXT NOT NULL,
-                    review_status TEXT NOT NULL,
-                    source_hash TEXT NOT NULL,
-                    classification_version TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    UNIQUE(parent_industry_code,stock_code,track_id),
-                    FOREIGN KEY(track_id) REFERENCES fine_grained_tracks(track_id) ON DELETE RESTRICT
-                );
-                CREATE INDEX IF NOT EXISTS idx_company_track_memberships_parent
-                    ON company_track_memberships(parent_industry_code,track_id,membership_type,stock_code);
-                CREATE TABLE IF NOT EXISTS company_track_suggestions (
-                    suggestion_id TEXT PRIMARY KEY,
-                    parent_industry_code TEXT NOT NULL,
-                    stock_code TEXT NOT NULL,
-                    source_hash TEXT NOT NULL,
-                    classification_version TEXT NOT NULL,
-                    suggestion_json TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    UNIQUE(parent_industry_code,stock_code,source_hash,classification_version)
-                );
-                CREATE TABLE IF NOT EXISTS fine_track_unclassified (
-                    parent_industry_code TEXT NOT NULL,
-                    stock_code TEXT NOT NULL,
-                    stock_name TEXT NOT NULL,
-                    classification_status TEXT NOT NULL,
-                    reason TEXT NOT NULL,
-                    source_hash TEXT NOT NULL,
-                    classification_version TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY(parent_industry_code,stock_code)
-                );
-                CREATE TABLE IF NOT EXISTS fine_track_classification_runs (
-                    run_id TEXT PRIMARY KEY,
-                    idempotency_key TEXT NOT NULL UNIQUE,
-                    parent_industry_code TEXT NOT NULL,
-                    parent_industry_name TEXT NOT NULL,
-                    profile_hash TEXT NOT NULL,
-                    classification_version TEXT NOT NULL,
-                    provider TEXT NOT NULL,
-                    model TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    company_count INTEGER NOT NULL,
-                    classified_count INTEGER NOT NULL DEFAULT 0,
-                    unclassified_count INTEGER NOT NULL DEFAULT 0,
-                    output_json TEXT NOT NULL DEFAULT '{}',
-                    error TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL,
-                    started_at TEXT,
-                    completed_at TEXT
-                );
-                CREATE INDEX IF NOT EXISTS idx_fine_track_runs_parent
-                    ON fine_track_classification_runs(parent_industry_code,created_at DESC);
-                CREATE TABLE IF NOT EXISTS value_refresh_jobs (
-                    id TEXT PRIMARY KEY, modules_json TEXT NOT NULL, as_of TEXT NOT NULL,
-                    status TEXT NOT NULL, current_module TEXT NOT NULL DEFAULT '',
-                    progress INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL DEFAULT 0,
-                    results_json TEXT NOT NULL DEFAULT '{}', errors_json TEXT NOT NULL DEFAULT '[]',
-                    created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT
-                );
-                CREATE TABLE IF NOT EXISTS value_research_universes (
-                    id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE,
-                    engine_run_id TEXT NOT NULL, profile_id TEXT NOT NULL,
-                    candidate_limit INTEGER NOT NULL, leader_limit INTEGER NOT NULL DEFAULT 5,
-                    status TEXT NOT NULL, data_as_of TEXT NOT NULL,
-                    formula_version TEXT NOT NULL, track_count INTEGER NOT NULL,
-                    membership_count INTEGER NOT NULL, company_count INTEGER NOT NULL,
-                    created_at TEXT NOT NULL, activated_at TEXT, archived_at TEXT,
-                    FOREIGN KEY(engine_run_id) REFERENCES engine_runs(id) ON DELETE RESTRICT
-                );
-                CREATE INDEX IF NOT EXISTS idx_value_universes_profile
-                    ON value_research_universes(profile_id,status,created_at DESC);
-                CREATE TABLE IF NOT EXISTS value_research_universe_members (
-                    id TEXT PRIMARY KEY, universe_id TEXT NOT NULL,
-                    track_id TEXT NOT NULL, track_name TEXT NOT NULL,
-                    track_rank INTEGER NOT NULL, symbol TEXT NOT NULL, name TEXT NOT NULL,
-                    leader_rank INTEGER NOT NULL, leader_type TEXT NOT NULL,
-                    leader_score REAL, leader_coverage REAL NOT NULL,
-                    inclusion_reason TEXT NOT NULL, created_at TEXT NOT NULL,
-                    UNIQUE(universe_id,track_id,symbol),
-                    FOREIGN KEY(universe_id) REFERENCES value_research_universes(id) ON DELETE CASCADE
-                );
-                CREATE INDEX IF NOT EXISTS idx_value_universe_members_symbol
-                    ON value_research_universe_members(universe_id,symbol,track_rank,leader_rank);
+
                 CREATE TABLE IF NOT EXISTS company_research_evidence (
                     id TEXT PRIMARY KEY, symbol TEXT NOT NULL, evidence_type TEXT NOT NULL,
                     source TEXT NOT NULL, source_id TEXT NOT NULL, data_as_of TEXT NOT NULL,
@@ -547,59 +581,6 @@ class ResearchWorkspaceStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_company_evidence_symbol
                     ON company_research_evidence(symbol,data_as_of DESC,evidence_type);
-                CREATE TABLE IF NOT EXISTS company_research_snapshots (
-                    id TEXT PRIMARY KEY, universe_id TEXT NOT NULL, symbol TEXT NOT NULL,
-                    version INTEGER NOT NULL, data_as_of TEXT NOT NULL,
-                    status TEXT NOT NULL, completeness REAL NOT NULL,
-                    source_hash TEXT NOT NULL, payload_json TEXT NOT NULL,
-                    diff_json TEXT NOT NULL, missing_fields_json TEXT NOT NULL,
-                    sources_json TEXT NOT NULL, evidence_ids_json TEXT NOT NULL,
-                    dossier_id TEXT, report_id TEXT, previous_snapshot_id TEXT,
-                    created_at TEXT NOT NULL,
-                    UNIQUE(universe_id,symbol,source_hash),
-                    FOREIGN KEY(universe_id) REFERENCES value_research_universes(id) ON DELETE CASCADE,
-                    FOREIGN KEY(previous_snapshot_id) REFERENCES company_research_snapshots(id) ON DELETE SET NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_company_snapshots_latest
-                    ON company_research_snapshots(universe_id,symbol,version DESC);
-                CREATE TABLE IF NOT EXISTS company_incremental_runs (
-                    id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE,
-                    universe_id TEXT NOT NULL, run_kind TEXT NOT NULL,
-                    trigger_kind TEXT NOT NULL, as_of TEXT NOT NULL,
-                    status TEXT NOT NULL, total INTEGER NOT NULL,
-                    completed INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0,
-                    coverage REAL NOT NULL DEFAULT 0, cancel_requested INTEGER NOT NULL DEFAULT 0,
-                    message TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
-                    started_at TEXT, completed_at TEXT,
-                    FOREIGN KEY(universe_id) REFERENCES value_research_universes(id) ON DELETE CASCADE
-                );
-                CREATE INDEX IF NOT EXISTS idx_incremental_runs_universe
-                    ON company_incremental_runs(universe_id,as_of DESC,created_at DESC);
-                CREATE TABLE IF NOT EXISTS company_incremental_jobs (
-                    id TEXT PRIMARY KEY, run_id TEXT NOT NULL, symbol TEXT NOT NULL,
-                    name TEXT NOT NULL, primary_track_id TEXT NOT NULL,
-                    status TEXT NOT NULL, stage TEXT NOT NULL,
-                    attempts INTEGER NOT NULL DEFAULT 0, message TEXT NOT NULL DEFAULT '',
-                    snapshot_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-                    UNIQUE(run_id,symbol),
-                    FOREIGN KEY(run_id) REFERENCES company_incremental_runs(id) ON DELETE CASCADE,
-                    FOREIGN KEY(snapshot_id) REFERENCES company_research_snapshots(id) ON DELETE SET NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_incremental_jobs_run
-                    ON company_incremental_jobs(run_id,status,symbol);
-                CREATE TABLE IF NOT EXISTS value_signal_evaluations (
-                    id TEXT PRIMARY KEY, monitor_id TEXT NOT NULL,
-                    snapshot_id TEXT, as_of TEXT NOT NULL, signal_state TEXT NOT NULL,
-                    rule_version TEXT NOT NULL, input_hash TEXT NOT NULL,
-                    rules_json TEXT NOT NULL, inputs_json TEXT NOT NULL,
-                    reasons_json TEXT NOT NULL, missing_fields_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    UNIQUE(monitor_id,input_hash,rule_version),
-                    FOREIGN KEY(monitor_id) REFERENCES value_entry_monitors(id) ON DELETE CASCADE,
-                    FOREIGN KEY(snapshot_id) REFERENCES company_research_snapshots(id) ON DELETE SET NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_signal_evaluations_monitor
-                    ON value_signal_evaluations(monitor_id,created_at DESC);
                 CREATE TABLE IF NOT EXISTS value_research_automation (
                     id TEXT PRIMARY KEY CHECK(id='default'), enabled INTEGER NOT NULL DEFAULT 0,
                     timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
@@ -607,72 +588,6 @@ class ResearchWorkspaceStore:
                     retry_minutes INTEGER NOT NULL DEFAULT 20, next_run_at TEXT,
                     last_run_id TEXT, last_status TEXT, last_error TEXT NOT NULL DEFAULT '',
                     lock_owner TEXT, lock_until TEXT, updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS value_company_research_monitors (
-                    id TEXT PRIMARY KEY, universe_id TEXT NOT NULL, symbol TEXT NOT NULL,
-                    name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'research_watching',
-                    is_priority INTEGER NOT NULL DEFAULT 0,
-                    data_status TEXT NOT NULL DEFAULT 'unavailable',
-                    research_status TEXT NOT NULL DEFAULT 'not_archived',
-                    valuation_status TEXT NOT NULL DEFAULT 'unavailable',
-                    technical_status TEXT NOT NULL DEFAULT 'unavailable',
-                    decision_status TEXT NOT NULL DEFAULT 'watching',
-                    last_snapshot_id TEXT, last_valuation_id TEXT, last_checked_at TEXT,
-                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-                    UNIQUE(universe_id,symbol),
-                    FOREIGN KEY(universe_id) REFERENCES value_research_universes(id) ON DELETE CASCADE,
-                    FOREIGN KEY(last_snapshot_id) REFERENCES company_research_snapshots(id) ON DELETE SET NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_company_research_monitors_universe
-                    ON value_company_research_monitors(universe_id,status,symbol);
-                CREATE TABLE IF NOT EXISTS company_valuation_snapshots (
-                    id TEXT PRIMARY KEY, universe_id TEXT NOT NULL, symbol TEXT NOT NULL,
-                    version INTEGER NOT NULL, status TEXT NOT NULL,
-                    review_status TEXT NOT NULL DEFAULT 'automatic_screen',
-                    data_as_of TEXT NOT NULL, coverage REAL NOT NULL, source_hash TEXT NOT NULL,
-                    current_price REAL, pe_ttm REAL, pb_mrq REAL, dividend_yield REAL,
-                    peer_pe_median REAL, peer_pb_median REAL,
-                    pe_percentile REAL, pb_percentile REAL, safety_margin REAL,
-                    fair_value_low REAL, fair_value_high REAL,
-                    watch_price_low REAL, watch_price_high REAL,
-                    comparable_json TEXT NOT NULL, dcf_json TEXT NOT NULL,
-                    missing_fields_json TEXT NOT NULL, sources_json TEXT NOT NULL,
-                    formula_version TEXT NOT NULL, previous_snapshot_id TEXT,
-                    confirmed_at TEXT, created_at TEXT NOT NULL,
-                    UNIQUE(universe_id,symbol,source_hash),
-                    FOREIGN KEY(universe_id) REFERENCES value_research_universes(id) ON DELETE CASCADE,
-                    FOREIGN KEY(previous_snapshot_id) REFERENCES company_valuation_snapshots(id) ON DELETE SET NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_company_valuation_latest
-                    ON company_valuation_snapshots(universe_id,symbol,version DESC);
-                CREATE TABLE IF NOT EXISTS value_research_events (
-                    id TEXT PRIMARY KEY,
-                    universe_id TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
-                    event_key TEXT NOT NULL UNIQUE,
-                    event_type TEXT NOT NULL,
-                    severity TEXT NOT NULL,
-                    title TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    payload_json TEXT NOT NULL DEFAULT '{}',
-                    triggered_at TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'open',
-                    acknowledgement_note TEXT NOT NULL DEFAULT '',
-                    acknowledged_at TEXT,
-                    resolved_at TEXT,
-                    FOREIGN KEY(universe_id) REFERENCES value_research_universes(id) ON DELETE CASCADE
-                );
-                CREATE INDEX IF NOT EXISTS idx_value_research_events_queue
-                    ON value_research_events(status,event_type,triggered_at DESC);
-                CREATE TABLE IF NOT EXISTS value_research_event_deliveries (
-                    id TEXT PRIMARY KEY,
-                    event_id TEXT NOT NULL,
-                    channel TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    error TEXT NOT NULL DEFAULT '',
-                    attempted_at TEXT NOT NULL,
-                    UNIQUE(event_id,channel),
-                    FOREIGN KEY(event_id) REFERENCES value_research_events(id) ON DELETE CASCADE
                 );
                 CREATE TABLE IF NOT EXISTS value_level3_leader_runs (
                     id TEXT PRIMARY KEY,
@@ -716,6 +631,151 @@ class ResearchWorkspaceStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_value_level3_leaders_industry_rank
                     ON value_level3_leaders(as_of,level3_code,eligibility_status,leader_rank);
+                -- The industry-leader page must filter on a complete, dated
+                -- historical-valuation snapshot.  Keeping this separate from
+                -- the ranking facts makes the valuation formula and its data
+                -- date explicit, and prevents the UI from calculating it one
+                -- company at a time.
+                CREATE TABLE IF NOT EXISTS value_level3_leader_valuation_snapshots (
+                    run_id TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    historical_valuation_status TEXT NOT NULL,
+                    presentation_status TEXT NOT NULL,
+                    coverage_status TEXT NOT NULL,
+                    data_as_of TEXT,
+                    formula_version TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(run_id,stock_code),
+                    FOREIGN KEY(run_id) REFERENCES value_level3_leader_runs(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_value_level3_leader_valuation_run_status
+                    ON value_level3_leader_valuation_snapshots(run_id,presentation_status);
+                CREATE TABLE IF NOT EXISTS l3_leader_pool_runs (
+                    id TEXT PRIMARY KEY,
+                    source_leader_run_id TEXT NOT NULL UNIQUE,
+                    as_of TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    formula_version TEXT NOT NULL,
+                    catalog_as_of TEXT NOT NULL,
+                    terminal_industry_count INTEGER NOT NULL DEFAULT 0,
+                    current_membership_count INTEGER NOT NULL DEFAULT 0,
+                    company_count INTEGER NOT NULL DEFAULT 0,
+                    new_count INTEGER NOT NULL DEFAULT 0,
+                    active_count INTEGER NOT NULL DEFAULT 0,
+                    out_count INTEGER NOT NULL DEFAULT 0,
+                    reentered_count INTEGER NOT NULL DEFAULT 0,
+                    diff_json TEXT NOT NULL DEFAULT '{}',
+                    error TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    FOREIGN KEY(source_leader_run_id) REFERENCES value_level3_leader_runs(id) ON DELETE RESTRICT
+                );
+                CREATE INDEX IF NOT EXISTS idx_l3_leader_pool_runs_latest
+                    ON l3_leader_pool_runs(as_of DESC,completed_at DESC);
+                CREATE TABLE IF NOT EXISTS l3_leader_pool_members (
+                    id TEXT PRIMARY KEY,
+                    pool_id TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    stock_name TEXT NOT NULL,
+                    level1_code TEXT NOT NULL,
+                    level1_name TEXT NOT NULL,
+                    level2_code TEXT NOT NULL,
+                    level2_name TEXT NOT NULL,
+                    level3_code TEXT NOT NULL,
+                    level3_name TEXT NOT NULL,
+                    leader_rank INTEGER NOT NULL,
+                    leader_score REAL,
+                    leader_formula_version TEXT NOT NULL,
+                    component_scores_json TEXT NOT NULL DEFAULT '{}',
+                    coverage REAL NOT NULL DEFAULT 0,
+                    eligibility_status TEXT NOT NULL,
+                    lifecycle_status TEXT NOT NULL,
+                    first_entered_at TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    exited_at TEXT,
+                    previous_pool_id TEXT,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(pool_id,level3_code,stock_code),
+                    FOREIGN KEY(pool_id) REFERENCES l3_leader_pool_runs(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_l3_leader_pool_members_current
+                    ON l3_leader_pool_members(pool_id,lifecycle_status,level3_code,leader_rank);
+                CREATE INDEX IF NOT EXISTS idx_l3_leader_pool_members_company
+                    ON l3_leader_pool_members(stock_code,pool_id);
+                CREATE TABLE IF NOT EXISTS l3_leader_pool_events (
+                    id TEXT PRIMARY KEY,
+                    pool_id TEXT NOT NULL,
+                    event_key TEXT NOT NULL UNIQUE,
+                    event_type TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    stock_name TEXT NOT NULL,
+                    level3_code TEXT NOT NULL,
+                    level3_name TEXT NOT NULL,
+                    previous_rank INTEGER,
+                    current_rank INTEGER,
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(pool_id) REFERENCES l3_leader_pool_runs(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_l3_leader_pool_events_pool
+                    ON l3_leader_pool_events(pool_id,event_type,created_at DESC);
+                CREATE TABLE IF NOT EXISTS l3_company_research_states (
+                    id TEXT PRIMARY KEY,
+                    pool_id TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    stock_name TEXT NOT NULL,
+                    lifecycle_status TEXT NOT NULL,
+                    research_status TEXT NOT NULL DEFAULT 'PENDING',
+                    is_priority INTEGER NOT NULL DEFAULT 0,
+                    last_financial_snapshot_id TEXT,
+                    last_researched_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(pool_id,stock_code),
+                    FOREIGN KEY(pool_id) REFERENCES l3_leader_pool_runs(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_l3_company_research_states_pool
+                    ON l3_company_research_states(pool_id,lifecycle_status,research_status,stock_code);
+                CREATE TABLE IF NOT EXISTS l3_company_research_snapshots (
+                    id TEXT PRIMARY KEY,
+                    source_snapshot_id TEXT NOT NULL UNIQUE,
+                    pool_id TEXT,
+                    stock_code TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    data_as_of TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    completeness REAL NOT NULL,
+                    source_hash TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    diff_json TEXT NOT NULL,
+                    missing_fields_json TEXT NOT NULL,
+                    sources_json TEXT NOT NULL,
+                    evidence_ids_json TEXT NOT NULL,
+                    dossier_id TEXT,
+                    report_id TEXT,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_l3_company_snapshots_latest
+                    ON l3_company_research_snapshots(stock_code,data_as_of DESC,created_at DESC);
+                CREATE TABLE IF NOT EXISTS l3_company_valuation_snapshots (
+                    id TEXT PRIMARY KEY,
+                    source_snapshot_id TEXT NOT NULL UNIQUE,
+                    pool_id TEXT,
+                    stock_code TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    review_status TEXT NOT NULL,
+                    data_as_of TEXT NOT NULL,
+                    coverage REAL NOT NULL,
+                    source_hash TEXT NOT NULL,
+                    valuation_json TEXT NOT NULL,
+                    formula_version TEXT NOT NULL,
+                    confirmed_at TEXT,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_l3_company_valuations_latest
+                    ON l3_company_valuation_snapshots(stock_code,data_as_of DESC,created_at DESC);
                 CREATE TABLE IF NOT EXISTS company_financial_analysis_snapshots (
                     id TEXT PRIMARY KEY,
                     stock_code TEXT NOT NULL,
@@ -746,10 +806,14 @@ class ResearchWorkspaceStore:
                 """
             )
             engine_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(engine_runs)")}
-            if "profile_id" not in engine_columns:
-                self._conn.execute("ALTER TABLE engine_runs ADD COLUMN profile_id TEXT")
-            if "profile_version" not in engine_columns:
-                self._conn.execute("ALTER TABLE engine_runs ADD COLUMN profile_version INTEGER")
+            if "data_snapshot_id" not in engine_columns:
+                self._conn.execute("ALTER TABLE engine_runs ADD COLUMN data_snapshot_id TEXT")
+            self._conn.execute(
+                """INSERT OR IGNORE INTO value_research_automation(
+                   id,enabled,timezone,run_time,max_retries,retry_minutes,updated_at
+                   ) VALUES('default',0,'Asia/Shanghai','16:45',3,20,?)""",
+                (_now(),),
+            )
             score_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(score_snapshots)")}
             for column, declaration in (
                 ("confidence", "TEXT NOT NULL DEFAULT 'LOW'"),
@@ -776,6 +840,25 @@ class ResearchWorkspaceStore:
             ):
                 if column not in macro_columns:
                     self._conn.execute(f"ALTER TABLE macro_snapshots ADD COLUMN {column} {declaration}")
+            review_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(company_thesis_reviews)")}
+            for column, declaration in (
+                ("applied_thesis_id", "TEXT"),
+                ("applied_thesis_version", "INTEGER"),
+            ):
+                if column not in review_columns:
+                    self._conn.execute(f"ALTER TABLE company_thesis_reviews ADD COLUMN {column} {declaration}")
+            evidence_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(company_thesis_evidence)")}
+            if "evidence_fingerprint" not in evidence_columns:
+                self._conn.execute("ALTER TABLE company_thesis_evidence ADD COLUMN evidence_fingerprint TEXT")
+            self._conn.execute(
+                """CREATE INDEX IF NOT EXISTS idx_company_thesis_evidence_fingerprint
+                   ON company_thesis_evidence(thesis_id, evidence_fingerprint)"""
+            )
+            self._conn.execute(
+                """CREATE UNIQUE INDEX IF NOT EXISTS idx_company_thesis_evidence_active_fingerprint
+                   ON company_thesis_evidence(thesis_id, evidence_fingerprint)
+                   WHERE evidence_fingerprint IS NOT NULL AND is_active=1"""
+            )
             for version in range(1, self.SCHEMA_VERSION + 1):
                 self._conn.execute(
                     "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)",

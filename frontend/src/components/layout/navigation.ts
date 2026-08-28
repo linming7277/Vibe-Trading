@@ -37,11 +37,9 @@ export const PRIMARY_NAVIGATION: PrimaryNavigationItem[] = [
     id: "value", to: "/value", label: "价值投资", icon: Scale,
     matches: ["/value", "/company"],
     secondary: [
-      { to: "/value", label: "行业龙头" },
-      { to: "/value/research", label: "公司研究" },
-      { to: "/value/valuation", label: "估值与买卖点" },
-      { to: "/value/plans", label: "投委与计划" },
-      { to: "/value/monitor", label: "监控事件" },
+      { to: "/value/leaders", label: "行业龙头", matches: ["/value/leaders", "/value/methodology"] },
+      { to: "/value", label: "低估龙头池", matches: ["=/value", "/value/focus", "/value/plans"] },
+      { to: "/value/opportunities", label: "机会与风险", matches: ["/value/opportunities", "/value/valuation", "/value/timing"] },
     ],
   },
   {
@@ -101,6 +99,7 @@ const MODELS_NAVIGATION = {
   matches: ["/models"],
   secondary: [
     { to: "/models/data", label: "数据中心" },
+    { to: "/models/value-line-data", label: "价值线资料" },
     { to: "/models/factors", label: "因子库" },
     { to: "/models/formulas", label: "公式选股" },
     { to: "/models/strategies", label: "策略版本" },

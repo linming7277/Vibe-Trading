@@ -28,6 +28,7 @@ class BaseChannel(ABC):
 
     name: str = "base"
     display_name: str = "Base"
+    pairing_role_name: str = "研究机器人"
     send_progress: bool = True
     send_tool_hints: bool = False
     show_reasoning: bool = True
@@ -194,7 +195,10 @@ class BaseChannel(ABC):
                     OutboundMessage(
                         channel=self.name,
                         chat_id=str(chat_id),
-                        content=format_pairing_reply(code),
+                        content=format_pairing_reply(
+                            code,
+                            role_name=self.pairing_role_name,
+                        ),
                         metadata={PAIRING_CODE_META_KEY: code},
                     )
                 )

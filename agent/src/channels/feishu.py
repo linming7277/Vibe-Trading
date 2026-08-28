@@ -364,6 +364,20 @@ def _extract_post_text(content_json: dict) -> str:
     return text
 
 
+class LowValueLeaderNotificationConfig(BaseModel):
+    enabled: bool = False
+    target_id: str = ""
+    web_base_url: str = ""
+    dry_run: bool = True
+
+
+class DailyResearchBriefNotificationConfig(BaseModel):
+    enabled: bool = False
+    target_id: str = ""
+    web_base_url: str = ""
+    dry_run: bool = True
+
+
 class FeishuConfig(BaseModel):
     """Feishu/Lark channel configuration using WebSocket long connection."""
 
@@ -381,7 +395,18 @@ class FeishuConfig(BaseModel):
     streaming: bool = True
     domain: Literal["feishu", "lark"] = "feishu"  # Set to "lark" for international Lark
     topic_isolation: bool = True  # If True, each topic in group chat gets its own session (isolation)
-    default_agent: Literal["general", "financial_analyst"] = "general"
+    default_agent: Literal[
+        "general",
+        "financial_analyst",
+        "investment_research_supervisor",
+        "risk_researcher",
+        "valuation_researcher",
+        "macro_policy_researcher",
+    ] = "general"
+    low_value_leader_notification: LowValueLeaderNotificationConfig = Field(default_factory=LowValueLeaderNotificationConfig)
+    daily_research_brief_notification: DailyResearchBriefNotificationConfig = Field(
+        default_factory=DailyResearchBriefNotificationConfig
+    )
 
 
 # =============================================================================
@@ -607,6 +632,7 @@ class FeishuChannel(BaseChannel):
 
     name = "feishu"
     display_name = "Feishu"
+    pairing_role_name = "财报研究员"
 
     _STREAM_EDIT_INTERVAL = 0.5  # throttle between CardKit streaming updates
 
@@ -621,7 +647,7 @@ class FeishuChannel(BaseChannel):
         self.config: FeishuConfig = config
         self._client: Any = None
         self._ws_client: Any = None
-        self._ws_thread: threading.Thread | None = None
+        self._ws_ping_task: asyncio.Task[None] | None = None
         self._processed_message_ids: OrderedDict[str, None] = OrderedDict()  # Ordered dedup cache
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stream_bufs: dict[str, _FeishuStreamBuf] = {}
@@ -704,7 +730,10 @@ class FeishuChannel(BaseChannel):
             )
             return
 
-        lark, feishu_domain, lark_domain = await asyncio.to_thread(_load_lark_runtime)
+        # Import once on the host loop.  Concurrent first imports in worker
+        # threads race over lark_oapi.ws.client's module-level loop and can
+        # leave one bot with a half-closed ProactorEventLoop.
+        lark, feishu_domain, lark_domain = _load_lark_runtime()
 
         # (stdlib logging handles Lark SDK output via propagation)
 
@@ -762,38 +791,17 @@ class FeishuChannel(BaseChannel):
             log_level=lark.LogLevel.INFO,
         )
 
-        # Start WebSocket client in a separate thread with reconnect loop.
-        # A dedicated event loop is created for this thread so that lark_oapi's
-        # module-level `loop = asyncio.get_event_loop()` picks up an idle loop
-        # instead of the already-running main asyncio loop, which would cause
-        # "This event loop is already running" errors.
-        def run_ws():
-            import time
+        # The SDK stores its event loop in a module-level variable.  Starting
+        # one SDK ``Client.start()`` thread per bot therefore races as soon as
+        # two Feishu apps are active: one thread replaces the loop used by the
+        # other.  Keep every client on the host asyncio loop instead.  The SDK's
+        # receive/reconnect implementation is already async and supports
+        # multiple client objects on that shared loop.
+        import lark_oapi.ws.client as _lark_ws_client
 
-            import lark_oapi.ws.client as _lark_ws_client
-
-            previous_loop = getattr(_lark_ws_client, "loop", None)
-            ws_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(ws_loop)
-            # Patch the module-level loop used by lark's ws Client.start()
-            _lark_ws_client.loop = ws_loop
-            try:
-                while self._running:
-                    try:
-                        self._ws_client.start()
-                    except Exception as e:
-                        self.logger.warning("WebSocket error: {}", e)
-                    if self._running:
-                        time.sleep(5)
-            finally:
-                if getattr(_lark_ws_client, "loop", None) is ws_loop:
-                    _lark_ws_client.loop = previous_loop
-                with suppress(Exception):
-                    asyncio.set_event_loop(None)
-                ws_loop.close()
-
-        self._ws_thread = threading.Thread(target=run_ws, daemon=True)
-        self._ws_thread.start()
+        _lark_ws_client.loop = self._loop
+        await self._ws_client._connect()
+        self._ws_ping_task = asyncio.create_task(self._ws_client._ping_loop())
 
         # Fetch bot's own open_id for accurate @mention matching
         self._bot_open_id = await asyncio.get_running_loop().run_in_executor(
@@ -820,6 +828,17 @@ class FeishuChannel(BaseChannel):
         Reference: https://github.com/larksuite/oapi-sdk-python/blob/v2_main/lark_oapi/ws/client.py#L86
         """
         self._running = False
+        if self._ws_client is not None:
+            # Prevent the SDK receive loop from reconnecting after an explicit
+            # channel stop, then close the current socket on its owning loop.
+            self._ws_client._auto_reconnect = False
+            with suppress(Exception):
+                await self._ws_client._disconnect()
+        if self._ws_ping_task is not None:
+            self._ws_ping_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._ws_ping_task
+            self._ws_ping_task = None
         self.logger.info("bot stopped")
 
     def _fetch_bot_open_id(self) -> str | None:
@@ -1318,6 +1337,49 @@ class FeishuChannel(BaseChannel):
         }
         return json.dumps(post_body, ensure_ascii=False)
 
+    @staticmethod
+    def _valid_mentions(msg: OutboundMessage) -> list[tuple[str, str]]:
+        """Normalize outbound mentions to ``(open_id, display_name)`` pairs."""
+        mentions: list[tuple[str, str]] = []
+        for item in getattr(msg, "mentions", None) or []:
+            if not isinstance(item, dict):
+                continue
+            open_id = str(item.get("open_id") or item.get("user_id") or "").strip()
+            if open_id:
+                name = str(item.get("name") or item.get("user_name") or "").strip()
+                mentions.append((open_id, name))
+        return mentions
+
+    @classmethod
+    def _prepend_post_mentions(cls, post_body: str, mentions: list[tuple[str, str]]) -> str:
+        """Insert an ``at`` element paragraph at the top of a post message."""
+        body = json.loads(post_body)
+        zh_cn = dict(body.get("zh_cn") or {})
+        paragraphs = list(zh_cn.get("content") or [])
+        paragraphs.insert(0, [
+            {"tag": "at", "user_id": open_id, "user_name": name or " "}
+            for open_id, name in mentions
+        ])
+        zh_cn["content"] = paragraphs
+        body["zh_cn"] = zh_cn
+        return json.dumps(body, ensure_ascii=False)
+
+    @classmethod
+    def _prepend_card_mentions(
+        cls, elements: list[dict], mentions: list[tuple[str, str]],
+    ) -> list[dict]:
+        """Prepend card-markdown ``<at>`` tags to the first markdown element."""
+        at_text = "".join(f'<at id="{open_id}"></at> ' for open_id, _ in mentions)
+        if not at_text:
+            return elements
+        result = list(elements)
+        for element in result:
+            if element.get("tag") == "markdown":
+                element["content"] = f"{at_text}{element.get('content') or ''}"
+                return result
+        result.insert(0, {"tag": "markdown", "content": at_text.strip()})
+        return result
+
     _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".tiff", ".tif"}
     _AUDIO_EXTS = {".opus"}
     _VIDEO_EXTS = {".mp4", ".mov", ".avi"}
@@ -1670,6 +1732,42 @@ class FeishuChannel(BaseChannel):
         except Exception:
             self.logger.exception("Error sending {} message", msg_type)
             return None
+
+    def send_low_value_notification_card(self, *, target_id: str, card: dict[str, Any]) -> str:
+        """Deliver a durable EOD notification through this running channel client."""
+        if not self._running or self._client is None:
+            raise RuntimeError("Feishu channel is not running")
+        receive_id_type = "chat_id" if target_id.startswith("oc_") else "open_id"
+        message_id = self._send_message_sync(
+            receive_id_type, target_id, "interactive", json.dumps(card, ensure_ascii=False),
+        )
+        if not message_id:
+            raise RuntimeError("Feishu interactive card delivery failed")
+        return message_id
+
+    def upload_low_value_notification_image(self, *, file_path: str) -> str:
+        """Upload an image for a durable EOD notification card."""
+        if not self._running or self._client is None:
+            raise RuntimeError("Feishu channel is not running")
+        image_key = self._upload_image_sync(file_path)
+        if not image_key:
+            raise RuntimeError("Feishu Daily Brief table image upload failed")
+        return image_key
+
+    def send_low_value_notification_file(self, *, target_id: str, file_path: str) -> str:
+        """Deliver one durable Daily Brief attachment through this running client."""
+        if not self._running or self._client is None:
+            raise RuntimeError("Feishu channel is not running")
+        file_key = self._upload_file_sync(file_path)
+        if not file_key:
+            raise RuntimeError("Feishu Daily Brief attachment upload failed")
+        receive_id_type = "chat_id" if target_id.startswith("oc_") else "open_id"
+        message_id = self._send_message_sync(
+            receive_id_type, target_id, "file", json.dumps({"file_key": file_key}, ensure_ascii=False),
+        )
+        if not message_id:
+            raise RuntimeError("Feishu Daily Brief attachment delivery failed")
+        return message_id
 
     def _create_streaming_card_sync(
         self,
@@ -2045,6 +2143,11 @@ class FeishuChannel(BaseChannel):
             elif has_thread_id:
                 reply_message_id = _msg_id
 
+            # In group chats every chunk replies to the same message so a
+            # split card stays inside one thread/topic instead of spilling
+            # into the main group; p2p chats quote only once to avoid
+            # repeated quote bubbles.
+            in_group = msg.metadata.get("chat_type", "group") == "group"
             first_send = True  # tracks whether the reply has already been used
 
             def _do_send(m_type: str, content: str) -> None:
@@ -2056,8 +2159,8 @@ class FeishuChannel(BaseChannel):
                 """
                 nonlocal first_send
                 if reply_message_id:
-                    # If we're in a topic, always use reply to stay in the topic
-                    if has_thread_id:
+                    if has_thread_id or in_group:
+                        # In a topic or group thread: always reply to stay in it
                         ok = self._reply_message_sync(
                             reply_message_id, m_type, content,
                             reply_in_thread=self._should_use_reply_in_thread(msg.metadata),
@@ -2065,7 +2168,7 @@ class FeishuChannel(BaseChannel):
                         if ok:
                             return
                     elif first_send:
-                        # If we're not in a topic but replying to message, only first uses reply
+                        # P2P replying to a message: only the first chunk quotes
                         first_send = False
                         ok = self._reply_message_sync(
                             reply_message_id, m_type, content,
@@ -2111,20 +2214,31 @@ class FeishuChannel(BaseChannel):
 
             if msg.content and msg.content.strip():
                 fmt = self._detect_msg_format(msg.content)
+                valid_mentions = self._valid_mentions(msg)
 
                 if fmt == "text":
                     # Short plain text – send as simple text message
-                    text_body = json.dumps({"text": msg.content.strip()}, ensure_ascii=False)
+                    body_text = msg.content.strip()
+                    if valid_mentions:
+                        body_text = "".join(
+                            f'<at user_id="{open_id}"></at> '
+                            for open_id, _ in valid_mentions
+                        ) + body_text
+                    text_body = json.dumps({"text": body_text}, ensure_ascii=False)
                     await loop.run_in_executor(None, _do_send, "text", text_body)
 
                 elif fmt == "post":
                     # Medium content with links – send as rich-text post
                     post_body = self._markdown_to_post(msg.content)
+                    if valid_mentions:
+                        post_body = self._prepend_post_mentions(post_body, valid_mentions)
                     await loop.run_in_executor(None, _do_send, "post", post_body)
 
                 else:
                     # Complex / long content – send as interactive card
                     elements = self._build_card_elements(msg.content)
+                    if valid_mentions:
+                        elements = self._prepend_card_mentions(elements, valid_mentions)
                     for chunk in self._split_elements_by_table_limit(elements):
                         card = {"config": {"wide_screen_mode": True}, "elements": chunk}
                         await loop.run_in_executor(

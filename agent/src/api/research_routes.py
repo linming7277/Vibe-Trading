@@ -199,12 +199,18 @@ def register_research_routes(app: FastAPI, require_auth: AuthDep | None = None, 
         if payload.strategy_line == "value" and payload.horizon != "long":
             raise HTTPException(422, "value committees require long horizon")
         if payload.strategy_line == "value" and market == "CN":
-            from src.value_workspace.store import ValueWorkspaceStore
+            from src.level3_leaders.store import Level3LeaderStore
 
-            value_store = ValueWorkspaceStore()
+            value_store = Level3LeaderStore()
             try:
-                if not value_store.reviewed_job_for_symbol(symbol):
-                    raise HTTPException(422, "value committee requires a completed or partial automatic research job selected for review")
+                pool = value_store.current_pool()
+                state = value_store._conn.execute(
+                    """SELECT research_status FROM l3_company_research_states
+                       WHERE pool_id=? AND stock_code=?""",
+                    ((pool or {}).get("id"), symbol),
+                ).fetchone() if pool else None
+                if not state or state["research_status"] not in {"READY", "PARTIAL"}:
+                    raise HTTPException(422, "value committee requires a prepared company in the current L3 leader pool")
             finally:
                 value_store.close()
         signal = None

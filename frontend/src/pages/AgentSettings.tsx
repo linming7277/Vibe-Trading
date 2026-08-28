@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, Loader2, Save, Users } from "lucide-react";
 import { api, type ResearchAgentConnectionSetting, type ResearchAgentRole } from "@/lib/api";
 
-const ROLE_LABELS: Record<ResearchAgentRole, string> = {
+const ROLE_LABELS: Partial<Record<ResearchAgentRole, string>> = {
   research_lead: "投研主管",
   macro_policy: "宏观政策研究员",
   valuation: "估值研究员",
@@ -10,7 +10,7 @@ const ROLE_LABELS: Record<ResearchAgentRole, string> = {
   financial_analyst: "财报研究员",
 };
 
-const ROLE_DESCRIPTIONS: Record<ResearchAgentRole, string> = {
+const ROLE_DESCRIPTIONS: Partial<Record<ResearchAgentRole, string>> = {
   research_lead: "汇总各研究结论，组织分歧复核和最终决策链。",
   macro_policy: "分析宏观周期、政策方向和市场流动性。",
   valuation: "计算估值区间、安全边际和情景假设。",

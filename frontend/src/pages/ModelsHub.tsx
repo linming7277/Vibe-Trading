@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router";
-import { ArrowRight, Database, FileSearch, GitCompareArrows } from "lucide-react";
+import { ArrowRight, Database, FileSearch, GitCompareArrows, Landmark } from "lucide-react";
 import { api, type StrategyDataStatus, type StrategyFormula } from "@/lib/api";
 import { EmptyState, LoadingState, PageHeader, WorkspacePage } from "@/components/workspace/WorkspaceUI";
 
@@ -25,8 +25,9 @@ export function ModelsHub() {
 
   return <WorkspacePage>
     <PageHeader eyebrow="DATA & MODEL GOVERNANCE" title={title} description={description} />
-    <section className="grid gap-4 md:grid-cols-3">
+    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <Link to="/models/data" className="rounded-xl border bg-card p-5 hover:border-primary/40"><Database className="h-5 w-5 text-primary" /><div className="mt-4 font-semibold">数据中心</div><div className="mt-1 text-sm text-muted-foreground">最新缓存、历史分区和覆盖率</div><ArrowRight className="mt-4 h-4 w-4" /></Link>
+      <Link to="/models/value-line-data" className="rounded-xl border bg-card p-5 hover:border-primary/40"><Landmark className="h-5 w-5 text-primary" /><div className="mt-4 font-semibold">价值线资料</div><div className="mt-1 text-sm text-muted-foreground">逐项查看价值线依赖的数据、用途和缺失边界</div><ArrowRight className="mt-4 h-4 w-4" /></Link>
       <Link to="/models/factors" className="rounded-xl border bg-card p-5 hover:border-primary/40"><GitCompareArrows className="h-5 w-5 text-primary" /><div className="mt-4 font-semibold">因子库</div><div className="mt-1 text-sm text-muted-foreground">公开因子、样本外验证和相关性</div><ArrowRight className="mt-4 h-4 w-4" /></Link>
       <Link to="/models/evidence" className="rounded-xl border bg-card p-5 hover:border-primary/40"><FileSearch className="h-5 w-5 text-primary" /><div className="mt-4 font-semibold">证据库</div><div className="mt-1 text-sm text-muted-foreground">数据来源和决策引用</div><ArrowRight className="mt-4 h-4 w-4" /></Link>
     </section>

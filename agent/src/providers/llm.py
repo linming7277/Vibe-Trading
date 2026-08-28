@@ -1192,6 +1192,10 @@ def build_llm(
     provider_name: Optional[str] = None,
     callbacks: Any = None,
     credential_override: dict[str, str] | None = None,
+    request_timeout_seconds: int | None = None,
+    request_max_retries: int | None = None,
+    request_max_tokens: int | None = None,
+    request_extra_body: dict[str, Any] | None = None,
 ) -> Any:
     """Construct the configured LangChain chat model.
 
@@ -1276,28 +1280,27 @@ def build_llm(
         api_key,
         source=_credential_env_source(caps.api_key_env),
     )
-    extra_body: dict[str, Any] | None = (
-        {"reasoning": {"effort": effort}}
-        if effort and caps.openrouter_reasoning_body
-        else None
-    )
+    extra_body: dict[str, Any] = dict(request_extra_body or {})
+    if effort and caps.openrouter_reasoning_body:
+        extra_body.setdefault("reasoning", {"effort": effort})
     if provider == "ollama":
         # langchain-openai 0.3 serializes its ``max_tokens`` constructor
         # argument as ``max_completion_tokens``. Ollama's OpenAI-compatible
         # endpoint currently ignores that alias, so put the supported wire
         # field in extra_body; the OpenAI SDK merges it into the JSON request.
-        extra_body = {"max_tokens": 512}
+        extra_body["max_tokens"] = 512
 
+    runtime_config = get_env_config().llm
     kwargs: dict[str, Any] = {
         "model": name,
         "api_key": api_key or None,
         "base_url": creds["base_url"] or None,
         "temperature": temperature,
-        "timeout": get_env_config().llm.timeout_seconds,
-        "max_retries": get_env_config().llm.max_retries,
-        "max_tokens": None,
+        "timeout": request_timeout_seconds or runtime_config.timeout_seconds,
+        "max_retries": runtime_config.max_retries if request_max_retries is None else request_max_retries,
+        "max_tokens": request_max_tokens,
         "callbacks": callbacks,
-        "extra_body": extra_body,
+        "extra_body": extra_body or None,
         # Direct OpenAI takes the effort as a top-level request field instead
         # (gpt-5.6-* require it, even "none", to accept function tools).
         # None is dropped by langchain-openai, so unsupported providers keep a

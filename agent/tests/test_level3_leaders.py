@@ -6,8 +6,8 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.api import fine_track_routes
-from src.api.fine_track_routes import register_fine_track_routes
+from src.api import value_l3_routes
+from src.api.value_l3_routes import register_value_l3_routes
 from src.level3_leaders.service import Level3IndustryLeaderService
 from src.level3_leaders.store import Level3LeaderStore
 from src.strategy_engines.value.leader_score_v2 import FORMULA_VERSION
@@ -102,10 +102,17 @@ def test_small_industries_are_not_backfilled_and_finance_warning_survives(tmp_pa
         one = subject.get_level3_leaders("I2")
         assert len(one["items"]) == 1
         assert one["items"][0]["metric_applicability_notes"] == ["FINANCIAL_SECTOR_METRIC_CAUTION"]
+        assert one["quality"]["sample_warning"] == "唯一可评分公司，不代表已经验证为行业龙头。"
+        assert one["items"][0]["explanation"]["selected"] is True
+        assert one["items"][0]["explanation"]["eligible_count"] == 1
         empty = subject.get_level3_leaders("I3")
         assert empty["items"] == []
         assert empty["company_count"] == 1
         assert empty["eligible_count"] == 0
+        assert empty["excluded_items"][0]["eligibility_reason_labels"] == [
+            "行情缺失或超过5个交易日未更新",
+            "缺少年度专业财务历史",
+        ]
         all_top = subject.get_all_level3_top_leaders(limit=2)
         assert set(all_top["items"]) == {"I1", "I2"}
         assert all(len(rows) <= 2 for rows in all_top["items"].values())
@@ -113,7 +120,44 @@ def test_small_industries_are_not_backfilled_and_finance_warning_survives(tmp_pa
         subject.close()
 
 
-def test_build_is_idempotent_and_contains_no_fine_track_membership(tmp_path):
+def test_formula_contract_and_full_industry_explanation_are_consistent(tmp_path):
+    subject, _ = service(tmp_path)
+    try:
+        subject.build_level3_leaders("2026-08-14")
+        result = subject.get_level3_leaders("I1", limit=100)
+
+        assert [row["stock_code"] for row in result["items"]] == ["C.SH", "B.SH", "A.SH"]
+        assert result["quality"] == {
+            "member_count": 3,
+            "eligible_count": 3,
+            "excluded_count": 0,
+            "selected_count": 2,
+            "sample_warning": "可评分公司少于5家，排名属于小样本结果。",
+        }
+        weights = {item["key"]: item["weight"] for item in result["formula"]["dimensions"]}
+        assert weights == {
+            "industry_position": .25,
+            "profitability": .20,
+            "growth_stability": .15,
+            "cash_flow": .15,
+            "valuation": .15,
+            "governance_risk": .10,
+        }
+        first = result["items"][0]
+        assert first["explanation"]["rank"] == 1
+        assert first["explanation"]["comparison_scope"] == "仅与科技设备行业内可评分公司比较"
+        assert first["explanation"]["overall_reweighted"] is False
+        assert first["explanation"]["missing_dimensions"] == []
+        assert first["raw_metric_available"] == 0
+        assert first["raw_metric_total"] == 20
+        assert len(first["components"]) == 6
+        assert sum(item["weight"] for item in first["components"]) == 1
+        assert first["components"][0]["contribution"] == 22.5
+    finally:
+        subject.close()
+
+
+def test_build_is_idempotent_and_contains_no_legacy_membership(tmp_path):
     subject, _ = service(tmp_path)
     try:
         first = subject.build_level3_leaders("2026-08-14")
@@ -122,7 +166,7 @@ def test_build_is_idempotent_and_contains_no_fine_track_membership(tmp_path):
         assert second["idempotent_reuse"] is True
         rows = subject.store.all_rows(first["id"])
         assert rows
-        assert all("fine_track_id" not in row and "membership_type" not in row for row in rows)
+        assert all("legacy_track_id" not in row and "membership_type" not in row for row in rows)
     finally:
         subject.close()
 
@@ -141,9 +185,9 @@ def test_level3_tree_and_leader_api(monkeypatch):
         def build_level3_leaders(self, as_of, *, force=False):
             return {"status": "COMPLETED", "as_of": as_of, "force": force}
 
-    monkeypatch.setattr(fine_track_routes, "get_level3_leader_service", lambda: ApiService())
+    monkeypatch.setattr(value_l3_routes, "get_level3_leader_service", lambda: ApiService())
     app = FastAPI()
-    register_fine_track_routes(app, require_auth=lambda: True)
+    register_value_l3_routes(app, require_auth=lambda: True)
     client = TestClient(app)
     assert client.get("/api/value/industry-tree").json()["level3_total"] == 345
     response = client.get("/api/value/industries/881321.SH/leaders?limit=2")

@@ -140,4 +140,12 @@ class TdxClient:
             if not bool(getattr(self._tq, "_initialized", False)):
                 self._reconnect()
                 value = target(*args, **kwargs)
+            # The vendor bridge may remain marked initialized immediately after
+            # the desktop client restarts, yet return an empty A-share list
+            # from its stale run.  An empty list is never a usable response
+            # for the CN list identifier ("5"); reconnect once before the
+            # caller treats the market-close snapshot as unavailable.
+            if method == "get_stock_list" and not value and args and str(args[0]) == "5":
+                self._reconnect()
+                value = getattr(self._tq, method)(*args, **kwargs)
             return json_safe(value)

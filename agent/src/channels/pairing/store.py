@@ -214,10 +214,10 @@ def get_approved(channel: str) -> list[str]:
         return sorted(data.get("approved", {}).get(channel, set()))
 
 
-def format_pairing_reply(code: str) -> str:
+def format_pairing_reply(code: str, *, role_name: str = "研究机器人") -> str:
     """Return the pairing-code message sent to unrecognised DM senders."""
     return (
-        "你好，财报研究员只响应已授权用户。\n\n"
+        f"你好，{role_name}只响应已授权用户。\n\n"
         f"你的配对码是：`{code}`\n\n"
         "请让系统管理员在「设置 → IM 通道 → 用户配对」中批准此配对码。"
     )

@@ -8,7 +8,8 @@ from typing import Any, Awaitable, Callable
 from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from src.tdx_data.service import MODULES, get_tdx_service
+from src.tdx_data.automation import get_data_refresh_scheduler
+from src.tdx_data.service import MODULES, REFRESH_PROFILES, get_tdx_service
 from src.tdx_data.financial_history import FinancialHistoryService
 
 AuthDep = Callable[..., Awaitable[Any] | Any]
@@ -16,6 +17,10 @@ AuthDep = Callable[..., Awaitable[Any] | Any]
 
 class TdxUpdateRequest(BaseModel):
     module: str = Field(default="all")
+
+
+class TdxRefreshAutomationUpdate(BaseModel):
+    enabled: bool
 
 
 class SecurityRefreshRequest(BaseModel):
@@ -47,7 +52,55 @@ def register_tdx_routes(app: FastAPI, require_auth: AuthDep | None = None) -> No
 
     @app.get("/tdx/status", dependencies=[Depends(require_auth)])
     async def tdx_status():
-        return get_tdx_service().status()
+        value = get_tdx_service().status()
+        value["automation"] = get_data_refresh_scheduler().status()
+        return value
+
+    @app.get("/tdx/capabilities/{market}", dependencies=[Depends(require_auth)])
+    async def tdx_market_capabilities(market: str):
+        try:
+            return await asyncio.to_thread(get_tdx_service().market_capabilities, market)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/tdx/markets/{market}/catalog", dependencies=[Depends(require_auth)])
+    async def tdx_market_catalog(market: str):
+        try:
+            return get_tdx_service().market_catalog_status(market)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post("/tdx/markets/{market}/catalog-refresh", dependencies=[Depends(require_auth)])
+    async def refresh_tdx_market_catalog(market: str):
+        try:
+            return get_tdx_service().start_market_catalog_refresh(market)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.get("/tdx/markets/{market}/quotes", dependencies=[Depends(require_auth)])
+    async def tdx_market_catalog_quotes(market: str, limit: int = Query(12, ge=1, le=100)):
+        try:
+            return get_tdx_service().market_catalog_quotes(market, limit=limit)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/tdx/refresh-runs", dependencies=[Depends(require_auth)])
+    async def tdx_refresh_runs(limit: int = Query(20, ge=1, le=100)):
+        return {"items": get_tdx_service().store.latest_refresh_runs(limit)}
+
+    @app.get("/tdx/snapshots", dependencies=[Depends(require_auth)])
+    async def tdx_snapshots(snapshot_id: str | None = None):
+        service = get_tdx_service()
+        return {
+            "active_close_snapshot": service.store.active_snapshot(),
+            "items": service.store.dataset_snapshots(snapshot_id),
+        }
+
+    @app.put("/tdx/automation", dependencies=[Depends(require_auth)])
+    async def update_tdx_automation(payload: TdxRefreshAutomationUpdate):
+        return get_data_refresh_scheduler().set_enabled(payload.enabled)
 
     @app.get("/tdx/financial-history/{symbol}", dependencies=[Depends(require_auth)])
     async def tdx_financial_history(
@@ -134,8 +187,8 @@ def register_tdx_routes(app: FastAPI, require_auth: AuthDep | None = None) -> No
 
     @app.post("/tdx/update", dependencies=[Depends(require_auth)])
     async def tdx_update(payload: TdxUpdateRequest):
-        if payload.module != "all" and payload.module not in MODULES:
-            raise HTTPException(422, f"unknown TDX module: {payload.module}")
+        if payload.module not in MODULES and payload.module not in REFRESH_PROFILES:
+            raise HTTPException(422, f"unknown TDX module or refresh profile: {payload.module}")
         try:
             return get_tdx_service().start_update(payload.module)
         except RuntimeError as exc:

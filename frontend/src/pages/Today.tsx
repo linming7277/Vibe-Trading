@@ -43,7 +43,7 @@ export function Today() {
       <MetricCard label="委员会候选" value={signals.filter((item) => item.status === "proposed").length} icon={<ShieldCheck className="h-4 w-4" />} />
     </section>
     <section className="grid gap-5 xl:grid-cols-2">
-      <LineCard line="value" title="价值投资" description="宏观 → 赛道 → 龙头 → 估值 → 入场" to="/value/macro" dashboard={value} observations={observations} />
+      <LineCard line="value" title="价值投资" description="三级行业 → 行业内龙头 Top2 → 公司研究 → 估值研究" to="/value" dashboard={value} observations={observations} />
       <LineCard line="emotion" title="情绪交易" description="温度 → 周期 → 板块 → 短线/波段 → 时机" to="/emotion/temperature" dashboard={emotion} observations={observations} />
     </section>
     <section className="rounded-xl border bg-card shadow-sm"><div className="flex items-center justify-between border-b p-5"><div><div className="text-xs font-semibold text-primary">ACTIONABLE SIGNALS</div><h2 className="mt-1 text-lg font-semibold">待验证信号</h2></div><Link to="/simulation/signals" className="inline-flex items-center gap-1 text-sm text-primary">完整日志<ArrowRight className="h-4 w-4" /></Link></div>{signals.length ? <div className="divide-y">{signals.slice(0, 8).map((signal) => <SignalRow key={signal.id} signal={signal} />)}</div> : <div className="p-5"><EmptyState title="当前没有可交易信号" body="覆盖率不足或未达到确定性阈值时，系统不会用Agent判断补足信号。" /></div>}</section>
@@ -56,5 +56,5 @@ function LineCard({ line, title, description, to, dashboard, observations }: { l
 }
 
 function SignalRow({ signal }: { signal: StrategySignal }) {
-  return <Link to={signal.strategy_line === "value" ? "/value/plans" : "/emotion/plans"} className="grid grid-cols-[1fr_110px_110px] items-center gap-4 p-4 hover:bg-muted/40"><div><div className="font-medium">{signal.symbol}</div><div className="mt-1 text-xs text-muted-foreground">{signal.strategy_line} / {signal.horizon} · {signal.status} · 有效至 {signal.valid_until}</div></div><ScoreBar value={signal.base_score} compact /><span className="text-right text-sm">仓位≤{(signal.position_cap * 100).toFixed(0)}%</span></Link>;
+  return <Link to={signal.strategy_line === "value" ? "/value/research" : "/emotion/plans"} className="grid grid-cols-[1fr_110px_110px] items-center gap-4 p-4 hover:bg-muted/40"><div><div className="font-medium">{signal.symbol}</div><div className="mt-1 text-xs text-muted-foreground">{signal.strategy_line} / {signal.horizon} · {signal.status} · 有效至 {signal.valid_until}</div></div><ScoreBar value={signal.base_score} compact /><span className="text-right text-sm">仓位≤{(signal.position_cap * 100).toFixed(0)}%</span></Link>;
 }

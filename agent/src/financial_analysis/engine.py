@@ -6,7 +6,7 @@ import math
 import statistics
 from typing import Any
 
-FINANCIAL_FEATURE_VERSION = "value-financial-feature-v1.0.0"
+FINANCIAL_FEATURE_VERSION = "value-financial-feature-v1.2.0"
 FORECAST_VERSION = "value-financial-forecast-v1.0.0"
 TREND_STATES = {"IMPROVING", "STABLE", "WEAKENING", "VOLATILE", "INSUFFICIENT_DATA"}
 
@@ -90,6 +90,29 @@ def _points(rows: list[dict[str, Any]], field: str) -> list[dict[str, Any]]:
         "report_date": row["report_date"], "announcement_date": row["announcement_date"],
         "period_type": row.get("period_type"), "value": _round(_number(row.get(field))),
     } for row in rows]
+
+
+def _ratio_points(
+    rows: list[dict[str, Any]], numerator: str, denominator: str, *, multiplier: float = 1.0,
+    annual_only: bool = False,
+) -> list[dict[str, Any]]:
+    """Return a deterministic, PIT-visible ratio series without imputing zero.
+
+    These are input facts for later risk rules.  They deliberately do not
+    assign a risk level here: a sector-aware rule must decide whether a trend
+    is material rather than treating one ratio as a universal conclusion.
+    """
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        top, bottom = _number(row.get(numerator)), _number(row.get(denominator))
+        comparable = not annual_only or row.get("period_type") == "annual"
+        result.append({
+            "report_date": row["report_date"], "announcement_date": row["announcement_date"],
+            "period_type": row.get("period_type"),
+            "value": _round(top / bottom * multiplier)
+            if comparable and top is not None and bottom not in (None, 0) else None,
+        })
+    return result
 
 
 def _cagr(rows: list[dict[str, Any]], field: str, years: int) -> dict[str, Any]:
@@ -191,7 +214,43 @@ class FinancialFeatureEngine:
         balance_sheet = {
             "total_assets": _points(display, "assets"), "equity": _points(display, "equity"),
             "debt_ratio": _points(display, "debt_ratio"),
+            "cash_and_equivalents": _points(display, "cash_and_equivalents"),
+            "accounts_receivable": _points(display, "accounts_receivable"),
+            "inventory": {"status": "NOT_APPLICABLE", "items": []} if financial_sector else _points(display, "inventory"),
+            "current_assets": _points(display, "current_assets"),
+            "current_liabilities": _points(display, "current_liabilities"),
+            "non_current_liabilities": _points(display, "non_current_liabilities"),
+            "interest_bearing_debt_ratio": _points(display, "interest_bearing_debt_ratio"),
+            "current_ratio": _ratio_points(display, "current_assets", "current_liabilities"),
+            "quick_ratio": {"status": "NOT_APPLICABLE", "items": []} if financial_sector else [],
+            "cash_to_current_liabilities": _ratio_points(display, "cash_and_equivalents", "current_liabilities"),
+            # A period-end balance divided by a single-quarter flow has no
+            # stable economic interpretation.  Keep this series annual-only;
+            # quarterly receivables risks are assessed later from same-period
+            # year-over-year changes, not this ratio.
+            "receivables_to_revenue": _ratio_points(
+                display, "accounts_receivable", "revenue", multiplier=100, annual_only=True,
+            ),
+            "inventory_to_revenue": {"status": "NOT_APPLICABLE", "items": []} if financial_sector else _ratio_points(
+                display, "inventory", "revenue", multiplier=100, annual_only=True,
+            ),
         }
+        # Quick ratio excludes inventory.  Keep the calculation adjacent to
+        # the balance-sheet source values so a missing inventory stays missing
+        # instead of silently becoming zero.
+        if not financial_sector:
+            quick_ratio_items: list[dict[str, Any]] = []
+            for row in display:
+                current_assets = _number(row.get("current_assets"))
+                inventory = _number(row.get("inventory"))
+                current_liabilities = _number(row.get("current_liabilities"))
+                quick_ratio_items.append({
+                    "report_date": row["report_date"], "announcement_date": row["announcement_date"],
+                    "period_type": row.get("period_type"),
+                    "value": _round((current_assets - inventory) / current_liabilities)
+                    if current_assets is not None and inventory is not None and current_liabilities not in (None, 0) else None,
+                })
+            balance_sheet["quick_ratio"] = quick_ratio_items
         capital_expenditure = {
             "capex": _points(display, "capex"),
             "capex_to_revenue": [{**point, "value": _round(
@@ -241,6 +300,16 @@ class FinancialFeatureEngine:
                 })
 
         cautions = ["FINANCIAL_SECTOR_METRIC_CAUTION"] if financial_sector else []
+        risk_input_fields = [
+            "cash_and_equivalents", "accounts_receivable", "current_assets", "current_liabilities",
+            "non_current_liabilities", "interest_bearing_debt_ratio",
+        ]
+        if not financial_sector:
+            risk_input_fields.append("inventory")
+        risk_input_missing = [field for field in risk_input_fields if not latest or _number(latest.get(field)) is None]
+        risk_input_status = "READY" if not risk_input_missing else (
+            "PARTIAL" if len(risk_input_missing) < len(risk_input_fields) else "MISSING"
+        )
         return {
             "stock_code": stock_code, "stock_name": stock_name, "as_of": as_of,
             "feature_version": self.version, "status": status,
@@ -256,6 +325,8 @@ class FinancialFeatureEngine:
                 "coverage": _round(present / denominator), "missing_fields": missing,
                 "annual_period_count": len(annual_all), "latest_report_date": latest.get("report_date") if latest else None,
                 "latest_announcement_date": latest.get("announcement_date") if latest else None,
+                "risk_financial_input_status": risk_input_status,
+                "risk_financial_input_missing_fields": risk_input_missing,
                 "cautions": cautions,
             },
         }

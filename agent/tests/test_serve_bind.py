@@ -44,7 +44,7 @@ def test_is_loopback_bind_host(host: str, expected: bool) -> None:
     assert api_server._is_loopback_bind_host(host) is expected
 
 
-def _run_serve(argv: list[str]) -> str | None:
+def _run_serve(argv: list[str]) -> dict[str, object]:
     """Invoke serve_main with uvicorn stubbed; return the host it bound to.
 
     The frontend mount / static-file branches are short-circuited because
@@ -54,6 +54,7 @@ def _run_serve(argv: list[str]) -> str | None:
 
     def fake_run(*args: object, **kwargs: object) -> None:
         captured["host"] = kwargs.get("host") or (args[1] if len(args) > 1 else None)
+        captured["port"] = kwargs.get("port") or (args[2] if len(args) > 2 else None)
         raise SystemExit(0)
 
     with mock.patch("uvicorn.run", fake_run):
@@ -61,17 +62,22 @@ def _run_serve(argv: list[str]) -> str | None:
             api_server.serve_main(argv)
         except SystemExit:
             pass
-    return captured.get("host")  # type: ignore[return-value]
+    return captured
 
 
 @pytest.mark.unit
 def test_serve_defaults_to_loopback() -> None:
-    assert _run_serve([]) == "127.0.0.1"
+    assert _run_serve([])["host"] == "127.0.0.1"
+
+
+@pytest.mark.unit
+def test_serve_defaults_to_launcher_backend_port() -> None:
+    assert _run_serve([])["port"] == 8899
 
 
 @pytest.mark.unit
 def test_serve_honors_explicit_host() -> None:
-    assert _run_serve(["--host", "0.0.0.0"]) == "0.0.0.0"
+    assert _run_serve(["--host", "0.0.0.0"])["host"] == "0.0.0.0"
 
 
 @pytest.mark.unit
@@ -127,6 +133,6 @@ def test_serve_mounts_frontend_when_routes_include_router_without_path(
     monkeypatch.setattr(api_server, "__file__", str(fake_api_file))
     api_server.app.routes.insert(0, SimpleNamespace())
     try:
-        assert _run_serve([]) == "127.0.0.1"
+        assert _run_serve([])["host"] == "127.0.0.1"
     finally:
         api_server.app.routes.pop(0)

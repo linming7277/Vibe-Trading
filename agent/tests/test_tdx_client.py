@@ -47,6 +47,28 @@ class InitializePathErrorTq:
         return [{"Code": "600519.SH", "Name": "贵州茅台"}]
 
 
+class StaleInitializedEmptyListTq:
+    """Vendor bridge can report initialized while its old run returns no rows."""
+
+    def __init__(self) -> None:
+        self._initialized = True
+        self.initialize_calls = 0
+        self.reads = 0
+
+    def initialize(self, _path: str) -> None:
+        self.initialize_calls += 1
+        self._initialized = True
+
+    def close(self) -> None:
+        self._initialized = False
+
+    def get_stock_list(self, *_args, **_kwargs):
+        self.reads += 1
+        if self.reads == 1:
+            return []
+        return [{"Code": "600519.SH", "Name": "贵州茅台"}]
+
+
 def test_connect_always_restores_vendor_connection_path(tmp_path: Path) -> None:
     client = TdxClient(tmp_path)
     client.bridge_file.parent.mkdir(parents=True)
@@ -88,3 +110,18 @@ def test_path_empty_vendor_error_is_reinitialized_and_retried(tmp_path: Path) ->
 
     assert value[0]["Code"] == "600519.SH"
     assert tq.initialize_calls == 2
+
+
+def test_empty_cn_stock_list_reconnects_even_when_vendor_reports_initialized(tmp_path: Path) -> None:
+    client = TdxClient(tmp_path)
+    client.bridge_file.parent.mkdir(parents=True)
+    client.bridge_file.touch()
+    (tmp_path / "tdxw.exe").touch()
+    tq = StaleInitializedEmptyListTq()
+    client._tq = tq
+
+    value = client.call("get_stock_list", "5", list_type=1)
+
+    assert value[0]["Code"] == "600519.SH"
+    assert tq.reads == 2
+    assert tq.initialize_calls >= 2

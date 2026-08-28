@@ -43,6 +43,10 @@ class OutboundMessage:
     ``metadata`` can carry routing (``message_id``, …), trace flags
     (``_progress``), and optional ``OUTBOUND_META_AGENT_UI`` blobs for
     rich clients; non-WebUI channels may ignore unknown keys.
+
+    ``mentions`` lists people/bots to @-mention, each as
+    ``{"open_id": "ou_...", "name": "显示名"}``; adapters without native
+    mention support may ignore it.
     """
 
     channel: str
@@ -52,3 +56,4 @@ class OutboundMessage:
     media: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     buttons: list[list[str]] = field(default_factory=list)
+    mentions: list[dict[str, Any]] = field(default_factory=list)

@@ -7,6 +7,7 @@ const apiMock = vi.hoisted(() => ({
   getLLMSettings: vi.fn(),
   getDataSourceSettings: vi.fn(),
   getChannelStatus: vi.fn(),
+  getFeishuChannelConfig: vi.fn(),
   startChannels: vi.fn(),
   stopChannels: vi.fn(),
   updateLLMSettings: vi.fn(),
@@ -148,6 +149,20 @@ describe("Settings QVeris card", () => {
     apiMock.getLLMSettings.mockResolvedValue(llmSettings());
     apiMock.getDataSourceSettings.mockResolvedValue(dataSourceSettings());
     apiMock.getChannelStatus.mockResolvedValue(channelStatus());
+    apiMock.getFeishuChannelConfig.mockResolvedValue({
+      auto_start: false,
+      enabled: false,
+      app_id: "",
+      app_secret_configured: false,
+      domain: "feishu",
+      group_policy: "mention",
+      reply_to_message: true,
+      streaming: true,
+      topic_isolation: true,
+      default_agent: "financial_analyst",
+      allow_from_count: 0,
+      config_path: "agent.json",
+    });
     apiMock.startChannels.mockResolvedValue(channelStatus());
     apiMock.stopChannels.mockResolvedValue(channelStatus());
   });

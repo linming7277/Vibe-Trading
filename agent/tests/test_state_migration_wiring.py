@@ -55,6 +55,8 @@ def test_api_startup_runs_migration(
 
     monkeypatch.setattr("src.preflight.run_preflight", lambda console: None)
     monkeypatch.setattr(api_server, "_start_scheduled_research_executor", lambda: None)
+    monkeypatch.setattr("src.tdx_data.automation.start_data_refresh_scheduler", lambda: None)
+    monkeypatch.setattr("src.tdx_data.automation.stop_data_refresh_scheduler", lambda: None)
     monkeypatch.setattr(
         "src.config.accessor.get_env_config",
         lambda: type(
@@ -95,6 +97,14 @@ def test_api_lifespan_preserves_startup_and_shutdown_order(
         "_start_scheduled_research_executor",
         lambda: events.append("scheduler-start"),
     )
+    monkeypatch.setattr(
+        "src.tdx_data.automation.start_data_refresh_scheduler",
+        lambda: events.append("data-refresh-start"),
+    )
+    monkeypatch.setattr(
+        "src.tdx_data.automation.stop_data_refresh_scheduler",
+        lambda: events.append("data-refresh-stop"),
+    )
 
     async def start_channels() -> None:
         events.append("channels-start")
@@ -133,9 +143,11 @@ def test_api_lifespan_preserves_startup_and_shutdown_order(
     # steps and that preflight was still invoked at least once.
     assert events.index("migration") < events.index("scheduler-start")
     assert events.index("scheduler-start") < events.index("channels-start")
+    assert events.index("data-refresh-start") < events.index("channels-start")
     assert events.index("channels-start") < events.index("serving")
     assert events.index("serving") < events.index("channels-stop")
     assert events.index("channels-stop") < events.index("scheduler-stop")
+    assert events.index("scheduler-stop") < events.index("data-refresh-stop")
     assert events.count("preflight") == 1
 
 

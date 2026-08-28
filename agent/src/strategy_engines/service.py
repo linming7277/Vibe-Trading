@@ -71,8 +71,7 @@ class StrategyEngineService:
         as_of: str,
         symbols: list[str] | None = None,
         force_refresh: bool = False,
-        profile_id: str | None = None,
-        profile_version: int | None = None,
+        data_snapshot_id: str | None = None,
     ) -> tuple[dict[str, Any], bool]:
         if strategy_line not in {"value", "emotion"}:
             raise ValueError("strategy_line must be value or emotion")
@@ -80,7 +79,8 @@ class StrategyEngineService:
             raise ValueError("v1 strategy engines support CN and HK only")
         date.fromisoformat(as_of)
         formula = VALUE_PIPELINE_VERSION if strategy_line == "value" else EMOTION_PIPELINE_VERSION
-        effective_formula = f"{formula}:profile={profile_id}:v{profile_version}" if strategy_line == "value" and profile_id else formula
+        effective_formula = formula
+        effective_formula = f"{effective_formula}:snapshot={data_snapshot_id}" if data_snapshot_id else effective_formula
         key = idempotency_key(strategy_line, market, as_of, symbols, effective_formula)
         return self.store.create_or_get_run(
             idempotency_key=key,
@@ -89,8 +89,7 @@ class StrategyEngineService:
             as_of=as_of,
             symbols=symbols or [],
             formula_version=effective_formula,
-            profile_id=profile_id,
-            profile_version=profile_version,
+            data_snapshot_id=data_snapshot_id,
             force_refresh=force_refresh,
         )
 

@@ -20,9 +20,10 @@ export function inferReturnLabel(path: string) {
   if (path.startsWith("/market/ranks")) return "市场榜单";
   if (path.startsWith("/market/sectors")) return "板块行情";
   if (path.startsWith("/screener")) return "股票筛选";
-  if (path.startsWith("/value/research")) return "公司研究";
-  if (path.startsWith("/value/valuation")) return "估值与买卖点";
-  if (path.startsWith("/value")) return "价值龙头";
+  if (path.startsWith("/value/research") || path.startsWith("/value/operations")) return "研究运行";
+  if (path.startsWith("/value/opportunities") || path.startsWith("/value/valuation") || path.startsWith("/value/timing")) return "机会与风险";
+  if (path.startsWith("/value/focus") || path.startsWith("/value/plans")) return "低估龙头池";
+  if (path.startsWith("/value/leaders") || path.startsWith("/value")) return "行业龙头";
   return "上一级";
 }
 

@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router";
 import { AgentSettings } from "../AgentSettings";
 
 const { settings, update } = vi.hoisted(() => ({
-  settings: ["research_lead", "macro_policy", "industry", "company", "valuation", "risk", "track_classifier", "financial_analyst"].map((role) => ({
+  settings: ["research_lead", "macro_policy", "industry", "company", "valuation", "risk", "financial_analyst"].map((role) => ({
     role,
     base_url: "https://models.example.com/v1",
     model: "gpt-5.5",

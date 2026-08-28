@@ -41,7 +41,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $frontendRoot "node_modules"))) {
 $npm = (Get-Command npm.cmd -ErrorAction Stop).Source
 $env:VITE_API_URL = "http://127.0.0.1:8899"
 $machineHost = [System.Net.Dns]::GetHostName()
-$configuredHost = if ([string]::IsNullOrWhiteSpace($env:HENGZHI_HOSTNAME)) { "hzstock" } else { $env:HENGZHI_HOSTNAME.Trim() }
+$configuredHost = if ([string]::IsNullOrWhiteSpace($env:HENGZHI_HOSTNAME)) { "127.0.0.1" } else { $env:HENGZHI_HOSTNAME.Trim() }
 $env:VITE_ALLOWED_HOST = @($configuredHost, $machineHost) -join ","
 Set-Location -LiteralPath $frontendRoot
 & $npm run dev -- --host 0.0.0.0 --port 5899 --strictPort

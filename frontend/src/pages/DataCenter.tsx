@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, CheckCircle2, CircleAlert, Clock3, Database, Loader2, RefreshCw, Server } from "lucide-react";
 import { toast } from "sonner";
-import { api, type TdxRecord, type TdxStatus, type ValueDataStatus, type ValueRefreshModule } from "@/lib/api";
+import { api, type TdxDatasetSnapshot, type TdxRecord, type TdxStatus, type ValueDataStatus, type ValueRefreshModule } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { PageHeader, WorkspacePage, formatNumber } from "@/components/workspace/WorkspaceUI";
 
@@ -31,6 +31,8 @@ export function DataCenter() {
   const [recordQuery, setRecordQuery] = useState("");
   const [valueData, setValueData] = useState<ValueDataStatus | null>(null);
   const [valueStarting, setValueStarting] = useState<ValueRefreshModule | "">("");
+  const [valuePipelineRunning, setValuePipelineRunning] = useState(false);
+  const [automationUpdating, setAutomationUpdating] = useState(false);
 
   const loadValue = useCallback(async () => {
     try { setValueData(await api.getValueDataStatus()); }
@@ -106,12 +108,44 @@ export function DataCenter() {
   const updateValue = async (module: ValueRefreshModule) => {
     setValueStarting(module);
     try {
-      const job = await api.startValueRefresh([module], valueData?.latest_score_as_of || undefined);
+      const job = await api.startValueRefresh([module]);
       setValueData((current) => current ? { ...current, recent_jobs: [job, ...current.recent_jobs] } : current);
       toast.success(module === "all" ? "价值线全部更新已启动" : "价值线模块更新已启动");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "价值线更新启动失败");
     } finally { setValueStarting(""); }
+  };
+
+  const updateAutomation = async (enabled: boolean) => {
+    setAutomationUpdating(true);
+    try {
+      const automation = await api.setTdxAutomation(enabled);
+      setData((current) => current ? { ...current, automation } : current);
+      toast.success(enabled ? "已恢复自动刷新" : "已暂停自动刷新；已有缓存保持可读");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "更新自动刷新设置失败");
+    } finally {
+      setAutomationUpdating(false);
+    }
+  };
+
+  const runValuePipeline = async () => {
+    setValuePipelineRunning(true);
+    try {
+      const result = await api.runValueAutomationNow();
+      if (result.status === "COMPLETED") {
+        toast.success(`价值线已更新至 ${result.as_of || "最近合格收盘日"}`);
+      } else if (result.status === "UP_TO_DATE") {
+        toast.success(`当前价值线结果已是最新：${result.as_of || "—"}`);
+      } else {
+        toast.error(result.error || result.reason || "价值线未能完成更新");
+      }
+      await Promise.all([load(true), loadValue()]);
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "启动价值线更新失败");
+    } finally {
+      setValuePipelineRunning(false);
+    }
   };
 
   return (
@@ -127,7 +161,7 @@ export function DataCenter() {
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-50"
           >
             <RefreshCw className={cn("h-4 w-4", (busy || starting === "all") && "animate-spin")} />
-            一键更新全部
+            人工应急：更新全部
           </button>
         }
       />
@@ -138,10 +172,17 @@ export function DataCenter() {
 
       {error ? <div className="rounded-xl border border-danger/30 bg-danger/5 p-4 text-sm text-danger">{error}</div> : null}
 
-      <ValueLineDataPanel data={valueData} active={valueActive} starting={valueStarting} onUpdate={updateValue} />
+      <ValueLineDataPanel data={valueData} active={valueActive} starting={valueStarting} pipelineRunning={valuePipelineRunning} onUpdate={updateValue} onRunPipeline={runValuePipeline} />
 
       {data ? (
         <>
+          <RefreshPipelinePanel
+            data={data}
+            busy={busy || Boolean(starting)}
+            automationUpdating={automationUpdating}
+            onRefreshClose={() => void update("market_close")}
+            onSetAutomation={(enabled) => void updateAutomation(enabled)}
+          />
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <article className="rounded-xl border bg-card p-4 shadow-sm"><div className="flex items-center justify-between text-xs text-muted-foreground"><span>客户端</span><Server className="h-4 w-4" /></div><div className={cn("mt-3 text-xl font-semibold", data.client_process_running ? "text-success" : "text-danger")}>{data.client_process_running ? "已登录运行" : "未检测到"}</div><div className="mt-1 truncate text-xs text-muted-foreground" title={data.tdx_home}>{data.tdx_home}</div></article>
             <article className="rounded-xl border bg-card p-4 shadow-sm"><div className="flex items-center justify-between text-xs text-muted-foreground"><span>已就绪模块</span><CheckCircle2 className="h-4 w-4" /></div><div className="mt-3 text-2xl font-semibold">{readyCount} / {data.modules.length}</div><div className="mt-1 text-xs text-muted-foreground">失败不会覆盖上次成功缓存</div></article>
@@ -150,7 +191,7 @@ export function DataCenter() {
           </section>
 
           <section className="grid gap-3 md:grid-cols-3">
-            <article className="rounded-xl border bg-card p-4 text-sm shadow-sm"><div className="text-xs text-muted-foreground">行情覆盖率</div><div className="mt-2 text-xl font-semibold">{quoteCount ? "100%" : "0%"}</div><div className="mt-1 text-xs text-muted-foreground">有效缓存 {formatNumber(quoteCount, 0)} 条</div></article>
+            <article className="rounded-xl border bg-card p-4 text-sm shadow-sm"><div className="text-xs text-muted-foreground">行情覆盖率</div><div className="mt-2 text-xl font-semibold">{coverageLabel(data.active_close_snapshot?.datasets?.find((item) => item.dataset === "quotes")?.coverage, quoteCount > 0 ? 1 : null)}</div><div className="mt-1 text-xs text-muted-foreground">有效缓存 {formatNumber(quoteCount, 0)} 条；收盘策略只消费质量合格快照</div></article>
             <article className="rounded-xl border bg-card p-4 text-sm shadow-sm"><div className="text-xs text-muted-foreground">财务估值覆盖率</div><div className="mt-2 text-xl font-semibold">{`${financeCoverage.toFixed(2)}%`}</div><div className="mt-1 text-xs text-muted-foreground">已缓存 {formatNumber(financeCount, 0)} 只证券；覆盖率按证券列表计算，缺失值不以0替代</div></article>
             <article className="rounded-xl border bg-card p-4 text-sm shadow-sm"><div className="text-xs text-muted-foreground">统一单位</div><div className="mt-2 font-semibold">北京时间 · 元 / 万元 / 亿元</div><div className="mt-1 text-xs text-muted-foreground">快照成交量为手；K线成交量按接口原始股数展示</div></article>
           </section>
@@ -212,18 +253,86 @@ export function DataCenter() {
   );
 }
 
-function ValueLineDataPanel({ data, active, starting, onUpdate }: {
+function coverageLabel(value?: number | null, fallback?: number | null) {
+  const resolved = value ?? fallback;
+  return resolved == null ? "—" : `${(resolved * 100).toFixed(1)}%`;
+}
+
+function RefreshPipelinePanel({ data, busy, automationUpdating, onRefreshClose, onSetAutomation }: {
+  data: TdxStatus;
+  busy: boolean;
+  automationUpdating: boolean;
+  onRefreshClose: () => void;
+  onSetAutomation: (enabled: boolean) => void;
+}) {
+  const automation = data.automation;
+  const close = data.active_close_snapshot;
+  const datasets = close?.datasets ?? [];
+  const status = close ? "已发布" : "尚未发布";
+  return <section className="rounded-xl border border-primary/25 bg-card shadow-sm">
+    <div className="flex flex-wrap items-start justify-between gap-4 border-b p-5">
+      <div>
+        <div className="text-xs font-semibold text-primary">REFRESH PIPELINE / CN</div>
+        <h2 className="mt-1 text-xl font-semibold">A股数据刷新流水线</h2>
+        <p className="mt-1 text-sm text-muted-foreground">刷新先写入独立快照；行情、榜单、指数和板块全部通过质量门槛后，才一次性发布给价值线与情绪线。</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={onRefreshClose} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><RefreshCw className="h-4 w-4" />立即运行收盘刷新</button>
+        <button onClick={() => onSetAutomation(!automation?.enabled)} disabled={automationUpdating} className={cn("inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50", automation?.enabled ? "bg-warning/10 text-warning hover:bg-warning/15" : "bg-primary text-primary-foreground hover:opacity-90")}>
+          {automationUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {automation?.enabled ? "暂停自动刷新" : "恢复自动刷新"}
+        </button>
+      </div>
+    </div>
+    <div className="grid gap-3 p-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.9fr)]">
+      <div className="rounded-lg border bg-muted/20 p-4 text-sm">
+        <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">当前收盘快照</span><span className={cn("rounded-full px-2 py-1 text-xs font-medium", close ? "bg-success/10 text-success" : "bg-warning/10 text-warning")}>{status}</span></div>
+        <div className="mt-3 font-mono text-sm font-semibold">{close?.snapshot_id ?? "等待首个合格收盘快照"}</div>
+        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+          <div><dt className="text-muted-foreground">数据日期</dt><dd className="mt-1 font-medium">{close?.market_date ?? "—"}</dd></div>
+          <div><dt className="text-muted-foreground">发布时间</dt><dd className="mt-1 font-medium">{formatTime(close?.completed_at)}</dd></div>
+          <div><dt className="text-muted-foreground">自动刷新</dt><dd className={cn("mt-1 font-medium", automation?.enabled ? "text-success" : "text-warning")}>{automation?.enabled ? "运行中" : "已暂停"}</dd></div>
+          <div><dt className="text-muted-foreground">下一计划时间</dt><dd className="mt-1 font-medium">{formatTime(automation?.next_run_at)}</dd></div>
+        </dl>
+        {automation?.last_error ? <div className="mt-4 rounded border border-danger/25 bg-danger/5 p-2 text-xs text-danger">最近异常：{automation.last_error}</div> : null}
+        {data.refresh_lock ? <div className="mt-3 text-xs text-muted-foreground">采集锁：{data.refresh_lock.owner}（至 {formatTime(data.refresh_lock.expires_at)}）</div> : null}
+      </div>
+      <div className="overflow-hidden rounded-lg border">
+        <div className="grid grid-cols-[1.1fr_.55fr_.6fr_.75fr] gap-2 border-b bg-muted/40 px-3 py-2 text-[11px] font-medium text-muted-foreground"><span>数据集</span><span>来源</span><span>覆盖率</span><span>状态 / 缺失</span></div>
+        {datasets.length ? datasets.map((item) => <SnapshotDatasetRow key={item.dataset} item={item} />) : <div className="p-5 text-sm text-muted-foreground">尚无可供策略消费的收盘快照。可手动运行“收盘刷新”，或等待交易日 15:10 自动任务。</div>}
+      </div>
+    </div>
+    {data.recent_refresh_runs?.[0]?.status === "failed" || data.recent_refresh_runs?.[0]?.status === "partial" ? <div className="mx-5 mb-5 rounded-lg border border-warning/25 bg-warning/5 p-3 text-xs text-warning">最近一次刷新未发布快照：{data.recent_refresh_runs[0].error || data.recent_refresh_runs[0].message}。上一次已发布缓存仍可查询，但策略会按数据日期判定是否过期。</div> : null}
+  </section>;
+}
+
+function SnapshotDatasetRow({ item }: { item: TdxDatasetSnapshot }) {
+  return <div className="grid grid-cols-[1.1fr_.55fr_.6fr_.75fr] gap-2 border-b px-3 py-2.5 text-xs last:border-b-0">
+    <div className="truncate font-medium" title={item.dataset}>{item.dataset}</div>
+    <div className="text-muted-foreground">{item.source}</div>
+    <div className={cn(item.coverage != null && item.coverage < 0.9 ? "text-warning" : "text-success")}>{coverageLabel(item.coverage)}</div>
+    <div className={cn(item.status === "ready" ? "text-success" : "text-danger")}>{item.status === "ready" ? "就绪" : "失败"}{item.missing_count ? ` · 缺 ${item.missing_count}` : ""}</div>
+  </div>;
+}
+
+function ValueLineDataPanel({ data, active, starting, pipelineRunning, onUpdate, onRunPipeline }: {
   data: ValueDataStatus | null;
   active?: ValueDataStatus["recent_jobs"][number];
   starting: ValueRefreshModule | "";
+  pipelineRunning: boolean;
   onUpdate: (module: ValueRefreshModule) => Promise<void>;
+  onRunPipeline: () => Promise<void>;
 }) {
-  const busy = Boolean(active) || Boolean(starting);
+  const busy = Boolean(active) || Boolean(starting) || pipelineRunning;
   return <section className="rounded-xl border border-primary/20 bg-card shadow-sm">
     <div className="flex flex-wrap items-start justify-between gap-3 border-b p-5">
-      <div><div className="text-xs font-semibold text-primary">VALUE LINE DATA</div><h2 className="mt-1 text-xl font-semibold">价值线数据</h2><p className="mt-1 text-sm text-muted-foreground">固定顺序：专业财务 → 历史行情 → 宏观 → 政策 → 评分。页面查询只读缓存，模块失败保留上次成功结果。</p></div>
-      <button onClick={() => void onUpdate("all")} disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"><RefreshCw className={cn("h-4 w-4", (starting === "all" || active?.status === "running") && "animate-spin")} />全部更新</button>
+      <div><div className="text-xs font-semibold text-primary">VALUE LINE DATA</div><h2 className="mt-1 text-xl font-semibold">价值线数据</h2><p className="mt-1 text-sm text-muted-foreground">专业财务和历史行情作为三级行业龙头计算输入；页面只读已发布缓存，模块失败保留上次成功结果。</p></div>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => void onRunPipeline()} disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"><RefreshCw className={cn("h-4 w-4", pipelineRunning && "animate-spin")} />更新价值线结果</button>
+        <button onClick={() => void onUpdate("all")} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><RefreshCw className={cn("h-4 w-4", (starting === "all" || active?.status === "running") && "animate-spin")} />更新价值线数据</button>
+      </div>
     </div>
+    <div className="border-b bg-muted/25 px-5 py-2 text-xs text-muted-foreground">“更新价值线结果”会从最近一个通过完整性校验的收盘快照重建龙头池、低估龙头池、风险快照和日报；没有合格新数据时不会伪造新日期，也不会覆盖已生成的更新版本。</div>
     <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-5">{data?.modules.map((module) => {
       const progress = module.total ? Math.min(100, module.progress / module.total * 100) : 0;
       const coverage = typeof module.metadata?.coverage === "number" ? module.metadata.coverage : null;
@@ -237,7 +346,7 @@ function ValueLineDataPanel({ data, active, starting, onUpdate }: {
     </article>})}</div>
     <div className="grid gap-3 border-t p-5 text-sm md:grid-cols-3">
       <div className="rounded-lg bg-muted/40 p-3"><div className="text-xs text-muted-foreground">专业财务包</div><div className="mt-1 font-medium">{data?.professional_finance.status === "ready" ? "可用" : "需要下载"} · {data?.professional_finance.file_count || 0} 个报告期</div><div className="mt-1 text-xs text-muted-foreground">{data?.professional_finance.first_period || "—"} 至 {data?.professional_finance.last_period || "—"}</div></div>
-      <div className="rounded-lg bg-muted/40 p-3"><div className="text-xs text-muted-foreground">最近评分日期</div><div className="mt-1 font-medium">{data?.latest_score_as_of || "尚未生成"}</div><div className="mt-1 text-xs text-muted-foreground">完整性不足不会覆盖旧评分缓存</div></div>
+      <div className="rounded-lg bg-muted/40 p-3"><div className="text-xs text-muted-foreground">三级行业龙头池</div><div className="mt-1 font-medium">工作日 16:45 自动更新</div><div className="mt-1 text-xs text-muted-foreground">Top2 池版本和变化记录保存在研究库</div></div>
       <div className="rounded-lg bg-muted/40 p-3"><div className="text-xs text-muted-foreground">可选定时模板（默认关闭）</div><div className="mt-1 font-medium">{data?.schedule_template?.name || "价值线工作日收盘后更新"}</div><div className="mt-1 font-mono text-xs text-muted-foreground">{data?.schedule_template?.cron || "0 17 * * 1-5"} · Asia/Shanghai</div></div>
     </div>
     {active ? <div className="border-t bg-primary/5 px-5 py-3 text-sm"><span className="inline-flex items-center gap-2 font-medium"><Loader2 className="h-4 w-4 animate-spin" />正在更新 {active.current_module || "准备中"}</span><span className="ml-3 text-xs text-muted-foreground">{active.progress}/{active.total}</span></div> : null}
@@ -248,7 +357,7 @@ const DATASETS = [
   ["quotes", "实时行情"], ["ranks", "榜单"], ["indices", "指数"], ["sectors", "板块"],
   ["fundamentals", "财务估值"], ["funds", "基金债券"], ["formulas", "公式"],
   ["ipo", "新股申购"], ["history_availability", "历史状态"],
-  ["financial_history", "专业财务历史"], ["value_sector_scores_v2", "价值行业 V2"], ["value_leader_scores_v2", "价值龙头 V2"],
+  ["financial_history", "专业财务历史"], ["research_industry_hierarchy", "研究行业目录"], ["research_terminal_industry_members", "末级行业成分"],
 ] as const;
 
 function value(payload: Record<string, unknown>, ...keys: string[]) {

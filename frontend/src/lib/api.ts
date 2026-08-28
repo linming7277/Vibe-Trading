@@ -53,7 +53,7 @@ export interface FinancialAgentReply {
 
 export type ResearchAgentRole =
   | "research_lead" | "macro_policy" | "industry" | "company" | "valuation" | "risk"
-  | "track_classifier" | "financial_analyst";
+  | "financial_analyst";
 
 export interface ResearchAgentConfig {
   role: ResearchAgentRole;
@@ -97,7 +97,7 @@ export interface ResearchAgentConnectionSetting {
   updated_at: string;
 }
 
-export interface FineTrackIndustry {
+export interface ValueIndustry {
   industry_code: string;
   industry_name: string;
   industry_level: string;
@@ -114,7 +114,7 @@ export interface FineTrackIndustry {
   terminal_level: 2 | 3;
   member_count: number;
   as_of: string | null;
-  source: Record<string, unknown>;
+  source: Record<string, unknown> | string;
 }
 
 export interface Level3Leader {
@@ -135,6 +135,249 @@ export interface Level3Leader {
   eligibility_reasons: string[];
   metric_applicability_notes: string[];
   as_of: string;
+  raw_features?: Record<string, number | null>;
+  normalized_features?: Record<string, number | null>;
+  raw_metric_coverage?: number;
+  raw_metric_available?: number;
+  raw_metric_total?: number;
+  confidence?: "LOW" | "MEDIUM" | "HIGH";
+  components?: LeaderComponentExplanation[];
+  explanation?: LeaderExplanation;
+}
+
+export interface LeaderMetricExplanation {
+  key: string; label: string; description: string; unit: string;
+  higher_is_better: boolean; weight: number; raw_value: number | null;
+  percentile: number | null; status: "available" | "missing";
+}
+
+export interface LeaderComponentExplanation {
+  key: string; label: string; weight: number; score: number | null;
+  coverage: number; status: string; contribution: number | null;
+  reweighted: boolean; metrics: LeaderMetricExplanation[];
+}
+
+export interface LeaderExplanation {
+  summary: string; selected: boolean; comparison_scope: string;
+  member_count: number; eligible_count: number; excluded_count: number;
+  rank: number; top_percent: number | null;
+  strongest: Array<{ key: string; label: string; score: number }>;
+  weakest: Array<{ key: string; label: string; score: number }>;
+  sample_warning?: string | null; overall_reweighted?: boolean;
+  missing_dimensions?: Array<{ key: string; label: string }>;
+  score_interpretation: string;
+}
+
+export interface LeaderFormulaContract {
+  version: string; comparison_scope: string; leader_limit: number;
+  minimum_overall_coverage: number; minimum_dimension_coverage: number;
+  normalization: string; product_label: string; disclaimer: string;
+  eligibility_rules: Array<{ key: string; label: string }>;
+  dimensions: Array<{
+    key: string; label: string; weight: number;
+    metrics: Array<{ key: string; label: string; weight: number; unit: string; higher_is_better: boolean; description: string }>;
+  }>;
+}
+
+export interface LeaderIndustrySummary {
+  member_count: number; eligible_count: number; excluded_count: number;
+  selected_count: number; sample_warning?: string | null;
+}
+
+export interface ExcludedLevel3Leader extends Level3Leader {
+  eligibility_reason_labels?: string[];
+}
+
+export type LeaderLifecycleStatus = "NEW" | "ACTIVE" | "OUT_OF_TOP2" | "REENTERED";
+
+export interface ValueLeaderPoolMember extends Level3Leader {
+  pool_id: string;
+  lifecycle_status: LeaderLifecycleStatus;
+  first_entered_at: string;
+  last_seen_at: string;
+  exited_at?: string | null;
+  previous_pool_id?: string | null;
+}
+
+export interface ValueCompanyResearchState {
+  id: string;
+  pool_id: string;
+  stock_code: string;
+  stock_name: string;
+  lifecycle_status: "ACTIVE" | "OUT_OF_TOP2";
+  research_status: "PENDING" | "READY" | "PARTIAL" | "INACTIVE" | string;
+  is_priority: boolean | number;
+  last_financial_snapshot_id?: string | null;
+  last_researched_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ValueLeaderPoolSummary {
+  id: string;
+  source_leader_run_id: string;
+  as_of: string;
+  status: "COMPLETED" | string;
+  formula_version: string;
+  catalog_as_of: string;
+  terminal_industry_count: number;
+  current_membership_count: number;
+  company_count: number;
+  new_count: number;
+  active_count: number;
+  out_count: number;
+  reentered_count: number;
+  diff: { previous_pool_id?: string | null; entered: number; stayed: number; left: number; reentered: number };
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ValueLeaderPool extends ValueLeaderPoolSummary {
+  members: ValueLeaderPoolMember[];
+  research_states: ValueCompanyResearchState[];
+  formula?: LeaderFormulaContract;
+  industry_summaries?: Record<string, LeaderIndustrySummary>;
+  valuation_snapshot?: {
+    status: "READY" | "MISSING" | string;
+    total: number;
+    expected: number;
+    data_as_of: string | null;
+    is_complete?: boolean;
+    items: Record<string, {
+      presentation_status: "DEEPLY_UNDERVALUED" | "UNDERVALUED" | "FAIR" | "OVERVALUED" | "DEEPLY_OVERVALUED" | "INSUFFICIENT_DATA";
+      historical_valuation_status?: string;
+      coverage_status?: string;
+      data_as_of?: string | null;
+    }>;
+  };
+}
+
+export interface LowValueLeaderPoolItem {
+  id: string;
+  market: string;
+  stock_code: string;
+  company_name: string;
+  industry_code: string;
+  industry_name: string;
+  leader_rank: number;
+  leader_score: number;
+  current_price: number | null;
+  fair_value_low: number | null;
+  fair_value_mid: number | null;
+  fair_value_high: number | null;
+  valuation_status: "UNDERVALUED" | "DEEPLY_UNDERVALUED" | string;
+  historical_valuation_status: string | null;
+  support_status: string | null;
+  support_zone_low: number | null;
+  support_zone_high: number | null;
+  entry_level: string | null;
+  pool_status: "ACTIVE" | "REMOVED";
+  source_pool_id: string;
+  source_as_of: string;
+  entered_at: string;
+  removed_at: string | null;
+  updated_at: string;
+  enter_reason: string;
+  remove_reason: string | null;
+  metadata: Record<string, unknown>;
+  risk_overall: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
+  value_trap_risk: "LOW_TRAP_RISK" | "MEDIUM_TRAP_RISK" | "HIGH_TRAP_RISK" | "UNKNOWN" | "NOT_APPLICABLE";
+  material_risk_count: number;
+  top_risk_types: string[];
+  risk_summary: string;
+  risk_as_of: string | null;
+  risk_snapshot_status: "READY" | "UNKNOWN";
+}
+
+export interface LowValueLeaderPoolResponse {
+  items: LowValueLeaderPoolItem[];
+  total: number;
+  data_as_of: string | null;
+  last_evaluated_at: string | null;
+}
+
+export interface LowValueLeaderEvent {
+  id: string;
+  market: string;
+  stock_code: string;
+  company_name: string;
+  industry_code: string | null;
+  industry_name: string | null;
+  event_type: "ENTER_LOW_VALUE" | "EXIT_LOW_VALUE";
+  before_status: string | null;
+  after_status: string;
+  current_price: number | null;
+  fair_value_mid: number | null;
+  valuation_status: string | null;
+  event_date: string;
+  source_as_of: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface LowValueLeaderEventsResponse {
+  event_date: string | null;
+  entered: number;
+  exited: number;
+  items: LowValueLeaderEvent[];
+  total: number;
+}
+
+export interface FocusSelectionItem {
+  tier: "A" | "B" | "C";
+  stock_code: string;
+  company_name: string;
+  industry_code: string;
+  industry_name: string;
+  leader_rank: number;
+  leader_score: number | null;
+  valuation_status: string;
+  current_price: number | null;
+  fair_value_mid: number | null;
+  discount_to_mid: number | null;
+  historical_valuation_status: string | null;
+  support_status: string | null;
+  entry_level: string | null;
+  risk_status: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN" | string;
+  value_trap_risk: string;
+  thesis_status: string;
+  thesis_authority: string | null;
+  financial_status: string;
+  business_profile_status: string;
+  peer_count: number | null;
+  focus_reasons: string[];
+  focus_cautions: string[];
+  primary_demotion_reason: string | null;
+  source_dates: Record<string, string | null>;
+}
+
+export interface FocusSelectionResponse {
+  research_as_of: string;
+  total_low_value: number;
+  hard_c_count: number;
+  soft_demote_count: number;
+  A_count: number;
+  B_count: number;
+  C_count: number;
+  A: FocusSelectionItem[];
+  B: FocusSelectionItem[];
+  C: FocusSelectionItem[];
+  selection_boundary: string;
+  read_only: boolean;
+}
+
+/** Read-only persisted daily brief. Loading this endpoint never rebuilds research. */
+export interface InvestmentResearchDailyBrief {
+  research_as_of: string;
+  status?: string;
+  low_value_active_count: number;
+  enter_count: number;
+  exit_count: number;
+  priority_companies: Array<{ stock_code?: string; company_name?: string; industry_name?: string; why_today?: string; [key: string]: unknown }>;
+  risk_summary?: { summary?: string; important_companies?: Array<{ company_name?: string; risk_summary?: string; [key: string]: unknown }>; [key: string]: unknown };
+  data_gaps?: string[];
+  brief_payload?: { executive?: string; executive_situations?: Array<{ company_name?: string; basis?: string; impact?: string; [key: string]: unknown }>; executive_watchlist?: Array<{ company_name?: string; stock_code?: string; research_priority_reason?: string; [key: string]: unknown }>; [key: string]: unknown };
+  formula_version?: string;
 }
 
 export interface FinancialPoint {
@@ -151,6 +394,38 @@ export interface FinancialForecastScenario {
   margin_assumptions: Array<number | null>;
   forecast: Array<{ year: string; revenue: number | null; net_profit: number | null }>;
   assumption_notes: string[];
+}
+
+export interface FinancialClaimCitation {
+  source_key: string;
+  status: "RESOLVED" | "UNRESOLVED";
+  source_type?: "FINANCIAL_HISTORY" | "FINANCIAL_FEATURE" | "DETERMINISTIC_FORECAST" | "UNKNOWN";
+  source?: string;
+  metric?: string | null;
+  period?: string | null;
+  value?: number | string | null;
+  unit?: string | null;
+  data_as_of?: string | null;
+  source_snapshot_id?: string | null;
+  source_hash?: string | null;
+  scenario?: string | null;
+  forecast_year?: string | null;
+  forecast_version?: string | null;
+}
+
+export interface FinancialClaimCitationStats {
+  claims_total: number;
+  claims_with_citations: number;
+  resolved_source_keys: number;
+  unresolved_source_keys: number;
+}
+
+export interface FinancialClaim {
+  type: "FACT" | "INFERENCE" | "FORECAST" | "UNKNOWN";
+  statement: string;
+  evidence_keys: string[];
+  source_keys?: string[];
+  citations?: FinancialClaimCitation[];
 }
 
 export interface FinancialAnalysisSnapshot {
@@ -177,6 +452,14 @@ export interface FinancialAnalysisSnapshot {
       dividend_yield?: number | null; market_cap?: number | null;
       source?: string; limitations?: string[];
     };
+    market_quote?: {
+      as_of?: string | null; price?: number | null; previous_close?: number | null; source?: string;
+    };
+    data_dates?: {
+      analysis_as_of?: string | null; quote_as_of?: string | null; valuation_as_of?: string | null;
+      financial_report_date?: string | null; financial_announcement_date?: string | null;
+      fundamental_report_date?: string | null; leader_as_of?: string | null;
+    };
   };
   history: Array<Record<string, number | string | null>>;
   feature: {
@@ -202,10 +485,16 @@ export interface FinancialAnalysisSnapshot {
     latest_changes: string[]; financial_strengths: string[]; financial_risks: string[];
     forecast_analysis: { bear: string; base: string; bull: string; key_assumptions: string[] };
     key_metrics_to_monitor: string[]; confidence: string; data_gaps: string[];
-    claims: Array<{ type: "FACT" | "INFERENCE" | "FORECAST" | "UNKNOWN"; statement: string; evidence_keys: string[] }>;
+    claims: FinancialClaim[];
+    analysis_metadata?: {
+      traceability_status?: "COMPLETE" | "PARTIAL" | "UNRESOLVED" | "NOT_APPLICABLE";
+      citation_stats?: FinancialClaimCitationStats;
+    };
   };
   data_gaps: string[];
   source_hash: string;
+  traceability_status?: "COMPLETE" | "PARTIAL" | "UNRESOLVED" | "NOT_APPLICABLE";
+  citation_stats?: FinancialClaimCitationStats;
   idempotent_reuse?: boolean;
 }
 
@@ -226,41 +515,393 @@ export interface FinancialDossier {
   archive_summary: { chat_entry_count: number; latest_chat_at: string | null; analysis_status: FinancialAnalysisSnapshot["analysis_status"]; source_hash: string };
 }
 
-export interface FineTrackCompanyProfile {
+export interface BusinessClaimCitation {
+  source_key: string;
+  status: "RESOLVED" | "UNRESOLVED";
+  source_type?: string;
+  source_id?: string;
+  data_as_of?: string;
+  field?: string;
+  value?: string;
+  source_hash?: string;
+  profile_role?: "CURRENT" | "PREVIOUS" | string;
+}
+
+export interface BusinessClaim {
+  type: "FACT" | "INFERENCE" | "UNKNOWN";
+  topic: "MAIN_BUSINESS" | "PRODUCT" | "BUSINESS_MODEL" | "BUSINESS_CHANGE";
+  text: string;
+  source_keys: string[];
+  confidence: "LOW" | "MEDIUM" | "HIGH";
+  citations?: BusinessClaimCitation[];
+}
+
+export interface BusinessResearchSnapshot {
+  id: string;
   stock_code: string;
-  stock_name: string;
-  third_level_industry_code: string;
-  third_level_industry_name: string;
-  second_level_industry_code: string;
-  second_level_industry_name: string;
-  first_level_industry_code: string;
-  first_level_industry_name: string;
-  business_scope: string;
+  company_name: string;
+  data_as_of: string;
   main_business: string;
-  company_description: string;
-  main_products: string;
-  data_status: "REAL" | "PARTIAL" | "MISSING";
+  products: string[];
+  product_note: string;
+  business_model: string;
+  business_changes: string[];
+  source_hash: string;
+  data_quality: {
+    status: "READY" | "PARTIAL" | "MISSING" | string;
+    field_statuses: Record<string, "READY" | "PARTIAL" | "MISSING" | string>;
+    missing_fields: string[];
+    limitations: string[];
+  };
+  module_version: string;
+  analysis_status: "NOT_RUN" | "CONFIGURATION_REQUIRED" | "COMPLETED" | "FAILED" | string;
+  analysis: null | { summary: string; claims: BusinessClaim[]; analysis_metadata?: Record<string, unknown> };
+  traceability_status: "COMPLETE" | "PARTIAL" | "UNRESOLVED" | "NOT_APPLICABLE";
+  citation_stats: { claims_total: number; required_claims: number; resolved_required_claims: number; unresolved: number };
+  agent_error?: string;
+}
+
+export interface CompanyThesis {
+  thesis_id: string;
+  market: string;
+  stock_code: string;
+  title: string;
+  core_thesis: string;
+  status: string;
+  confidence: string;
+  version: number;
+  authority_status?: "AI_PROVISIONAL" | "HUMAN_CONFIRMED" | "LEGACY_UNVERIFIED" | string;
+  source_draft_id?: string | null;
+  created_by?: string;
+  invalid_conditions?: Array<{ condition?: string; text?: string; status?: string }>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CompanyThesisDraft {
+  draft_id: string;
+  market: string;
+  stock_code: string;
+  company_name: string;
+  title: string;
+  core_thesis: string;
+  status: "FORMING" | "STRENGTHENING" | "UNCHANGED" | "WEAKENING" | "FALSIFIED";
+  confidence: "LOW" | "MEDIUM" | "HIGH";
+  invalid_conditions: Array<{ condition: string; status?: string }>;
+  source_data_as_of?: string | null;
+  source_snapshots: Array<{ domain: string; snapshot_id?: string; data_as_of?: string }>;
+  source_refs: Array<{ domain: string; type: string; text: string; source_keys: string[]; confidence: string }>;
+  competitive_advantages?: Array<{ moat_dimension?: string; dimension?: string; assessment?: "SUPPORTED" | "PARTIAL" | "UNKNOWN"; type: string; text: string; data_gaps?: string[]; counter_evidence_ids?: string[] }>;
+  metadata?: { moat_research?: { research_as_of?: string | null; status?: string; formula_version?: string }; [key: string]: unknown };
+  draft_status: "DRAFT" | "CONFIRMED" | "REJECTED" | "SUPERSEDED";
+  created_at: string;
   updated_at: string;
 }
 
-export interface FineTrackMembership {
-  membership_id: string;
-  stock_code: string;
-  stock_name: string;
-  membership_type: "PRIMARY" | "SECONDARY";
-  classification_reason: string;
-  confidence: number;
-  confidence_level: "HIGH" | "MEDIUM" | "LOW";
-  review_status: "AUTO_ACCEPTED" | "NEEDS_REVIEW" | "MANUAL_CONFIRMED";
+export interface CompanyThesisReview {
+  review_id: string;
+  thesis_id: string;
+  thesis_version: number;
+  review_status: "PENDING" | "REVIEWED" | "APPLIED" | "DISMISSED" | string;
+  is_stale: boolean;
+  recommended_status: string;
+  recommended_confidence: string;
+  support_count: number;
+  challenge_count: number;
+  neutral_count: number;
+  review_reason: string;
+  review_summary: string;
+  evidence_set_hash: string;
+  metadata: { evidence_source_summary?: Record<string, number>; [key: string]: unknown };
+  created_at: string;
 }
 
-export interface FineTrack {
-  track_id: string;
-  track_name: string;
-  description: string;
+export interface CompanyThesisReviewResponse {
+  status: "CREATED" | "EXISTING" | "THESIS_NOT_CREATED" | "NO_ACTIVE_EVIDENCE" | "NOT_REVIEWED" | string;
+  review: CompanyThesisReview | null;
+  created?: boolean;
+}
+
+export interface CompanyThesisEvidence {
+  evidence_id: string; thesis_id: string; market: string; stock_code: string; evidence_type: string;
+  effect: "SUPPORT" | "CHALLENGE" | "NEUTRAL" | string; claim: string; summary: string;
+  source_type: string; source_title?: string | null; source_date?: string | null; data_as_of?: string | null;
+  confidence: string; is_active: boolean; created_at: string; created_by: string;
+  metadata?: { research_domain?: string; resolved_citations?: CompanyResearchOverviewCitation[]; [key: string]: unknown };
+}
+
+export interface CompanyThesisEvidenceResponse {
+  status: "OK" | "THESIS_NOT_CREATED" | string;
+  current_thesis: CompanyThesis | null;
+  evidence: CompanyThesisEvidence[];
+  summary: { total: number; active: number; support: number; challenge: number; neutral: number; by_type?: Record<string, number> } | null;
+}
+
+export interface CompanyThesisHistoryItem {
+  history_id: string; market: string; stock_code: string; from_thesis_id: string; to_thesis_id: string;
+  from_version: number; to_version: number; old_status: string; new_status: string;
+  old_confidence: string; new_confidence: string; change_type: string; change_reason: string;
+  trigger_type: string; trigger_ref?: string | null; evidence_ids_json?: string[]; created_by: string; created_at: string;
+  metadata_json?: Record<string, unknown>;
+}
+
+export interface CompanyResearchOverviewCitation {
+  source_key?: string;
+  status: "RESOLVED" | "UNRESOLVED" | string;
+  source_type?: string;
+  source_id?: string;
+  source?: string;
+  data_as_of?: string;
+  field?: string;
+  value?: string | number | null;
+  metric?: string | null;
+  period?: string | null;
+}
+
+export interface CompanyResearchOverview {
+  company: { market: string; stock_code: string; stock_name: string };
+  business_summary: { status: string; snapshot_id: string | null; data_as_of?: string | null; main_business?: string; description?: string; products?: string[]; product_note?: string; business_model?: string; changes: string[]; claims: BusinessClaim[]; traceability_status?: string };
+  financial_summary: { status: string; snapshot_id: string | null; as_of?: string | null; latest_announcement_date?: string | null; latest_report_date?: string | null; analysis_status: string; message?: string; items: Array<{ category: string; text: string; source_keys: string[]; citations: CompanyResearchOverviewCitation[] }>; claims: FinancialClaim[]; key_metrics_to_monitor?: string[] };
+  supporting_evidence: Array<{ evidence_id: string; evidence_type: string; effect: string; claim: string; summary: string; confidence: string; created_by: string; created_at: string; source_type: string; citations: CompanyResearchOverviewCitation[]; research_domain: string }>;
+  challenging_evidence: Array<{ evidence_id: string; evidence_type: string; effect: string; claim: string; summary: string; confidence: string; created_by: string; created_at: string; source_type: string; citations: CompanyResearchOverviewCitation[]; research_domain: string }>;
+  neutral_evidence_count: number;
+  thesis: null | { thesis_id: string; title: string; core_thesis: string; status: string; status_label: string; confidence: string; version: number; updated_at?: string; invalid_conditions: Array<{ condition: string; status: string }>; history_count: number };
+  review: null | { review_id: string; review_status: string; is_stale: boolean; support_count: number; challenge_count: number; neutral_count: number; recommended_status: string; recommended_confidence: string; review_reason: string; created_at: string };
+  watch_items: Array<{ source: string; text: string }>;
+  data_status: { financial: string; business: string; thesis: "CREATED" | "NOT_CREATED"; review: "CURRENT" | "STALE" | "NOT_CREATED" };
+}
+
+export interface CapitalAllocationSourceRef {
+  source_type: string;
+  source_record_id: string;
+  source?: string | null;
+  report_date?: string | null;
+  announcement_date?: string | null;
+  event_date?: string | null;
+  data_as_of?: string | null;
+  source_hash?: string | null;
+  raw_version?: string | null;
+  pit_status: "STRICT" | "PIT_LIMITED" | "UNKNOWN" | string;
+}
+
+export interface CapitalAllocationRatio { value: number | null; status: "READY" | "PARTIAL" | "UNKNOWN" | string; }
+export interface CapitalAllocationGap { item: string; status: "MISSING" | "RAW_NOT_STRUCTURED" | "NOT_COLLECTED" | string; reason: string; }
+export interface CapitalAllocationTimelineItem {
+  year: string;
+  report_date: string;
+  announcement_date: string;
+  data_as_of: string;
+  flow_basis: string;
+  operating_cash_flow: number | null;
+  capex: number | null;
+  cash_and_equivalents: number | null;
+  revenue: number | null;
+  net_profit: number | null;
+  liabilities: number | null;
+  debt_ratio: number | null;
+  interest_bearing_debt_ratio: number | null;
+  total_shares: number | null;
+  roe: number | null;
+  capex_to_ocf: CapitalAllocationRatio;
+  capex_to_revenue: CapitalAllocationRatio;
+  cash_change: CapitalAllocationRatio;
+  debt_ratio_change: CapitalAllocationRatio;
+  share_count_change: CapitalAllocationRatio;
+  debt_context: {
+    liabilities: number | null;
+    current_liabilities: number | null;
+    non_current_liabilities: number | null;
+    debt_ratio: number | null;
+    interest_bearing_debt_ratio: number | null;
+    debt_ratio_change: CapitalAllocationRatio;
+    status: string;
+    source_refs: CapitalAllocationSourceRef[];
+  };
+  source_refs: CapitalAllocationSourceRef[];
+}
+export interface CapitalAllocationDividendEvent {
+  event_date: string;
+  cash_dividend_per_ten_shares: number;
+  cash_dividend_per_share: number;
+  cash_dividend_total: number | null;
+  bonus_share: number | null;
+  rights_issue_ratio: number | null;
+  rights_issue_price: number | null;
+  normalization_status: string;
+  pit_status: string;
+  linked_annual_report_date: string | null;
+  linked_annual_announcement_date: string | null;
+  dividend_to_net_profit: CapitalAllocationRatio;
+  dividend_to_ocf: CapitalAllocationRatio;
+  source_refs: CapitalAllocationSourceRef[];
+}
+export interface CapitalAllocationFacts {
+  company: { market: string; stock_code: string };
+  as_of: string | null;
+  formula_version: string;
+  read_only: boolean;
+  financial_timeline: { status: string; pit_status: string; items: CapitalAllocationTimelineItem[] };
+  dividend_history: { status: string; pit_status: string; events: CapitalAllocationDividendEvent[]; raw_unknown_fields: Array<Record<string, unknown>>; source?: string | null; detail_updated_at?: string | null };
+  share_capital_history: { status: string; pit_status: string; events: Array<{ event_date: string; total_shares_before: number; total_shares_after: number; change_pct: CapitalAllocationRatio; change_reason: string; status: string; pit_status: string; source_refs: CapitalAllocationSourceRef[] }>; raw_unknown_fields: Array<Record<string, unknown>>; source?: string | null; detail_updated_at?: string | null };
+  allocation_completeness: "READY" | "PARTIAL" | "UNKNOWN" | string;
+  pit_status: string;
+  data_gaps: CapitalAllocationGap[];
+  source_traceability: Record<string, { source_type: string; pit_status: string }>;
+}
+
+export interface CapitalAllocationResearchDimension {
+  status: "SUPPORTED" | "PARTIAL" | "UNKNOWN" | string;
+  direction: "POSITIVE" | "NEUTRAL" | "CAUTION" | "UNKNOWN" | string;
+  observation: string;
+  signal?: string;
+  fact_refs: CapitalAllocationSourceRef[];
+  comparison_window: Record<string, unknown>;
+  data_gaps: string[];
+  pit_status: string;
+  observations?: Array<Record<string, unknown>>;
+  continuity?: { calendar_years: string[]; longest_consecutive_years: number; event_count: number };
+  matching?: { matched_event_count: number; above_profit_or_ocf_count: number };
+  trend?: Record<string, unknown>;
+  context?: Record<string, unknown>;
+}
+export interface CapitalAllocationResearch {
+  company: { market: string; stock_code: string };
+  research_as_of: string | null;
+  fact_layer_as_of: string | null;
   status: string;
-  company_count: number;
-  companies: FineTrackMembership[];
+  dimensions: Record<"reinvestment" | "dividend" | "debt_management" | "equity_dilution" | "cash_management" | "buyback" | "m_and_a", CapitalAllocationResearchDimension>;
+  strengths: Array<{ dimension: string; observation: string; direction: string }>;
+  cautions: Array<{ dimension: string; observation: string; direction: string }>;
+  data_gaps: CapitalAllocationGap[];
+  capital_allocation_summary: string;
+  formula_version: string;
+  fact_layer_formula_version: string;
+  read_only: boolean;
+  pit_status: string;
+}
+
+export interface CompanyActionEvent {
+  id: string;
+  event_type: string;
+  event_status: string;
+  event_stage: string;
+  announcement_date: string | null;
+  event_date: string | null;
+  effective_date: string | null;
+  research_visible_from: string | null;
+  title: string;
+  summary: string;
+  cash_amount: number | null;
+  share_count: number | null;
+  share_ratio: number | null;
+  price: number | null;
+  currency: string | null;
+  shares_before: number | null;
+  shares_after: number | null;
+  reason: string | null;
+  reason_source_event_id: string | null;
+  pit_status: string;
+  confidence: string;
+  data_quality: string;
+  payload: Record<string, unknown>;
+  source_refs: Array<{ source_type: string; source_id: string; source_url?: string; announcement_date?: string | null; event_date?: string | null; pit_status: string }>;
+}
+export interface CompanyActionResponse {
+  company: { market: string; stock_code: string };
+  as_of: string | null;
+  event_type: string | null;
+  events: CompanyActionEvent[];
+  event_count: number;
+  read_only: boolean;
+  extractor_version: string;
+  capabilities: Record<string, { status: string; source: string }>;
+}
+export interface CompanyActionPrepareResponse {
+  company: { market: string; stock_code: string };
+  status: string;
+  created: number;
+  events: CompanyActionEvent[];
+  unknown_raw_fields: Array<Record<string, unknown>>;
+  capabilities: Record<string, { status: string; source: string }>;
+  message: string;
+}
+
+export interface ValuePriceZone {
+  low: number | null; high: number | null; strength?: string; score?: number; reasons?: string[]; name?: string; kind?: string;
+}
+export interface ValuePriceValuationMethod {
+  name: string;
+  status: string;
+  peer_count?: number;
+  multiple_low?: number;
+  multiple_mid?: number;
+  multiple_high?: number;
+  forecast_profit?: number;
+  fair_values?: number[];
+  cheapness_percentile?: number | null;
+  metrics?: Record<string, HistoricalValuationMetric>;
+  message?: string;
+}
+export interface ValuePriceZones {
+  stock_code: string; as_of: string | null; current_price: number | null; formula_version: string;
+  valuation: { status: string; fair_value_low: number | null; fair_value_mid: number | null; fair_value_high: number | null; methods: ValuePriceValuationMethod[]; message: string; limitations: string[] };
+  valuation_zones: ValuePriceZone[]; support_zones: ValuePriceZone[]; resistance_zones: ValuePriceZone[];
+  confluence_zones: Array<ValuePriceZone & { valuation_status: string; support_strength?: string }>;
+  upper_review_zones: Array<ValuePriceZone & { valuation_status: string; support_strength?: string }>;
+  thesis_status: string | null; plain_summary: string;
+  historical_valuation?: HistoricalValuationHistory;
+  data_quality: { daily_history: { status: string; message?: string; bars?: number }; historical_valuation: { status: string; message: string; coverage?: HistoricalValuationCoverage; historical_valuation_status?: string }; current_fundamentals: string; peer_comparables: { status: string; peer_count: number; message?: string }; forecast: string; financial_snapshot: string };
+}
+
+export interface HistoricalValuationCoverage { first_date: string | null; last_date: string | null; pe_count: number; pb_count: number; dividend_yield_count: number; coverage_status: string; minimum_reliable_observations: number; }
+export interface HistoricalValuationMetric { status: string; count: number; current: number | null; percentile: number | null; cheapness_percentile: number | null; state?: string; direction: string; plain: string; winsorized?: { low_quantile: number; high_quantile: number; low: number; high: number }; }
+export interface HistoricalValuationHistory { stock_code: string; as_of: string | null; current: Record<string, unknown> | null; historical_percentiles: { pe_ttm: HistoricalValuationMetric; pb_mrq: HistoricalValuationMetric; dividend_yield: HistoricalValuationMetric }; historical_valuation_status: string; cheapness_percentile: number | null; coverage: HistoricalValuationCoverage; series_summary: { observations: number; source_type: string; price_source_id: string; outlier_rule: string }; }
+export interface EntryResearchZone { label: string; low: number | null; high: number | null; kind: string; strength?: string | null; }
+export interface EntryResearch { stock_code: string; as_of: string | null; current_price: number | null; entry_score: number; entry_level: "HIGH_ATTENTION" | "ATTENTION" | "WATCH" | "WAIT" | "BLOCKED"; entry_level_label: string; confidence: "HIGH" | "MEDIUM" | "LOW"; valuation_score: number; historical_valuation_score: number; support_score: number; thesis_score: number; thesis_status: string | null; thesis_confidence: string | null; safety_gate: string | null; focus_zones: Record<string, EntryResearchZone | null>; reason_codes: string[]; data_gaps: string[]; plain_explanation: string; formula_version: string; weights: Record<string, number>; }
+export interface ExitResearch { stock_code: string; as_of: string | null; current_price: number | null; exit_score: number; exit_level: "CRITICAL_REVIEW" | "REVIEW" | "WATCH" | "NORMAL"; exit_level_label: string; confidence: "HIGH" | "MEDIUM" | "LOW"; valuation_pressure: number; historical_valuation_pressure: number; resistance_pressure: number; thesis_risk: number; thesis_status: string | null; thesis_confidence: string | null; challenge_count: number; challenge_evidence: Array<{ evidence_id: string; confidence: string; text: string; created_at: string; source_title?: string | null; source_date?: string | null }>; latest_review: { review_id: string; review_status: string; recommended_status: string; is_stale: boolean; challenge_count?: number | null } | null; upper_review_zones: ValuePriceZone[]; focus_zones: Record<string, EntryResearchZone | null>; reason_codes: string[]; data_gaps: string[]; safety_gate: string | null; plain_explanation: string; formula_version: string; weights: Record<string, number>; }
+export interface RiskResearchItem { risk_type: string; severity: "LOW" | "MEDIUM" | "HIGH"; status: "CONFIRMED" | "WATCH" | "UNKNOWN"; text: string; why_it_matters: string; source_keys: string[]; evidence_ids: string[]; watch_item: string; }
+export interface RiskResearch { stock_code: string; market: string; as_of: string | null; status: "READY" | "PARTIAL" | "UNKNOWN" | "NOT_APPLICABLE"; overall_risk: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN"; summary: string; value_trap_risk: "LOW_TRAP_RISK" | "MEDIUM_TRAP_RISK" | "HIGH_TRAP_RISK" | "UNKNOWN" | "NOT_APPLICABLE"; is_current_l3_leader: boolean; valuation_status: string; data_quality: { financial: string; business: string; forecast: string; thesis: string; review_stale: boolean | null; missing: string[] }; risks: RiskResearchItem[]; formula_version: string; }
+export interface CompanyResearchConclusion { company: { market: string; stock_code: string; stock_name: string }; thesis: { status: string; label: string; confidence: string | null } | null; entry: { available: boolean; level: string | null; label: string; confidence: string | null; data_gaps: string[] }; exit: { available: boolean; level: string | null; label: string; confidence: string | null; data_gaps: string[] }; fair_value_range: EntryResearchZone | null; focus_zone: EntryResearchZone | null; evidence_counts: { support: number; challenge: number }; research_conclusion: string; data_status: Record<string, string>; formula_version: string; }
+export interface LeaderQualityPeerMetric {
+  dimension: string; dimension_label: string; metric: string; label: string; unit: string;
+  company_value: number | null; peer_median: number | null; peer_percentile: number | null;
+  valid_peer_count: number; total_peer_count: number; status: "STRONG" | "ABOVE_AVERAGE" | "NORMAL" | "BELOW_AVERAGE" | "UNKNOWN" | "NOT_SCORED";
+  comparison_direction: string; data_quality: string; reporting_period?: string | null; announcement_cutoff?: string | null;
+}
+export interface LeaderQualityProfile {
+  company: { market: string; stock_code: string; stock_name: string };
+  research_as_of: string | null;
+  leader_position: {
+    status: string; level1?: { code: string; name: string }; level2?: { code: string; name: string }; level3?: { code: string; name: string };
+    rank?: number | null; leader_score?: number | null; valid_peer_count?: number; total_peer_count?: number;
+    score_coverage?: number | null; score_components?: Record<string, number | null>; formula_version?: string; run_id?: string; as_of?: string;
+    gap_to_next?: number | null; next_company?: { stock_code: string; stock_name: string; rank: number; leader_score: number } | null; plain_explanation?: string;
+  };
+  leader_stability: { status: string; observation_window?: string | null; run_count?: number; top1_count?: number; top2_count?: number; rank_path: Array<{ as_of: string; leader_rank: number | null; leader_score?: number | null }>; disclaimer?: string };
+  peer_advantages: LeaderQualityPeerMetric[];
+  peer_advantage_categories: Array<{ dimension: string; label: string; status: string; metrics: string[]; valid_metric_count: number; total_metric_count: number }>;
+  profitability_quality: { status: string; cash_quality_status?: string; positive_ocf_years?: number; annual_observation_count?: number; disclaimer?: string };
+  pricing_power_proxy: { status: string; peer_margin_percentile?: number | null; valid_peer_count?: number; disclaimer?: string };
+  strengths: Array<{ dimension: string; label: string; status: string }>;
+  weaknesses: Array<{ dimension: string; label: string; status: string }>;
+  moat_data_gaps: string[];
+  data_quality: { status: string; peer_sample?: string; small_peer_sample?: boolean; pit_financial_cutoff?: string | null; missing_fields?: string[]; disclaimer?: string };
+  source_traceability?: { l3_run_id?: string; l3_run_as_of?: string; financial?: { report_date?: string | null; announcement_date?: string | null } };
+  formula_version: string;
+}
+export interface MoatResearchDimension {
+  dimension: string; label: string; applicability: "APPLICABLE" | "NOT_APPLICABLE" | "UNKNOWN_APPLICABILITY";
+  status: "SUPPORTED" | "PARTIAL" | "UNKNOWN"; evidence_balance: "SUPPORTING" | "MIXED" | "CHALLENGED" | "NO_SIGNAL";
+  confidence: "HIGH" | "MEDIUM" | "LOW"; persistence: "REPEATED" | "SINGLE_PERIOD" | "DETERIORATING";
+  summary: string; supporting_evidence_ids: string[]; counter_evidence_ids: string[]; management_claim_ids: string[]; data_gaps: string[];
+  evidence_counts: Record<string, number>;
+}
+export interface MoatResearch {
+  company: { market: string; stock_code: string; stock_name: string }; research_as_of: string | null; status: "READY" | "PARTIAL" | "UNKNOWN";
+  industry_context: { level3_name: string | null; applicability_status: string; business_profile_status: string };
+  dimensions: MoatResearchDimension[]; supported_advantages: Array<MoatResearchDimension & { why_it_may_matter: string; key_evidence_ids: string[] }>;
+  moat_challenges: Array<{ dimension: string; label: string; summary: string; evidence_balance: string; counter_evidence_ids: string[] }>;
+  moat_data_gaps: string[]; moat_summary: string; leader_quality_context: Record<string, unknown>; source_status: Record<string, string>; formula_version: string;
 }
 
 export interface RegimeEpisode {
@@ -510,8 +1151,8 @@ export const api = {
     method: "PUT",
     body: JSON.stringify(body),
   }),
-  getFineTrackIndustries: () =>
-    request<{ items: FineTrackIndustry[]; total: number; level1_total: number; level2_total: number; level3_total: number; level2_leaf_total: number; source: Record<string, unknown> }>("/api/value/industries"),
+  getValueIndustries: () =>
+    request<{ items: ValueIndustry[]; total: number; level1_total: number; level2_total: number; level3_total: number; source: string }>("/api/value/industries"),
   getAllLevel3Leaders: (limit = 2, asOf?: string) =>
     request<{
       as_of: string | null;
@@ -521,24 +1162,97 @@ export const api = {
     }>(`/api/value/level3-leaders?limit=${encodeURIComponent(String(limit))}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
   getLevel3IndustryLeaders: (industryCode: string, limit = 2) =>
     request<{
-      industry: FineTrackIndustry;
+      industry: ValueIndustry;
       as_of: string | null;
       formula_version: string;
       company_count: number;
       eligible_count: number;
       items: Level3Leader[];
+      excluded_items: ExcludedLevel3Leader[];
+      quality: LeaderIndustrySummary;
+      formula: LeaderFormulaContract;
       total_ranked: number;
       snapshot_status: "ready" | "not_built";
       comparison_scope: string;
     }>(`/api/value/industries/${encodeURIComponent(industryCode)}/leaders?limit=${limit}`),
+  getCurrentLeaderPool: () => request<ValueLeaderPool>("/api/value/current-leader-pool"),
+  getLowValueLeaders: () => request<LowValueLeaderPoolResponse>("/api/value/low-value-leaders"),
+  getLowValueLeaderEvents: () => request<LowValueLeaderEventsResponse>("/api/value/low-value-leader-events"),
+  getFocusSelection: (asOf?: string) => request<FocusSelectionResponse>(`/api/value/focus-selection${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getInvestmentResearchDailyBrief: () => request<InvestmentResearchDailyBrief>("/api/research-supervisor/daily-brief"),
+  getLeaderPools: (limit = 30) => request<{ items: ValueLeaderPoolSummary[] }>(`/api/value/leader-pools?limit=${limit}`),
+  getLeaderPool: (poolId: string) => request<ValueLeaderPool>(`/api/value/leader-pools/${encodeURIComponent(poolId)}`),
+  getValueResearchStates: () => request<{ pool_id: string; as_of: string; items: ValueCompanyResearchState[] }>("/strategy/value/research-states"),
+  updateValueResearchState: (stockCode: string, isPriority: boolean) => request<ValueCompanyResearchState>(`/strategy/value/research-states/${encodeURIComponent(stockCode)}`, { method: "PATCH", body: JSON.stringify({ is_priority: isPriority }) }),
+  refreshValueCompanyResearch: (stockCode: string) => request<FinancialAnalysisSnapshot>(`/strategy/value/research-states/${encodeURIComponent(stockCode)}/refresh`, { method: "POST" }),
   getCompanyFinancialAnalysis: (stockCode: string, asOf?: string) =>
     request<FinancialAnalysisSnapshot>(`/api/value/companies/${encodeURIComponent(stockCode)}/financial${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
   getCompanyFinancialDossier: (stockCode: string, asOf?: string) =>
     request<FinancialDossier>(`/api/value/companies/${encodeURIComponent(stockCode)}/financial/dossier${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getCompanyCompactDailyBars: (stockCode: string, options?: { as_of?: string; limit?: number }) =>
+    request<CompactDailyBars>(`/api/value/companies/${encodeURIComponent(stockCode)}/daily-bars/compact?market=CN${options?.as_of ? `&as_of=${encodeURIComponent(options.as_of)}` : ""}${options?.limit ? `&limit=${options.limit}` : ""}`),
   analyzeCompanyFinancials: (stockCode: string, body: { as_of?: string; refresh?: boolean } = {}) =>
     request<FinancialAnalysisSnapshot>(`/api/value/companies/${encodeURIComponent(stockCode)}/financial/analyze`, {
       method: "POST", body: JSON.stringify(body),
     }),
+  getCompanyBusinessResearch: (stockCode: string) =>
+    request<BusinessResearchSnapshot>(`/api/value/companies/${encodeURIComponent(stockCode)}/business-research`),
+  analyzeCompanyBusinessResearch: (stockCode: string, body: { force?: boolean } = {}) =>
+    request<BusinessResearchSnapshot>(`/api/value/companies/${encodeURIComponent(stockCode)}/business-research/analyze`, {
+      method: "POST", body: JSON.stringify(body),
+    }),
+  getCompanyResearchOverview: (stockCode: string) =>
+    request<CompanyResearchOverview>(`/api/value/companies/${encodeURIComponent(stockCode)}/research-overview?market=CN`),
+  getCompanyResearchConclusion: (stockCode: string) =>
+    request<CompanyResearchConclusion>("/api/value/companies/" + encodeURIComponent(stockCode) + "/research-conclusion?market=CN"),
+  getCapitalAllocationFacts: (stockCode: string, asOf?: string) =>
+    request<CapitalAllocationFacts>(`/api/value/companies/${encodeURIComponent(stockCode)}/capital-allocation-facts?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getCapitalAllocationResearch: (stockCode: string, asOf?: string) =>
+    request<CapitalAllocationResearch>(`/api/value/companies/${encodeURIComponent(stockCode)}/capital-allocation-research?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getCompanyActions: (stockCode: string, asOf?: string) =>
+    request<CompanyActionResponse>(`/api/value/companies/${encodeURIComponent(stockCode)}/company-actions?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
+  prepareCompanyActions: (stockCode: string) =>
+    request<CompanyActionPrepareResponse>(`/api/value/companies/${encodeURIComponent(stockCode)}/company-actions/prepare?market=CN`, { method: "POST" }),
+  getLeaderQualityProfile: (stockCode: string, asOf?: string) =>
+    request<LeaderQualityProfile>(`/api/value/companies/${encodeURIComponent(stockCode)}/leader-quality?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getMoatResearch: (stockCode: string, asOf?: string) =>
+    request<MoatResearch>(`/api/value/companies/${encodeURIComponent(stockCode)}/moat-research?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getCompanyPriceZones: (stockCode: string, asOf?: string) =>
+    request<ValuePriceZones>(`/api/value/companies/${encodeURIComponent(stockCode)}/price-zones?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getCompanyEntryResearch: (stockCode: string, asOf?: string) =>
+    request<EntryResearch>(`/api/value/companies/${encodeURIComponent(stockCode)}/entry-research?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getCompanyExitResearch: (stockCode: string, asOf?: string) =>
+    request<ExitResearch>("/api/value/companies/" + encodeURIComponent(stockCode) + "/exit-research?market=CN" + (asOf ? "&as_of=" + encodeURIComponent(asOf) : "")),
+  getCompanyRiskResearch: (stockCode: string, asOf?: string) =>
+    request<RiskResearch>("/api/value/companies/" + encodeURIComponent(stockCode) + "/risk-research?market=CN" + (asOf ? "&as_of=" + encodeURIComponent(asOf) : "")),
+  getCompanyValuationHistory: (stockCode: string, asOf?: string) =>
+    request<HistoricalValuationHistory>(`/api/value/companies/${encodeURIComponent(stockCode)}/valuation-history?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
+  rebuildCompanyPriceZones: (stockCode: string, asOf?: string) =>
+    request<ValuePriceZones>(`/api/value/companies/${encodeURIComponent(stockCode)}/price-zones/rebuild?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`, { method: "POST" }),
+  getCompanyThesis: (stockCode: string) =>
+    request<{ status: string; thesis: CompanyThesis | null }>(`/api/value/companies/${encodeURIComponent(stockCode)}/thesis?market=CN`),
+  getCompanyThesisDraft: (stockCode: string) =>
+    request<{ status: string; draft: CompanyThesisDraft | null }>(`/api/value/companies/${encodeURIComponent(stockCode)}/thesis/draft?market=CN`),
+  generateCompanyThesisDraft: (stockCode: string) =>
+    request<{ status: string; draft: CompanyThesisDraft | null; message?: string }>(`/api/value/companies/${encodeURIComponent(stockCode)}/thesis/draft?market=CN`, { method: "POST" }),
+  confirmCompanyThesisDraft: (stockCode: string, draftId: string, body: {
+    title: string; core_thesis: string; status: CompanyThesisDraft["status"]; confidence: CompanyThesisDraft["confidence"];
+    invalid_conditions: Array<{ condition: string; status?: string }>;
+  }) => request<{ status: string; draft: CompanyThesisDraft; thesis: CompanyThesis }>(
+    `/api/value/companies/${encodeURIComponent(stockCode)}/thesis/draft/${encodeURIComponent(draftId)}/confirm?market=CN`, { method: "POST", body: JSON.stringify(body) },
+  ),
+  rejectCompanyThesisDraft: (stockCode: string, draftId: string, reason = "人工未采纳") =>
+    request<{ status: string; draft: CompanyThesisDraft }>(
+      `/api/value/companies/${encodeURIComponent(stockCode)}/thesis/draft/${encodeURIComponent(draftId)}/reject?market=CN`, { method: "POST", body: JSON.stringify({ reason }) },
+    ),
+  getCompanyThesisReview: (stockCode: string) =>
+    request<CompanyThesisReviewResponse>(`/api/value/companies/${encodeURIComponent(stockCode)}/thesis/review?market=CN`),
+  getCompanyThesisEvidence: (stockCode: string) =>
+    request<CompanyThesisEvidenceResponse>(`/api/value/companies/${encodeURIComponent(stockCode)}/thesis/evidence?market=CN`),
+  getCompanyThesisHistory: (stockCode: string) =>
+    request<{ items: CompanyThesisHistoryItem[]; total: number }>(`/api/value/companies/${encodeURIComponent(stockCode)}/thesis/history?market=CN`),
+  refreshCompanyThesisReview: (stockCode: string) =>
+    request<CompanyThesisReviewResponse>(`/api/value/companies/${encodeURIComponent(stockCode)}/thesis/review?market=CN`, { method: "POST" }),
   chatCompanyFinancials: (stockCode: string, body: { question: string; as_of?: string; history?: Array<{ role: string; content: string }> }) =>
     request<{ stock_code: string; stock_name: string; as_of: string; answer: string; provider: string; model: string }>(
       `/api/value/companies/${encodeURIComponent(stockCode)}/financial/chat`,
@@ -560,16 +1274,6 @@ export const api = {
     body: { question: string; history?: Array<{ role: string; content: string }>; candidates?: Array<Record<string, unknown>> },
     onProgress?: (progress: FinancialAgentProgress) => void,
   ) => streamFinancialChat<FinancialAgentReply>("/api/value/financial-agent/chat/stream", body, onProgress),
-  getFineTrackIndustryCompanies: (industryCode: string) =>
-    request<{ industry: FineTrackIndustry; items: FineTrackCompanyProfile[]; total: number; data_status_counts: Record<string, number> }>(
-      `/api/value/industries/${encodeURIComponent(industryCode)}/companies`,
-    ),
-  getFineTracks: (industryCode: string) =>
-    request<{ industry: FineTrackIndustry; items: FineTrack[]; total: number; unclassified: Array<Record<string, string>>; classification_version: string }>(
-      `/api/value/industries/${encodeURIComponent(industryCode)}/tracks`,
-    ),
-  classifyFineTracks: (industryCode: string) =>
-    request<Record<string, unknown>>(`/api/value/industries/${encodeURIComponent(industryCode)}/classify-tracks`, { method: "POST" }),
   updateLLMSettings: (settings: UpdateLLMSettingsRequest) =>
     request<LLMSettings>("/settings/llm", {
       method: "PUT",
@@ -630,6 +1334,12 @@ export const api = {
   // 恒值投资 structured research workspace
   getDashboard: () => request<DashboardToday>("/dashboard/today"),
   getTdxStatus: () => request<TdxStatus>("/tdx/status"),
+  getTdxMarketCatalog: (market: "HK" | "US") => request<TdxMarketCatalog>(`/tdx/markets/${market}/catalog`),
+  refreshTdxMarketCatalog: (market: "HK" | "US") => request<TdxJob>(`/tdx/markets/${market}/catalog-refresh`, { method: "POST" }),
+  getTdxMarketCatalogQuotes: (market: "HK" | "US", limit = 12) => request<TdxMarketCatalogQuotes>(`/tdx/markets/${market}/quotes?limit=${limit}`),
+  getTdxRefreshRuns: (limit = 20) => request<{ items: TdxRefreshRun[] }>(`/tdx/refresh-runs?limit=${limit}`),
+  getTdxSnapshots: (snapshotId?: string) => request<{ active_close_snapshot: TdxRefreshRun | null; items: TdxDatasetSnapshot[] }>(`/tdx/snapshots${snapshotId ? `?snapshot_id=${encodeURIComponent(snapshotId)}` : ""}`),
+  setTdxAutomation: (enabled: boolean) => request<TdxRefreshAutomation>("/tdx/automation", { method: "PUT", body: JSON.stringify({ enabled }) }),
   getTdxMarketOverview: () => request<TdxMarketOverview>("/tdx/market/overview"),
   getTdxMarketRanks: (options?: { category?: string; query?: string; sector?: string; sort?: string; direction?: string; limit?: number; offset?: number }) =>
     request<TdxRankResult>(`/tdx/market/ranks?${queryString(options)}`),
@@ -714,56 +1424,10 @@ export const api = {
   getValueMacro: (asOf?: string) => request<ValueMacroSnapshot>(`/strategy/value/macro${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
   getValuePolicies: (options?: { status?: string; limit?: number }) =>
     request<{ items: ValuePolicyEvent[] }>(`/strategy/value/policies?${queryString(options)}`),
-  getValueSectorScores: (options?: { as_of?: string; status?: string; query?: string }) =>
-    request<ValueSectorScoreList>(`/strategy/value/sectors?market=CN&${queryString(options)}`),
-  getValueLeaderScores: (sectorCode?: string, asOf?: string, candidateTrackLimit?: number) =>
-    request<ValueLeaderScoreList>(`/strategy/value/leaders?market=CN${sectorCode ? `&sector_code=${encodeURIComponent(sectorCode)}` : ""}${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}${candidateTrackLimit ? `&candidate_track_limit=${candidateTrackLimit}` : ""}`),
-  getValueSectors: (market: "CN" | "HK") => request<StrategyScoreList>(`/strategy/value/sectors?market=${market}`),
-  getValueLeaders: (market: "CN" | "HK") => request<StrategyScoreList>(`/strategy/value/leaders?market=${market}`),
   getValueSignals: (market: "CN" | "HK") => request<StrategySignal[]>(`/strategy/value/signals?market=${market}`),
-  getValueProfiles: () => request<{ items: CalculationProfile[] }>("/strategy/value/profiles"),
-  createValueProfile: (body: Pick<CalculationProfile, "name" | "mode" | "model_weights">) =>
-    request<CalculationProfile>("/strategy/value/profiles", { method: "POST", body: JSON.stringify(body) }),
-  updateValueProfile: (id: string, body: Pick<CalculationProfile, "name" | "mode" | "model_weights">) =>
-    request<CalculationProfile>(`/strategy/value/profiles/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
-  deleteValueProfile: (id: string) => request<{ status: string }>(`/strategy/value/profiles/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  getValueWorkbench: (profileId?: string) => request<ValueWorkbench>(`/strategy/value/workbench${profileId ? `?profile_id=${encodeURIComponent(profileId)}` : ""}`),
-  getValueTracks: (runId: string) => request<{ run_id: string; items: ValueTrack[] }>(`/strategy/value/tracks?run_id=${encodeURIComponent(runId)}`),
-  getValueTrackLeaders: (runId: string, trackId: string) => request<{ run_id: string; track_id: string; items: ValueTrackLeader[] }>(`/strategy/value/tracks/${encodeURIComponent(trackId)}/leaders?run_id=${encodeURIComponent(runId)}`),
-  getValueResearchUniverses: (profileId?: string) => request<{ items: ValueResearchUniverse[] }>(`/strategy/value/research-universes${profileId ? `?profile_id=${encodeURIComponent(profileId)}` : ""}`),
-  createValueResearchUniverse: (body: { run_id: string; candidate_limit: 5 | 10 | 20 | 50; leader_limit?: 5 }) =>
-    request<ValueResearchUniverse & { created: boolean }>("/strategy/value/research-universes", { method: "POST", body: JSON.stringify(body) }),
-  getValueResearchUniverse: (id: string) => request<ValueResearchUniverse>(`/strategy/value/research-universes/${encodeURIComponent(id)}`),
-  getValueUniverseAnalysis: (id: string) => request<ValueUniverseAnalysis>(`/strategy/value/research-universes/${encodeURIComponent(id)}/analysis`),
-  getValueResearchMonitors: (universeId?: string) => request<{ items: ValueResearchMonitor[] }>(`/strategy/value/research-monitors${universeId ? `?universe_id=${encodeURIComponent(universeId)}` : ""}`),
-  updateValueResearchMonitor: (id: string, body: { status?: "research_watching" | "paused"; is_priority?: boolean }) => request<ValueResearchMonitor>(`/strategy/value/research-monitors/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
-  getValueValuations: (universeId: string, queue: "all" | "priority" | "entry" | "review_exit" = "all") => request<{ universe_id: string; queue: string; total: number; items: ValueCompanyAnalysis[] }>(`/strategy/value/valuations?universe_id=${encodeURIComponent(universeId)}&queue=${queue}`),
-  getValueValuation: (universeId: string, symbol: string) => request<ValueValuationSnapshot>(`/strategy/value/valuations/${encodeURIComponent(symbol)}?universe_id=${encodeURIComponent(universeId)}`),
-  confirmValueValuation: (id: string) => request<ValueValuationSnapshot>(`/strategy/value/valuations/${encodeURIComponent(id)}/confirm`, { method: "POST" }),
-  bootstrapValueResearchUniverse: (id: string, asOf?: string) => request<ValueIncrementalRun & { created: boolean }>(`/strategy/value/research-universes/${encodeURIComponent(id)}/bootstrap`, { method: "POST", body: JSON.stringify({ as_of: asOf }) }),
-  activateValueResearchUniverse: (id: string) => request<ValueResearchUniverse>(`/strategy/value/research-universes/${encodeURIComponent(id)}/activate`, { method: "POST" }),
-  getValueCompanyArchive: (symbol: string) => request<ValueCompanyArchive>(`/strategy/value/company-archives/${encodeURIComponent(symbol)}`),
-  startValueIncrementalRun: (universeId: string, asOf?: string) => request<ValueIncrementalRun & { created: boolean }>("/strategy/value/incremental-runs", { method: "POST", body: JSON.stringify({ universe_id: universeId, as_of: asOf }) }),
-  getValueIncrementalRun: (id: string) => request<ValueIncrementalRun>(`/strategy/value/incremental-runs/${encodeURIComponent(id)}`),
-  cancelValueIncrementalRun: (id: string) => request<ValueIncrementalRun>(`/strategy/value/incremental-runs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
-  retryValueIncrementalRun: (id: string) => request<ValueIncrementalRun>(`/strategy/value/incremental-runs/${encodeURIComponent(id)}/retry`, { method: "POST" }),
-  getValueMonitoringSignals: (options?: { status?: string; symbol?: string; limit?: number }) => request<{ items: ValueSignalEvaluation[] }>(`/strategy/value/signals?scope=monitoring&${queryString(options)}`),
-  createValueResearchBatch: (body: { run_id: string; track_id: string; symbols: string[]; concurrency?: number }) =>
-    request<CompanyResearchBatch>("/strategy/value/research-batches", { method: "POST", body: JSON.stringify(body) }),
-  getValueResearchBatches: () => request<{ items: CompanyResearchBatch[] }>("/strategy/value/research-batches"),
-  getValueResearchBatch: (id: string) => request<CompanyResearchBatch>(`/strategy/value/research-batches/${encodeURIComponent(id)}`),
-  cancelValueResearchBatch: (id: string) => request<CompanyResearchBatch>(`/strategy/value/research-batches/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
-  retryValueResearchBatch: (id: string) => request<CompanyResearchBatch>(`/strategy/value/research-batches/${encodeURIComponent(id)}/retry`, { method: "POST" }),
-  getValueMonitors: () => request<{ items: ValueEntryMonitor[] }>("/strategy/value/monitors"),
-  createValueMonitor: (body: { research_job_id?: string; universe_id?: string; symbol?: string; position_state?: "watching" | "holding"; risk_preset?: "balanced"; conditions: Record<string, unknown>; channels: string[] }) =>
-    request<ValueEntryMonitor>("/strategy/value/monitors", { method: "POST", body: JSON.stringify(body) }),
-  updateValueMonitor: (id: string, body: Partial<Pick<ValueEntryMonitor, "status" | "conditions" | "channels" | "position_state" | "risk_preset" | "thesis_invalidated">>) =>
-    request<ValueEntryMonitor>(`/strategy/value/monitors/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
-  evaluateValueMonitors: () => request<{ items: ValueMonitorEvent[] }>("/strategy/value/monitors/evaluate", { method: "POST" }),
-  getValueMonitorEvents: () => request<{ items: ValueMonitorEvent[] }>("/strategy/value/monitor-events"),
-  acknowledgeValueMonitorEvent: (id: string, status: "acknowledged" | "closed", note = "") => request<ValueMonitorEvent>(`/strategy/value/monitor-events/${encodeURIComponent(id)}/acknowledge`, { method: "POST", body: JSON.stringify({ status, note }) }),
   getValueAutomation: () => request<ValueResearchAutomation>("/strategy/value/automation"),
   updateValueAutomation: (enabled: boolean) => request<ValueResearchAutomation>("/strategy/value/automation", { method: "PATCH", body: JSON.stringify({ enabled }) }),
+  runValueAutomationNow: () => request<ValueResearchManualRun>("/strategy/value/automation/run-now", { method: "POST" }),
   getEmotionDashboard: (market: "CN" | "HK") => request<StrategyDashboard>(`/strategy/emotion/dashboard?market=${market}`),
   getEmotionSectors: (market: "CN" | "HK") => request<StrategyScoreList>(`/strategy/emotion/sectors?market=${market}`),
   getEmotionCandidates: (market: "CN" | "HK", horizon: "short" | "swing") =>
@@ -788,45 +1452,38 @@ export const api = {
 export type MarketCode = "CN" | "HK" | "US";
 export type SourceStatus = "live" | "agent" | "sample" | "stale" | string;
 
-export interface CreateStrategyRunRequest { strategy_line: "value" | "emotion"; market: "CN" | "HK"; as_of?: string; symbols?: string[]; force_refresh?: boolean; profile_id?: string; }
-export type ValueRefreshModule = "financial_history" | "market_history" | "macro" | "policy" | "scores" | "all";
+export interface CreateStrategyRunRequest { strategy_line: "value" | "emotion"; market: "CN" | "HK"; as_of?: string; symbols?: string[]; force_refresh?: boolean; }
+export type ValueRefreshModule = "financial_history" | "market_history" | "macro" | "policy" | "all";
 export interface ValueModuleState { code: Exclude<ValueRefreshModule, "all">; label: string; status: string; progress: number; total: number; item_count: number; message: string; error: string; metadata: Record<string, unknown>; started_at?: string | null; updated_at?: string | null; last_success_at?: string | null; }
 export interface ValueRefreshJob { id: string; modules: ValueRefreshModule[]; as_of: string; status: string; current_module: string; progress: number; total: number; results: Record<string, unknown>; errors: Array<{ module: string; error: string }>; created_at: string; started_at?: string | null; completed_at?: string | null; }
-export interface ValueDataStatus { professional_finance: { status: string; file_count: number; first_period?: string | null; last_period?: string | null; raw_version?: string | null }; modules: ValueModuleState[]; recent_jobs: ValueRefreshJob[]; latest_score_as_of?: string | null; schedule_template?: { name: string; cron: string; timezone: string; modules: ValueRefreshModule[]; enabled: boolean }; }
-export interface ValueScoreComponent { name: string; raw_value: unknown; normalized_value: number | null; weight: number; contribution: number | null; }
-export interface ValueMacroSnapshot { id?: string; as_of?: string | null; formula_version?: string; regime?: string; score?: number | null; coverage?: number; axis_coverage?: number; series_coverage?: number; series_count?: number; series_total?: number; release_verified_coverage?: number; first_observed_count?: number; confidence?: "LOW" | "MEDIUM" | "HIGH"; status: string; axes: Record<string, number | null>; states?: Record<string, string>; missing_fields?: string[]; missing_series?: string[]; sources?: string[]; provenance_key?: string; }
-export interface ValueSectorMacroDriver { axis: string; axis_name: string; axis_score: number; sensitivity: number; adjusted_score: number; contribution: number | null; }
-export interface ValueSectorScore { sector_code: string; sector_name: string; rank: number; score: number | null; base_score: number | null; coverage: number; confidence: "LOW" | "MEDIUM" | "HIGH"; status: string; member_coverage: number; raw_features?: Record<string, number | null>; normalized_features?: Record<string, number | null>; component_scores: Record<string, number | null>; components: ValueScoreComponent[]; missing_fields: string[]; formula_version: string; matrix_version?: string; ranking_basis?: string[]; context_fields?: { macro_fit?: number | null; policy_fit?: number | null; available: string[]; missing: string[] }; data_as_of: string; sources: string[]; provenance_key: string; macro_fit?: number | null; policy_fit?: number | null; macro_rank?: number; macro_group?: string; macro_group_name?: string; macro_exposure?: Record<string, number>; macro_stance?: "beneficiary" | "neutral" | "headwind" | "unavailable"; macro_drivers?: ValueSectorMacroDriver[]; macro_matrix_explicit?: boolean; }
-export interface ValueLeaderScore { sector_code: string; sector_name: string; symbol: string; name: string; rank: number; candidate_sector_rank?: number; score: number | null; base_score: number | null; coverage: number; confidence: "LOW" | "MEDIUM" | "HIGH"; status: string; raw_features?: Record<string, number | null>; normalized_features?: Record<string, number | null>; component_scores: Record<string, number | null>; components: ValueScoreComponent[]; missing_fields: string[]; growth_status?: Record<string, string>; formula_version: string; data_as_of: string; sources: string[]; provenance_key: string; }
-export interface ValueSectorScoreList { market: "CN"; as_of?: string | null; items: ValueSectorScore[]; total: number; formula_version?: string; run?: EngineRun | null; }
-export interface ValueLeaderScoreList { market: "CN"; as_of?: string | null; sector_code: string; items: ValueLeaderScore[]; total: number; formula_version?: string; pool_rule?: { leaders_per_candidate_track: number; pool_capacity: number | null; candidate_track_limit: number | null; scored_only: boolean; deduplicated_by_symbol: boolean; ordering: "leader_score_desc_global_capacity" } | null; run?: EngineRun | null; }
+export interface ValueResearchManualRun { status: string; as_of?: string; pool_id?: string; stages?: Record<string, string>; error?: string; reason?: string; }
+export interface ValueDataStatus { professional_finance: { status: string; file_count: number; first_period?: string | null; last_period?: string | null; raw_version?: string | null }; modules: ValueModuleState[]; recent_jobs: ValueRefreshJob[]; schedule_template?: { name: string; cron: string; timezone: string; modules: ValueRefreshModule[]; enabled: boolean }; }
+export interface ValueMacroSnapshot {
+  id?: string;
+  as_of?: string | null;
+  formula_version?: string;
+  regime?: string;
+  score?: number | null;
+  coverage?: number;
+  axis_coverage?: number;
+  series_coverage?: number;
+  series_count?: number;
+  series_total?: number;
+  release_verified_coverage?: number;
+  first_observed_count?: number;
+  confidence?: "LOW" | "MEDIUM" | "HIGH";
+  status: string;
+  axes: Record<string, number | null>;
+  states?: Record<string, string>;
+  missing_fields?: string[];
+  missing_series?: string[];
+  sources?: string[];
+  provenance_key?: string;
+}
 export interface ValuePolicyEvent { id: string; document_number: string; title: string; normalized_url: string; source: string; published_at?: string | null; fetched_at: string; status: string; classifications: Array<{ industry_code: string; industry_name: string; direction: number; strength: number; sensitivity: number; horizon_days: number; evidence: string; confidence: number; status: string }>; }
 export interface TdxFinancialHistory { symbol: string; as_of?: string | null; period_type?: string | null; total: number; items: Array<Record<string, number | string | null>>; package: Record<string, unknown>; }
-export interface EngineRun { id: string; strategy_line: "value" | "emotion"; market: "CN" | "HK"; as_of: string; formula_version: string; profile_id?: string | null; profile_version?: number | null; status: string; source_status: string; message: string; started_at: string; completed_at?: string | null; created?: boolean; }
-export interface CalculationProfile { id: string; name: string; mode: "single" | "composite"; model_weights: Record<string, number>; version: number; is_default: boolean; is_builtin: boolean; created_at: string; updated_at: string; }
-export interface ValueTrack { id: string; engine_run_id: string; profile_id: string; track_id: string; track_name: string; category: string; base_score: number | null; coverage: number; rank: number; component_scores: Record<string, number | null>; quality_flags: string[]; source_status: string; data_as_of: string; }
-export interface ValueTrackLeader { id: string; engine_run_id: string; track_id: string; symbol: string; name: string; leader_type: string; base_score: number | null; coverage: number; rank: number; component_scores: Record<string, number | null>; quality_flags: string[]; research_status: string; }
-export interface ValueUniverseMember { id: string; universe_id: string; track_id: string; track_name: string; track_rank: number; symbol: string; name: string; leader_rank: number; leader_type: string; leader_score: number | null; leader_coverage: number; inclusion_reason: string; created_at: string; }
-export interface ValueUniverseCompany { symbol: string; name: string; memberships: ValueUniverseMember[]; }
-export interface ValueIncrementalJob { id: string; run_id: string; symbol: string; name: string; primary_track_id: string; status: string; stage: string; attempts: number; message: string; snapshot_id?: string | null; created_at: string; updated_at: string; }
-export interface ValueIncrementalRun { id: string; universe_id: string; run_kind: "bootstrap" | "incremental"; trigger_kind: string; as_of: string; status: string; total: number; completed: number; failed: number; coverage: number; cancel_requested: boolean; message: string; created_at: string; started_at?: string | null; completed_at?: string | null; jobs: ValueIncrementalJob[]; }
-export interface ValueResearchUniverse { id: string; engine_run_id: string; profile_id: string; candidate_limit: 5 | 10 | 20 | 50; leader_limit: 5; status: "draft" | "bootstrapping" | "partial" | "ready" | "active" | "archived"; data_as_of: string; formula_version: string; track_count: number; membership_count: number; company_count: number; created_at: string; activated_at?: string | null; archived_at?: string | null; members: ValueUniverseMember[]; companies: ValueUniverseCompany[]; latest_operation?: ValueIncrementalRun | null; }
-export interface ValueResearchSnapshot { id: string; universe_id: string; symbol: string; version: number; data_as_of: string; status: string; completeness: number; source_hash: string; payload: Record<string, unknown>; diff: Record<string, unknown>; missing_fields: string[]; sources: string[]; evidence_ids: string[]; dossier_id?: string | null; report_id?: string | null; created_at: string; }
-export interface ValueResearchEvidence { id: string; symbol: string; evidence_type: string; source: string; source_id: string; data_as_of: string; published_at?: string | null; fetched_at: string; content_hash: string; payload: Record<string, unknown>; status: string; }
-export interface ValueAnalysisDimension { key: "fundamental" | "financial" | "technical" | "capital" | "macro" | "risk"; label: string; status: "ready" | "partial" | "unavailable" | "stale" | string; coverage: number; summary: string; metrics: Record<string, number | string | null>; facts: string[]; risks: string[]; missing_fields: string[]; sources: string[]; data_as_of?: string | null; }
-export interface ValueResearchMonitor { id: string; universe_id: string; symbol: string; name: string; status: "research_watching" | "paused"; is_priority: boolean; data_status: string; research_status: string; valuation_status: string; technical_status: string; decision_status: string; last_snapshot_id?: string | null; last_valuation_id?: string | null; last_checked_at?: string | null; }
-export interface ValueValuationSnapshot { id: string; universe_id: string; symbol: string; version: number; status: string; review_status: "automatic_screen" | "manual_confirmed"; data_as_of: string; coverage: number; current_price?: number | null; pe_ttm?: number | null; pb_mrq?: number | null; dividend_yield?: number | null; peer_pe_median?: number | null; peer_pb_median?: number | null; pe_percentile?: number | null; pb_percentile?: number | null; safety_margin?: number | null; fair_value_low?: number | null; fair_value_high?: number | null; watch_price_low?: number | null; watch_price_high?: number | null; comparable: Record<string, unknown>; dcf: Record<string, unknown>; missing_fields: string[]; sources: string[]; formula_version: string; confirmed_at?: string | null; }
-export interface ValueCompanyAnalysis { symbol: string; name: string; memberships: ValueUniverseMember[]; current_state: string; research_state: string; signal_state: string; data_status: string; valuation_status: string; technical_status: string; monitor_status: "research_watching" | "decision_watching" | "paused"; decision_status: string; is_priority: boolean; model_state: "not_configured" | "pending" | "completed" | "failed"; conclusion: string; next_action: string; data_as_of?: string | null; snapshot_version?: number | null; completeness: number; missing_fields: string[]; metrics: { price?: number | null; pe_ttm?: number | null; pb_mrq?: number | null; dividend_yield?: number | null; safety_margin?: number | null; fair_value_low?: number | null; fair_value_high?: number | null; revenue_yoy?: number | null; net_profit_yoy?: number | null; roe?: number | null }; supporting_facts: string[]; risk_facts: string[]; changes: string[]; monitor_id?: string | null; research_monitor_id?: string | null; valuation?: ValueValuationSnapshot | null; position_state?: "watching" | "holding" | null; analysis_version: string; dimensions: ValueAnalysisDimension[]; }
-export interface ValueUniverseAnalysis { universe_id: string; universe_status: string; data_as_of: string; total: number; state_counts: Record<string, number>; monitored: number; research_monitored: number; decision_monitored: number; model_state: ValueCompanyAnalysis["model_state"]; analysis_version: string; items: ValueCompanyAnalysis[]; }
-export interface ValueCompanyArchive { symbol: string; memberships: Array<ValueUniverseMember & { profile_id: string; engine_run_id: string; universe_as_of: string; universe_status: string }>; snapshots: ValueResearchSnapshot[]; evidence: ValueResearchEvidence[]; monitors: ValueEntryMonitor[]; research_monitors: ValueResearchMonitor[]; valuations: ValueValuationSnapshot[]; events: ValueMonitorEvent[]; analysis?: ValueCompanyAnalysis | null; }
-export interface ValueSignalEvaluation { id: string; monitor_id: string; snapshot_id?: string | null; symbol: string; name: string; position_state: "watching" | "holding"; as_of: string; signal_state: "watching" | "entry_candidate" | "holding_review" | "exit_candidate" | "thesis_invalidated" | "data_insufficient" | "stale"; rule_version: string; input_hash: string; rules: Record<string, unknown>; inputs: Record<string, unknown>; reasons: string[]; missing_fields: string[]; created_at: string; }
+export interface EngineRun { id: string; strategy_line: "value" | "emotion"; market: "CN" | "HK"; as_of: string; formula_version: string; status: string; source_status: string; message: string; started_at: string; completed_at?: string | null; created?: boolean; }
 export interface ValueResearchAutomation { id: "default"; enabled: boolean; timezone: "Asia/Shanghai"; run_time: "16:45"; max_retries: number; retry_minutes: number; next_run_at?: string | null; last_run_id?: string | null; last_status?: string | null; last_error: string; updated_at: string; }
-export interface CompanyResearchJob { id: string; batch_id: string; symbol: string; name: string; status: "queued" | "running" | "partial" | "completed" | "failed"; stage: string; message: string; dossier_id?: string | null; report_id?: string | null; valuation_status: string; valuation: Record<string, unknown>; attempts: number; created_at?: string; updated_at?: string; }
-export interface CompanyResearchBatch { id: string; engine_run_id: string; profile_id: string; track_id: string; status: string; total: number; completed: number; failed: number; cancel_requested: boolean; concurrency: number; created_at: string; completed_at?: string | null; jobs: CompanyResearchJob[]; created?: boolean; }
-export interface ValueEntryMonitor { id: string; symbol: string; name: string; engine_run_id: string; track_id: string; research_job_id: string; universe_id?: string | null; status: "active" | "paused" | "closed"; position_state: "watching" | "holding"; signal_state: ValueSignalEvaluation["signal_state"]; risk_preset: "balanced"; thesis_invalidated: boolean; conditions: Record<string, unknown>; channels: string[]; confirmed_at: string; last_checked_at?: string | null; }
-export interface NotificationDelivery { id: string; event_id: string; channel: "in_app" | "feishu" | "weixin"; status: string; error: string; attempted_at: string; }
-export interface ValueMonitorEvent { id: string; monitor_id: string; scope?: "research" | "decision"; event_type: string; severity: string; title: string; message: string; payload: Record<string, unknown>; triggered_at: string; evaluation_id?: string | null; status: "open" | "acknowledged" | "closed"; acknowledgement_note?: string; acknowledged_at?: string | null; resolved_at?: string | null; deliveries: NotificationDelivery[]; }
-export interface ValueWorkbench { profile: CalculationProfile; latest_run?: EngineRun | null; macro?: ValueMacroSnapshot | null; tracks: ValueTrack[]; sector_scores: ValueSectorScore[]; research_batches: CompanyResearchBatch[]; monitor_summary: { active: number; events: number }; }
 export interface StrategyFormula { id: string; strategy_line: "value" | "emotion"; name: string; version: string; weights: Record<string, number>; engine_path: string; universe: string; minimum_coverage: number | null; }
 export interface StrategyFormulaResponse { items: StrategyFormula[]; strategy_store_ids: string[]; }
 export interface StrategyProviderStatus { market: "CN" | "HK"; status: string; provider?: string | null; fallback_chain: string[]; error?: string; }
@@ -894,6 +1551,57 @@ export interface TdxJob {
   started_at?: string | null;
   completed_at?: string | null;
 }
+export interface TdxRefreshProfile {
+  code: string;
+  label: string;
+  description: string;
+  modules: string[];
+}
+export interface TdxDatasetSnapshot {
+  id: number;
+  snapshot_id: string;
+  refresh_run_id: string;
+  dataset: string;
+  market: string;
+  market_date: string;
+  available_at: string;
+  source: string;
+  coverage?: number | null;
+  item_count: number;
+  expected_count: number;
+  missing_count: number;
+  status: string;
+  error: string;
+}
+export interface TdxRefreshRun {
+  id: string;
+  profile: string;
+  market: string;
+  market_date: string;
+  snapshot_id: string;
+  modules: string[];
+  status: string;
+  progress: number;
+  total: number;
+  message: string;
+  error: string;
+  retry_count: number;
+  created_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  datasets?: TdxDatasetSnapshot[];
+}
+export interface TdxRefreshAutomation {
+  market: string;
+  enabled: boolean;
+  last_profile: string;
+  last_status: string;
+  last_error: string;
+  next_run_at?: string | null;
+  updated_at?: string;
+  running?: boolean;
+  profiles?: Array<Omit<TdxRefreshProfile, "modules">>;
+}
 export interface TdxStatus {
   available: boolean;
   tdx_home: string;
@@ -901,6 +1609,28 @@ export interface TdxStatus {
   active_job?: TdxJob | null;
   modules: TdxModule[];
   recent_jobs: TdxJob[];
+  active_snapshot_id?: string | null;
+  active_close_snapshot?: TdxRefreshRun | null;
+  refresh_lock?: { name: string; owner: string; acquired_at: string; expires_at: string } | null;
+  recent_refresh_runs?: TdxRefreshRun[];
+  refresh_profiles?: TdxRefreshProfile[];
+  automation?: TdxRefreshAutomation;
+  market_catalogs?: TdxMarketCatalog[];
+}
+export interface TdxMarketCatalog {
+  market: "HK" | "US";
+  label: string;
+  list_id: string;
+  securities: number;
+  quotes: number;
+  latest_refresh?: TdxRefreshRun | null;
+}
+export interface TdxMarketCatalogQuotes {
+  market: "HK" | "US";
+  label: string;
+  total: number;
+  as_of?: string | null;
+  items: TdxQuote[];
 }
 export interface TdxRecord {
   dataset: string;
@@ -909,6 +1639,7 @@ export interface TdxRecord {
   name: string;
   payload: Record<string, unknown>;
   updated_at: string;
+  snapshot_id?: string | null;
 }
 export interface TdxDataset { dataset: string; total: number; items: TdxRecord[]; }
 
@@ -1206,6 +1937,28 @@ export interface PriceBar {
   low: number;
   close: number;
   volume: number;
+}
+
+export interface CompactDailyBars {
+  market: string;
+  stock_code: string;
+  adjustment_type: "front";
+  bars: Array<{
+    date: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number | null;
+  }>;
+  bar_count: number;
+  returned_bar_count: number;
+  coverage_status: "READY" | "PARTIAL" | "INSUFFICIENT";
+  data_as_of: string | null;
+  requested_as_of: string | null;
+  source: string | null;
+  source_version: string | null;
+  fetched_at: string | null;
 }
 
 export interface TradeMarker {

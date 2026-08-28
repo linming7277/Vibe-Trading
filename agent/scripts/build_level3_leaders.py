@@ -25,18 +25,20 @@ if str(AGENT_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENT_ROOT))
 
 from src.level3_leaders.service import Level3IndustryLeaderService  # noqa: E402
+from src.tdx_data.service import get_tdx_service  # noqa: E402
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--as-of", help="PIT date (YYYY-MM-DD); defaults to latest completed Value Line score date")
+    parser.add_argument("--as-of", help="PIT date (YYYY-MM-DD); defaults to latest published close snapshot")
     parser.add_argument("--force", action="store_true", help="rebuild an existing idempotent snapshot")
     args = parser.parse_args()
     service = Level3IndustryLeaderService()
     try:
-        as_of = args.as_of or service.value_line.status().get("latest_score_as_of")
+        close_snapshot = get_tdx_service().store.active_snapshot()
+        as_of = args.as_of or (close_snapshot or {}).get("market_date")
         if not as_of:
-            parser.error("no latest Value Line score date; pass --as-of")
+            parser.error("no published close snapshot; pass --as-of")
         result = service.build_level3_leaders(str(as_of), force=args.force)
         statistics = dict(result["statistics"])
         statistics.pop("industry_stats", None)

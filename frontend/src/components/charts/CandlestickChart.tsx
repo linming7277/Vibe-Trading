@@ -31,14 +31,16 @@ interface Props {
   markers?: TradeMarker[];
   indicators?: Record<string, IndicatorPoint[]>;
   height?: number;
+  /** A price-only presentation for decision summaries; the full chart remains unchanged by default. */
+  compact?: boolean;
 }
 
-export function CandlestickChart({ data, markers, indicators, height = 500 }: Props) {
+export function CandlestickChart({ data, markers, indicators, height = 500, compact = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof echarts.init> | null>(null);
   const [sub, setSub] = useState<Sub>("vol");
   const [range, setRange] = useState<Range>("ALL");
-  const [overlays, setOverlays] = useState<Set<Overlay>>(new Set(["ma5", "ma20"]));
+  const [overlays, setOverlays] = useState<Set<Overlay>>(() => new Set(compact ? [] : ["ma5", "ma20"]));
   const [showMenu, setShowMenu] = useState(false);
   const dark = useThemeDark();
 
@@ -273,7 +275,7 @@ export function CandlestickChart({ data, markers, indicators, height = 500 }: Pr
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-1 flex-wrap">
+      {!compact ? <div className="flex items-center gap-2 mb-1 flex-wrap">
         {/* Time range */}
         <div className="flex gap-0.5">
           {(["1M", "3M", "6M", "1Y", "ALL"] as const).map((r) => (
@@ -321,7 +323,7 @@ export function CandlestickChart({ data, markers, indicators, height = 500 }: Pr
             <button key={id} onClick={() => setSub(id)} className={cn("px-1.5 py-0.5 rounded text-[10px] font-mono uppercase transition-colors", sub === id ? "bg-primary/15 text-primary font-medium" : "text-muted-foreground/50 hover:text-muted-foreground")}>{id}</button>
           ))}
         </div>
-      </div>
+      </div> : null}
       <div ref={containerRef} style={{ height }} />
     </div>
   );

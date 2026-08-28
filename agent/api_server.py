@@ -119,6 +119,20 @@ from src.api.channels_routes import (  # noqa: E402
     _start_channel_runtime,
     _stop_channel_runtime,
 )
+from src.api.value_price_zone_routes import register_value_price_zone_routes  # noqa: E402
+from src.api.low_value_leader_pool_routes import register_low_value_leader_pool_routes  # noqa: E402
+from src.api.adjusted_daily_bar_routes import register_adjusted_daily_bar_routes  # noqa: E402
+from src.api.historical_valuation_routes import register_historical_valuation_routes  # noqa: E402
+from src.api.capital_allocation_fact_routes import register_capital_allocation_fact_routes  # noqa: E402
+from src.api.capital_allocation_research_routes import register_capital_allocation_research_routes  # noqa: E402
+from src.api.company_action_routes import register_company_action_routes  # noqa: E402
+from src.api.entry_research_routes import register_entry_research_routes  # noqa: E402
+from src.api.exit_research_routes import register_exit_research_routes  # noqa: E402
+from src.api.risk_research_routes import register_risk_research_routes  # noqa: E402
+from src.api.risk_research_preparation_routes import register_risk_research_preparation_routes  # noqa: E402
+from src.api.focus_selection_routes import register_focus_selection_routes  # noqa: E402
+from src.api.research_freshness_routes import register_research_freshness_routes  # noqa: E402
+from src.api.cio_report_routes import register_cio_report_routes  # noqa: E402
 from src.api.scheduled_routes import (  # noqa: E402
     _start_scheduled_research_executor,
     _stop_scheduled_research_executor,
@@ -161,7 +175,11 @@ async def _run_startup_preflight() -> None:
     _start_preflight_background()
     _start_scheduled_research_executor()
     from src.value_workspace.automation import start_value_research_scheduler
+    from src.tdx_data.automation import start_data_refresh_scheduler
 
+    # Data collection owns freshness; strategy schedulers only consume a
+    # quality-gated completed snapshot.
+    start_data_refresh_scheduler()
     start_value_research_scheduler()
     from src.config.accessor import get_env_config
 
@@ -188,8 +206,10 @@ async def _stop_scheduled_research_on_shutdown() -> None:
             await _stop_scheduled_research_executor()
         finally:
             from src.value_workspace.automation import stop_value_research_scheduler
+            from src.tdx_data.automation import stop_data_refresh_scheduler
 
             stop_value_research_scheduler()
+            stop_data_refresh_scheduler()
 
 
 @asynccontextmanager
@@ -320,11 +340,54 @@ register_research_routes(app)
 from src.api.research_task_routes import register_research_task_routes  # noqa: E402
 register_research_task_routes(app, require_auth)
 
-from src.api.fine_track_routes import register_fine_track_routes  # noqa: E402
-register_fine_track_routes(app, require_auth)
+from src.api.research_supervisor_routes import register_research_supervisor_routes  # noqa: E402
+register_research_supervisor_routes(app, require_auth)
+
+from src.api.value_l3_routes import register_value_l3_routes  # noqa: E402
+register_value_l3_routes(app, require_auth)
+
+from src.api.company_thesis_routes import register_company_thesis_routes  # noqa: E402
+register_company_thesis_routes(app, require_auth)
+
+from src.api.company_thesis_evidence_routes import register_company_thesis_evidence_routes  # noqa: E402
+register_company_thesis_evidence_routes(app, require_auth)
+
+from src.api.company_thesis_history_routes import register_company_thesis_history_routes  # noqa: E402
+register_company_thesis_history_routes(app, require_auth)
+
+from src.api.company_thesis_review_routes import register_company_thesis_review_routes  # noqa: E402
+register_company_thesis_review_routes(app, require_auth)
 
 from src.api.financial_analysis_routes import register_financial_analysis_routes  # noqa: E402
 register_financial_analysis_routes(app, require_auth)
+from src.api.business_research_routes import register_business_research_routes  # noqa: E402
+register_business_research_routes(app, require_auth)
+from src.api.disclosure_material_routes import register_disclosure_material_routes  # noqa: E402
+register_disclosure_material_routes(app, require_auth)
+from src.api.company_research_overview_routes import register_company_research_overview_routes  # noqa: E402
+register_company_research_overview_routes(app, require_auth)
+from src.api.company_research_conclusion_routes import register_company_research_conclusion_routes  # noqa: E402
+register_company_research_conclusion_routes(app, require_auth)
+from src.api.leader_quality_profile_routes import register_leader_quality_profile_routes  # noqa: E402
+register_leader_quality_profile_routes(app, require_auth)
+from src.api.moat_evidence_routes import register_moat_evidence_routes  # noqa: E402
+register_moat_evidence_routes(app, require_auth)
+from src.api.moat_research_routes import register_moat_research_routes  # noqa: E402
+register_moat_research_routes(app, require_auth)
+register_value_price_zone_routes(app, require_auth)
+register_low_value_leader_pool_routes(app, require_auth)
+register_adjusted_daily_bar_routes(app, require_auth)
+register_historical_valuation_routes(app, require_auth)
+register_capital_allocation_fact_routes(app, require_auth)
+register_capital_allocation_research_routes(app, require_auth)
+register_company_action_routes(app, require_auth)
+register_entry_research_routes(app, require_auth)
+register_exit_research_routes(app, require_auth)
+register_risk_research_routes(app, require_auth)
+register_risk_research_preparation_routes(app, require_auth)
+register_focus_selection_routes(app, require_auth)
+register_research_freshness_routes(app, require_auth)
+register_cio_report_routes(app, require_auth)
 
 from src.api.strategy_routes import register_strategy_routes  # noqa: E402
 register_strategy_routes(app)
@@ -388,7 +451,10 @@ def serve_main(argv: list[str] | None = None) -> int:
                 return self._with_cache_policy(response, "index.html")
 
     parser = argparse.ArgumentParser(description="恒值投资服务")
-    parser.add_argument("--port", type=int, default=8000, help="Listen port (default 8000)")
+    # The Windows launcher and Vite development proxy both use this internal
+    # application port.  Keep the direct `serve` default aligned so a manual
+    # formal launch cannot silently create a second service on :8000.
+    parser.add_argument("--port", type=int, default=8899, help="Listen port (default 8899)")
     parser.add_argument("--host", default="127.0.0.1", help="Bind address")
     parser.add_argument("--dev", action="store_true", help="Dev mode: spawn Vite on :5173")
     try:

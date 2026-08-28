@@ -33,13 +33,13 @@ def test_sqlite_bootstrap_is_idempotent_and_market_taxonomies_stay_native(tmp_pa
             "HK": "恒生",
             "US": "GICS",
         }
-        assert second._conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0] == "10"
+        assert second._conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0] == str(second.SCHEMA_VERSION)
         tables = {
             row[0]
             for row in second._conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert {"engine_runs", "strategy_signals", "decision_chain_runs", "structured_committee_decisions"} <= tables
-        assert [row[0] for row in second._conn.execute("SELECT version FROM schema_migrations ORDER BY version")] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        assert [row[0] for row in second._conn.execute("SELECT version FROM schema_migrations ORDER BY version")] == list(range(1, second.SCHEMA_VERSION + 1))
     finally:
         second.close()
 
@@ -258,3 +258,30 @@ def test_global_equity_refresh_replaces_sample_dossier_with_real_profile(
     assert dossier["metrics"]["price"] == 200.0
     assert dossier["metrics"]["source"] == "Yahoo Finance"
     assert "Yahoo Finance" in dossier["overview"]
+
+
+def test_global_equity_refresh_prefers_tdx_market_snapshot(store: ResearchWorkspaceStore) -> None:
+    from src.research_workspace.global_equity import GlobalEquityResearchService
+
+    def no_yahoo(*_args, **_kwargs):
+        raise AssertionError("Yahoo must not be called when TDX data is available")
+
+    dossier = GlobalEquityResearchService(
+        store,
+        fetcher=no_yahoo,
+        tdx_fetcher=lambda market, symbol: {
+            "market": market, "symbol": symbol, "name": "Apple Inc.", "snapshot_id": "us-test",
+            "data_as_of": "2026-08-19T09:30:00+08:00",
+            "quote": {"price": 230.0, "last_close": 228.0, "change_pct": 0.8772},
+            "finance": {
+                "market_cap_100m": 35000, "pe_ttm": 35.0, "pe_dynamic": 31.0,
+                "pb_mrq": 50.0, "dividend_yield": 0.004, "revenue_10k": 39500000,
+                "net_profit_10k": 9700000, "total_assets_10k": 36400000, "eps": 6.4,
+            },
+        },
+    ).refresh("US", "AAPL.US")
+
+    assert dossier["metrics"]["source"] == "通达信客户端"
+    assert dossier["metrics"]["price"] == 230.0
+    assert dossier["metrics"]["market_cap"] == 3_500_000_000_000
+    assert dossier["data_as_of"] == "2026-08-19"
