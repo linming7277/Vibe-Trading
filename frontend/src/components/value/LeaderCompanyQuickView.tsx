@@ -8,10 +8,25 @@ import {
   type CompanyResearchConclusion,
   type CompactDailyBars,
   type EntryResearch,
-  type Level3Leader,
+  type LeaderExplanation,
   type PriceBar,
   type ValuePriceZones,
 } from "@/lib/api";
+
+/**
+ * Minimal company shape the quick view needs. `Level3Leader` satisfies it
+ * directly; the low-value focus cards pass a slimmer item without
+ * level-1/level-2 industry names.
+ */
+export type QuickViewLeader = {
+  stock_code: string;
+  stock_name: string;
+  leader_rank: number;
+  level3_name: string;
+  level1_name?: string;
+  level2_name?: string;
+  explanation?: LeaderExplanation;
+};
 
 type DetailState = {
   conclusion: CompanyResearchConclusion | null;
@@ -48,7 +63,7 @@ function moneyRange(low: number | null | undefined, high: number | null | undefi
   return `${number(low)} – ${number(high)} 元`;
 }
 
-function leaderReason(leader: Level3Leader, index: number) {
+function leaderReason(leader: QuickViewLeader, index: number) {
   const item = leader.explanation?.strongest?.[index];
   if (!item) return null;
   const labels: Record<string, string> = {
@@ -338,7 +353,7 @@ export function LeaderCompanyQuickView({
   onClose,
   onChat,
 }: {
-  leader: Level3Leader;
+  leader: QuickViewLeader;
   onClose: () => void;
   onChat: () => void;
 }) {
@@ -370,6 +385,9 @@ export function LeaderCompanyQuickView({
 
   const bars = frontDailyBars(details.dailyBars);
   const reasons = [0, 1, 2].map((index) => leaderReason(leader, index)).filter((item): item is string => Boolean(item));
+  const industryLine = leader.level1_name || leader.level2_name
+    ? `${leader.level3_name} · ${leader.level1_name || "—"} / ${leader.level2_name || "—"}`
+    : leader.level3_name;
   const historicalMetrics = details.zones?.historical_valuation?.historical_percentiles;
   const currentPe = historicalMetrics?.pe_ttm?.current ?? null;
   const currentPb = historicalMetrics?.pb_mrq?.current ?? null;
@@ -382,7 +400,7 @@ export function LeaderCompanyQuickView({
     <button type="button" aria-label="关闭龙头快速判断" className="fixed inset-0 z-40 cursor-default bg-black/35 backdrop-blur-[1px]" onClick={onClose} />
     <section role="dialog" aria-modal="true" aria-label="龙头快速判断" className="fixed inset-3 z-50 flex flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl md:inset-y-8 md:left-1/2 md:right-auto md:w-[min(900px,calc(100vw-3rem))] md:-translate-x-1/2">
       <header className="border-b border-border px-5 py-4">
-        <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="text-xs font-medium text-primary">龙头快速判断</p><div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1"><h2 className="truncate text-xl font-semibold">{leader.stock_name} <span className="font-mono text-sm font-normal text-muted-foreground">{leader.stock_code}</span></h2>{reasons.length ? <span className="flex flex-wrap items-center gap-1.5"><span className="text-xs font-semibold">为什么入选</span>{reasons.map((reason) => <span key={reason} className="rounded bg-primary/10 px-2 py-1 text-[11px] text-primary">{reason}</span>)}</span> : <span className="text-xs text-muted-foreground">该公司在当前三级行业内排名第 {leader.leader_rank}，进入量化龙头候选池。</span>}</div><p className="mt-1 truncate text-xs text-muted-foreground">{leader.level3_name} · {leader.level1_name} / {leader.level2_name}</p></div><button type="button" aria-label="关闭龙头快速判断" onClick={onClose} className="rounded-md border border-border p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></div>
+        <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="text-xs font-medium text-primary">龙头快速判断</p><div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1"><h2 className="truncate text-xl font-semibold">{leader.stock_name} <span className="font-mono text-sm font-normal text-muted-foreground">{leader.stock_code}</span></h2>{reasons.length ? <span className="flex flex-wrap items-center gap-1.5"><span className="text-xs font-semibold">为什么入选</span>{reasons.map((reason) => <span key={reason} className="rounded bg-primary/10 px-2 py-1 text-[11px] text-primary">{reason}</span>)}</span> : <span className="text-xs text-muted-foreground">该公司在当前三级行业内排名第 {leader.leader_rank}，进入量化龙头候选池。</span>}</div><p className="mt-1 truncate text-xs text-muted-foreground">{industryLine}</p></div><button type="button" aria-label="关闭龙头快速判断" onClick={onClose} className="rounded-md border border-border p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">

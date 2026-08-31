@@ -31,6 +31,25 @@ def register_cio_report_routes(app: FastAPI, require_auth: AuthDep) -> None:
             raise HTTPException(404, "no persisted CIO report; call refresh first")
         return report
 
+    @app.get("/api/research/cio/{stock_code}/quick-brief", dependencies=[Depends(require_auth)])
+    async def get_cio_quick_brief(
+        stock_code: str = Path(min_length=4, max_length=12),
+        as_of: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    ) -> dict[str, Any]:
+        """Deterministic six-block brief projected from the persisted report.
+
+        Read-only: no refresh, no LLM, no specialist calls; a missing report
+        returns CIO_REPORT_NOT_FOUND instead of silently building one.
+        """
+        from src.cio_report import get_cio_report_service
+
+        try:
+            return await asyncio.to_thread(
+                get_cio_report_service().get_quick_brief, "CN", stock_code, as_of=as_of,
+            )
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     @app.get("/api/research/cio/{stock_code}/freshness", dependencies=[Depends(require_auth)])
     async def cio_report_freshness(
         stock_code: str = Path(min_length=4, max_length=12),

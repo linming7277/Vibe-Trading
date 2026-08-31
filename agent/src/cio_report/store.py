@@ -109,7 +109,24 @@ class CioReportStore:
     ) -> dict[str, Any]:
         existing = self.latest_report(market, stock_code, as_of=research_as_of)
         if existing and str(existing.get("input_fingerprint") or "") == input_fingerprint:
-            return {**existing, "idempotent_reuse": True}
+            if (str(existing.get("narrative_report_md") or "") == narrative_report_md
+                    and str(existing.get("synthesis_source") or "") == synthesis_source):
+                return {**existing, "idempotent_reuse": True}
+            # Same research inputs, better synthesis (e.g. TEMPLATE_FALLBACK
+            # recovered via an explicit full-report retry): update the
+            # delivery layer in place instead of discarding the recovery.
+            now = _utc_now()
+            with self._lock, self._conn:
+                self._conn.execute(
+                    """UPDATE company_cio_research_reports
+                       SET narrative_report_md=?, synthesis_source=?, model_version=?,
+                           prompt_version=?, updated_at=?
+                       WHERE id=?""",
+                    (narrative_report_md, synthesis_source, model_version,
+                     prompt_version, now, existing["id"]),
+                )
+            refreshed = self.latest_report(market, stock_code, as_of=research_as_of) or {}
+            return {**refreshed, "idempotent_reuse": False, "synthesis_recovered": True}
         now = _utc_now()
         with self._lock, self._conn:
             cursor = self._conn.execute(

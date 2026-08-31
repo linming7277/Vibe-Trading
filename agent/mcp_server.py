@@ -814,6 +814,103 @@ def ask_risk_researcher(question: str) -> str:
     return _ask_research_specialist(agent="risk_researcher", question=question)
 
 
+def _resolve_cio_stock_code(stock_code: str) -> str:
+    """Accept a company name, bare six-digit code, or suffixed code.
+
+    The gateway agent naturally passes what the boss typed ("士兰微");
+    without normalization the persisted reports (keyed 600460.SH) would 404
+    and the agent would fall back to a full specialist fan-out.
+    """
+    text = str(stock_code or "").strip()
+    if not text:
+        return text
+    import re as _re
+
+    try:
+        if _re.search(r"(?<!\d)\d{6}(?:\.(?:SH|SZ|BJ))?(?!\d)", text, _re.IGNORECASE):
+            from src.financial_analysis.service import FinancialAnalysisService
+
+            security = FinancialAnalysisService._resolve_cached_security(text, "")
+            if security and str(security.get("code") or "").strip():
+                return str(security["code"]).upper()
+        else:
+            from src.tdx_data import get_tdx_service
+
+            security = get_tdx_service().find_security_named_in(text)
+            if security and str(security.get("code") or "").strip():
+                return str(security["code"]).upper()
+    except Exception:  # noqa: BLE001 - resolution must never break the tool
+        return text
+    return text.upper()
+
+
+@mcp.tool
+def get_deep_research_coverage(stock_code: str, as_of: str = "") -> str:
+    """Read the Deep Research Coverage projection for one company.
+
+    Read-only: 11 dimensions (financial / business_profile / business_research /
+    valuation / risk / disclosure / moat_evidence / moat_research / thesis /
+    capital_allocation / leader_quality), each READY/PARTIAL/MISSING, plus
+    overall COMPLETE/USABLE/PARTIAL.  Use this to decide whether a deep
+    analysis needs prepare_deep_research or can be answered from the saved
+    CIO report directly.
+    """
+    try:
+        from src.deep_research import get_deep_research_coverage_service
+
+        return _json_ok(coverage=get_deep_research_coverage_service().coverage(
+            "CN", _resolve_cio_stock_code(stock_code), as_of=as_of or None))
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        return _json_error(str(exc), error_type="deep_coverage_unavailable")
+
+
+@mcp.tool
+def prepare_deep_research(stock_code: str, as_of: str = "") -> str:
+    """Fill ONLY the missing research capabilities for one company, on demand.
+
+    For explicit deep-analysis requests about companies outside the low-value
+    pool: runs business research (≤1 LLM), bounded disclosure sync (≤2 per
+    report kind), moat evidence extraction (deterministic) and a thesis
+    DRAFT (never auto-promoted), then rebuilds the affected CIO sections.
+    Idempotent — a second call reuses everything and costs ~0 research LLM
+    calls.  Never adds the company to the low-value pool or Focus tiers,
+    never calls financial/valuation/risk specialists.
+    """
+    try:
+        from src.deep_research import get_deep_research_preparation_service
+
+        result = get_deep_research_preparation_service().prepare(
+            "CN", _resolve_cio_stock_code(stock_code), as_of=as_of or None)
+        return _json_ok(result=result)
+    except RuntimeError as exc:
+        return _json_error(str(exc), error_type="deep_prepare_rejected")
+    except (OSError, TypeError, ValueError) as exc:
+        return _json_error(str(exc), error_type="deep_prepare_failed")
+
+
+@mcp.tool
+def get_cio_quick_brief(stock_code: str, as_of: str = "") -> str:
+    """Read the CIO Quick Brief: a six-block fast summary of the persisted CIO report.
+
+    ``stock_code`` accepts a company name ("士兰微"), a bare six-digit code
+    ("600460"), or a suffixed code ("600460.SH").  The default entry for
+    ordinary company questions ("XX现在怎么样/值得关注吗/简单说下").  Pure
+    projection of the saved Full Report: zero model calls, zero research
+    refreshes.  Blocks: 研究结论/为什么值得看/主要风险/当前估值/核心逻
+    辑/接下来重点看.  Use get_cio_report for the full 14-section deep report.
+    """
+    try:
+        from src.cio_report import get_cio_report_service
+
+        brief = get_cio_report_service().get_quick_brief(
+            "CN", _resolve_cio_stock_code(stock_code), as_of=as_of or None)
+        return _json_ok(brief=brief)
+    except ValueError as exc:
+        return _json_error(str(exc), error_type="cio_report_not_found")
+    except (OSError, RuntimeError, TypeError) as exc:
+        return _json_error(str(exc), error_type="cio_quick_brief_unavailable")
+
+
 @mcp.tool
 def get_cio_report(stock_code: str, as_of: str = "") -> str:
     """Read the persisted Company CIO Deep Research Report (cache-first).
@@ -826,7 +923,8 @@ def get_cio_report(stock_code: str, as_of: str = "") -> str:
     try:
         from src.cio_report import get_cio_report_service
 
-        report = get_cio_report_service().get_report("CN", stock_code, as_of=as_of or None)
+        report = get_cio_report_service().get_report(
+            "CN", _resolve_cio_stock_code(stock_code), as_of=as_of or None)
         if report is None:
             return _json_error(
                 "该公司尚未生成 CIO 报告；可先调用 refresh_cio_report 生成（或直接用 ask_investment_research_supervisor 读取综合研究）",
@@ -858,7 +956,7 @@ def refresh_cio_report(stock_code: str, as_of: str = "", force_synthesis: bool =
         from src.cio_report import get_cio_report_service
 
         result = get_cio_report_service().build_report(
-            "CN", stock_code, as_of=as_of or None, force_synthesis=force_synthesis,
+            "CN", _resolve_cio_stock_code(stock_code), as_of=as_of or None, force_synthesis=force_synthesis,
         )
         return _json_ok(report={
             "stock_code": result.get("stock_code"), "research_as_of": result.get("research_as_of"),

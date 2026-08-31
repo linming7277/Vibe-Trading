@@ -133,6 +133,7 @@ from src.api.risk_research_preparation_routes import register_risk_research_prep
 from src.api.focus_selection_routes import register_focus_selection_routes  # noqa: E402
 from src.api.research_freshness_routes import register_research_freshness_routes  # noqa: E402
 from src.api.cio_report_routes import register_cio_report_routes  # noqa: E402
+from src.api.deep_research_routes import register_deep_research_routes  # noqa: E402
 from src.api.scheduled_routes import (  # noqa: E402
     _start_scheduled_research_executor,
     _stop_scheduled_research_executor,
@@ -388,6 +389,7 @@ register_risk_research_preparation_routes(app, require_auth)
 register_focus_selection_routes(app, require_auth)
 register_research_freshness_routes(app, require_auth)
 register_cio_report_routes(app, require_auth)
+register_deep_research_routes(app, require_auth)
 
 from src.api.strategy_routes import register_strategy_routes  # noqa: E402
 register_strategy_routes(app)
