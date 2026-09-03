@@ -19,12 +19,12 @@ VALUATION_LABELS = {
     "FAIR": "恢复合理估值区间",
     "OVERVALUED": "离开低估区域，估值偏高",
     "DEEPLY_OVERVALUED": "离开低估区域，估值偏高",
-    "NO_LONGER_LEADER": "不再属于当前L3龙头",
+    "NO_LONGER_LEADER": "已移出低估龙头研究范围：当前不再属于三级行业Top1/Top2",
 }
 
 EXIT_REASON_LABELS = {
     "VALUATION_RECOVERED": "估值恢复至非低估区间",
-    "NO_LONGER_LEADER": "不再属于当前L3龙头",
+    "NO_LONGER_LEADER": "已移出低估龙头研究范围：当前不再属于三级行业Top1/Top2",
 }
 
 

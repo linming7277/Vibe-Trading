@@ -74,18 +74,18 @@ const thesisStatusLabels: Record<string, string> = {
 };
 
 const entryStatusLabels: Record<string, string> = {
-  HIGH_ATTENTION: "重点关注",
-  ATTENTION: "值得关注",
-  WATCH: "继续观察",
-  WAIT: "暂不具备明显优势",
-  BLOCKED: "暂停研究",
+  HIGH_ATTENTION: "价格条件高度值得关注",
+  ATTENTION: "价格条件值得关注",
+  WATCH: "价格条件继续观察",
+  WAIT: "当前价格条件等待",
+  BLOCKED: "当前研究条件存在阻断",
 };
 
 const exitStatusLabels: Record<string, string> = {
-  CRITICAL_REVIEW: "需要重点复核",
-  REVIEW: "建议认真检查",
-  WATCH: "继续观察",
-  NORMAL: "暂无明显压力",
+  CRITICAL_REVIEW: "需要立即复核核心研究逻辑",
+  REVIEW: "需要重点复核",
+  WATCH: "存在复核事项",
+  NORMAL: "当前暂无明显复核压力",
 };
 
 export function claimTypeLabel(value?: string | null) { return claimTypeLabels[String(value || "")] || "研究观点"; }

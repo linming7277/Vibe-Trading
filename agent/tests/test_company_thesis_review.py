@@ -270,7 +270,13 @@ def test_review_table_schema_version_and_no_cross_object_side_effects(tmp_path: 
     thesis, evidence, history, review = services(tmp_path)
     try:
         with sqlite3.connect(review.repository.db_path) as conn:
-            assert conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0] == "20"
+            # The workspace schema version advances with additive migrations;
+            # module tables must never require a separate bump to appear.
+            from src.research_workspace.store import ResearchWorkspaceStore
+
+            assert conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0] == str(
+                ResearchWorkspaceStore.SCHEMA_VERSION
+            )
             assert conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='company_thesis_reviews'"
             ).fetchone()

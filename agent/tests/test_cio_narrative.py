@@ -85,7 +85,7 @@ def test_report_uses_new_boss_section_order_and_titles() -> None:
     positions = [md.find(f"## {i}. {t}") for i, t in enumerate(BOSS_SECTIONS, 1)]
     assert all(p != -1 for p in positions)
     assert positions == sorted(positions)
-    assert "## 5. 当前最核心的经营矛盾" in md and "## 14. 最终研究判断" in md
+    assert "## 6. 当前最核心的经营矛盾" in md and "## 15. 最终研究判断" in md
 
 
 def test_no_backend_english_tokens_leak_into_boss_narrative() -> None:
@@ -159,7 +159,7 @@ def test_watchpoints_are_prioritized_with_no_thesis_disclaimer() -> None:
 def test_final_verdict_has_reasoning_and_up_downgrade_conditions() -> None:
     md = _render()
     assert "暂缓优先研究" in md
-    assert "为什么是" in md and "最重要的正面因素" in md and "最大的限制" in md
+    assert "正面变化" in md and "最大风险" in md and "核心矛盾" in md
     assert "升级为重点研究" in md and "下调" in md
 
 

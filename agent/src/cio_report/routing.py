@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 
+WATCHPOINT = "WATCHPOINT"
 QUICK = "QUICK"
 FULL_REPORT = "FULL_REPORT"
 REFRESH = "REFRESH"
@@ -37,6 +38,7 @@ _VALUATION_RE = re.compile(r"估值|合理价值|价值区间|PE|PB|市盈率|�
 _RISK_RE = re.compile(r"风险|低估陷阱|债务|违约|质押")
 _MACRO_RE = re.compile(r"宏观|流动性|通胀|CPI|利率|降息|加息|社融|政策传导")
 _SPECIALIST_DEEPEN_RE = re.compile(r"具体|详细|展开|为什么|怎么回事|怎么形成")
+_WATCHPOINT_RE = re.compile(r"接下来|重点看什么|验证什么|最需要验证|盯什么|下一份财报|关注哪些指标|核心验证点")
 _QUICK_RE = re.compile(r"怎么看|怎么样|怎样|简单说下|值得.{0,3}(?:关注|看|研究)|分析一下|研究一下|现在|目前")
 
 
@@ -48,6 +50,8 @@ def classify_company_question(question: str) -> str:
         return REFRESH
     if _FULL_RE.search(text):
         return FULL_REPORT
+    if _WATCHPOINT_RE.search(text):
+        return WATCHPOINT
     if _MACRO_RE.search(text) and not _QUICK_RE.search(text):
         return SPECIALIST_MACRO
     if _SPECIALIST_DEEPEN_RE.search(text):

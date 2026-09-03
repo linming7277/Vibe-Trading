@@ -119,12 +119,22 @@ class ValuePriceZoneService:
                 "date": row["trade_date"], "open": row["open"], "high": row["high"], "low": row["low"],
                 "close": row["close"], "volume": row.get("volume") or 0.0, "amount": row.get("amount") or 0.0,
             } for row in cached]
-            coverage = self.tdx_store.adjusted_daily_bar_status("CN", symbol, adjustment_type="front")
+            # Coverage metadata must describe the same truncated window the
+            # bars came from.  For an as-of read the persisted latest-state
+            # coverage row would leak a newer last_date, so recompute it from
+            # the bars visible on or before ``as_of``.
+            if as_of is not None:
+                coverage = self.tdx_store.adjusted_daily_bar_status_as_of(
+                    "CN", symbol, adjustment_type="front", as_of=as_of.isoformat(),
+                )
+            else:
+                coverage = self.tdx_store.adjusted_daily_bar_status("CN", symbol, adjustment_type="front")
             status = str(coverage.get("coverage_status") or "INSUFFICIENT")
             message = "" if status in {"READY", "PARTIAL"} else "历史行情不足，暂无法计算可靠支撑/压力区。"
             return bars, {
                 "status": status, "message": message, "bars": len(bars), "dividend_type": "front",
                 "source": "adjusted_daily_bars", "first_date": coverage.get("first_date"), "last_date": coverage.get("last_date"),
+                "coverage_as_of_scoped": as_of is not None,
             }
         rows = self.tdx_store.list_records("klines", query=symbol, limit=40).get("items") or []
         selected: dict[str, Any] | None = None
@@ -254,10 +264,12 @@ class ValuePriceZoneService:
 
     def _peer_multiples(self, symbol: str, level3_code: str | None, as_of: date | None) -> dict[str, Any]:
         if not level3_code:
-            return {"status": "MISSING", "pe": [], "pb": [], "peer_count": 0, "message": "缺少三级行业归属，无法读取同业可比。"}
+            return {"status": "MISSING", "pe": [], "pb": [], "peer_count": 0, "pe_codes": [], "pb_codes": [], "message": "缺少三级行业归属，无法读取同业可比。"}
         members = self.tdx_store.list_records("research_terminal_industry_members", category=level3_code, limit=2_000).get("items") or []
         pe_values: list[float] = []
         pb_values: list[float] = []
+        pe_codes: list[str] = []
+        pb_codes: list[str] = []
         for member in members:
             code = str(self._record_payload(member).get("stock_code") or "")
             if not code or code == symbol:
@@ -267,12 +279,15 @@ class ValuePriceZoneService:
                 continue
             if (value := _number(fundamental.get("pe_ttm"))) is not None and value < 300:
                 pe_values.append(value)
+                pe_codes.append(code)
             if (value := _number(fundamental.get("pb_mrq"))) is not None and value < 50:
                 pb_values.append(value)
+                pb_codes.append(code)
         count = max(len(pe_values), len(pb_values))
         return {
             "status": "READY" if count >= self.config.min_peer_count else "PARTIAL" if count else "MISSING",
             "pe": pe_values, "pb": pb_values, "peer_count": count,
+            "pe_codes": pe_codes, "pb_codes": pb_codes,
             "message": "" if count >= self.config.min_peer_count else "同三级行业可用估值样本不足，估值区间会降级。",
         }
 
@@ -300,7 +315,7 @@ class ValuePriceZoneService:
             low_multiple, mid_multiple, high_multiple = (_percentile(pe_values, p) for p in (0.25, 0.50, 0.75))
             values = [current_price * growth * multiple / current_pe for multiple in (low_multiple, mid_multiple, high_multiple)]
             estimates.extend(values)
-            methods.append({"name": "预测利润 + 同三级行业 PE 可比", "status": "READY", "peer_count": len(pe_values),
+            methods.append({"name": "预测利润 + 同三级行业 PE 可比", "kind": "PE", "status": "READY", "peer_count": len(pe_values),
                             "multiple_low": round(low_multiple, 3), "multiple_mid": round(mid_multiple, 3), "multiple_high": round(high_multiple, 3),
                             "forecast_profit": base_profit, "fair_values": [round(value, 2) for value in values]})
         pb_values = list(peers.get("pb") or [])
@@ -308,11 +323,11 @@ class ValuePriceZoneService:
             low_multiple, mid_multiple, high_multiple = (_percentile(pb_values, p) for p in (0.25, 0.50, 0.75))
             values = [current_price * multiple / current_pb for multiple in (low_multiple, mid_multiple, high_multiple)]
             estimates.extend(values)
-            methods.append({"name": "同三级行业 PB 可比", "status": "READY", "peer_count": len(pb_values),
+            methods.append({"name": "同三级行业 PB 可比", "kind": "PB", "status": "READY", "peer_count": len(pb_values),
                             "multiple_low": round(low_multiple, 3), "multiple_mid": round(mid_multiple, 3), "multiple_high": round(high_multiple, 3),
                             "fair_values": [round(value, 2) for value in values]})
         historical_method = {
-            "name": "公司自身历史估值位置", "status": historical.get("historical_valuation_status", "INSUFFICIENT_DATA"),
+            "name": "公司自身历史估值位置", "kind": "HISTORICAL", "status": historical.get("historical_valuation_status", "INSUFFICIENT_DATA"),
             "cheapness_percentile": historical.get("cheapness_percentile"),
             "metrics": historical.get("historical_percentiles", {}),
             "message": "历史估值位置仅用于解释当前估值的一致性，不直接改写合理价值区间。",
@@ -486,7 +501,12 @@ class ValuePriceZoneService:
                         if target else "缺少可用行情，未计算正式估值。"
                     ),
                 },
-                "current_fundamentals": "READY" if fundamentals_ready else "MISSING", "peer_comparables": {key: peers.get(key) for key in ("status", "peer_count", "message")},
+                "current_fundamentals": "READY" if fundamentals_ready else "MISSING",
+                "peer_comparables": {
+                    "status": peers.get("status"), "peer_count": peers.get("peer_count"), "message": peers.get("message"),
+                    "pe_peer_count": len(peers.get("pe") or []), "pb_peer_count": len(peers.get("pb") or []),
+                    "pe_codes": list(peers.get("pe_codes") or []), "pb_codes": list(peers.get("pb_codes") or []),
+                },
                 "forecast": str((snapshot or {}).get("forecast_status") or "MISSING"), "financial_snapshot": "READY" if snapshot else "MISSING",
             },
             "historical_valuation": historical,

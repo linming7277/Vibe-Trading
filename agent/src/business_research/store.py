@@ -6,7 +6,7 @@ import json
 import sqlite3
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +52,14 @@ class BusinessResearchStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_business_research_company_time
                     ON company_business_research_snapshots(stock_code,data_as_of DESC,created_at DESC);
+                CREATE TABLE IF NOT EXISTS business_analysis_leases (
+                    lease_key TEXT PRIMARY KEY,
+                    stock_code TEXT NOT NULL,
+                    source_hash TEXT NOT NULL,
+                    owner TEXT NOT NULL,
+                    acquired_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL
+                );
             """)
 
     def close(self) -> None:
@@ -101,25 +109,77 @@ class BusinessResearchStore:
             (stock_code.upper(), source_hash),
         ).fetchone())
 
+    def list_snapshots(self, stock_code: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Newest-first snapshot rows for content-level PIT profile recovery.
+
+        Snapshot ``data_as_of`` carries the profile cache touch date, so a
+        snapshot persisted after ``as_of`` may still embed profile content
+        whose business dates are valid at ``as_of``; callers therefore need the
+        sequence, not just the date-filtered latest.
+        """
+        return [self._row(row) for row in self._conn.execute(
+            "SELECT * FROM company_business_research_snapshots WHERE stock_code=? "
+            "ORDER BY data_as_of DESC,created_at DESC,rowid DESC LIMIT ?",
+            (stock_code.upper(), limit),
+        ).fetchall()]
+
+    def acquire_analysis_lease(self, lease_key: str, stock_code: str, source_hash: str,
+                               owner: str, *, ttl_seconds: int = 600) -> bool:
+        """Single-flight lease: one model-analysis owner per source fingerprint.
+
+        An expired lease is recoverable by the next caller, so a crashed
+        analyst can never lock a company permanently.
+        """
+        now = datetime.now(timezone.utc)
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM business_analysis_leases WHERE lease_key=? AND expires_at<=?",
+                (lease_key, now.isoformat()),
+            )
+            try:
+                self._conn.execute(
+                    "INSERT INTO business_analysis_leases(lease_key,stock_code,source_hash,owner,acquired_at,expires_at)"
+                    " VALUES(?,?,?,?,?,?)",
+                    (lease_key, stock_code.upper(), source_hash, owner,
+                     now.isoformat(), (now + timedelta(seconds=ttl_seconds)).isoformat()),
+                )
+            except sqlite3.IntegrityError:
+                return False
+        return True
+
+    def release_analysis_lease(self, lease_key: str, owner: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM business_analysis_leases WHERE lease_key=? AND owner=?",
+                (lease_key, owner),
+            )
+
     def save(self, snapshot: dict[str, Any], *, configured: bool, provider: str, model: str) -> tuple[dict[str, Any], bool]:
         if existing := self.by_hash(snapshot["stock_code"], snapshot["source_hash"]):
             return existing, False
         timestamp = _now()
         snapshot_id = f"business_{uuid.uuid4().hex[:20]}"
         with self._lock, self._conn:
-            self._conn.execute(
-                """INSERT INTO company_business_research_snapshots(
-                   id,stock_code,company_name,data_as_of,source_hash,snapshot_json,analysis_status,
-                   analysis_json,agent_provider,agent_model,agent_error,created_at,updated_at
-                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (
-                    snapshot_id, snapshot["stock_code"], snapshot["company_name"], snapshot["data_as_of"],
-                    snapshot["source_hash"], json.dumps(snapshot, ensure_ascii=False, sort_keys=True),
-                    "NOT_RUN" if configured else "CONFIGURATION_REQUIRED", None, provider, model, "",
-                    timestamp, timestamp,
-                ),
-            )
-        return self.by_hash(snapshot["stock_code"], snapshot["source_hash"]) or {}, True
+            try:
+                self._conn.execute(
+                    """INSERT INTO company_business_research_snapshots(
+                       id,stock_code,company_name,data_as_of,source_hash,snapshot_json,analysis_status,
+                       analysis_json,agent_provider,agent_model,agent_error,created_at,updated_at
+                       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        snapshot_id, snapshot["stock_code"], snapshot["company_name"], snapshot["data_as_of"],
+                        snapshot["source_hash"], json.dumps(snapshot, ensure_ascii=False, sort_keys=True),
+                        "NOT_RUN" if configured else "CONFIGURATION_REQUIRED", None, provider, model, "",
+                        timestamp, timestamp,
+                    ),
+                )
+            except sqlite3.IntegrityError:
+                # Concurrent callers may race past the by_hash pre-check; the
+                # UNIQUE(stock_code, source_hash) guard makes the save
+                # idempotent — the surviving row wins and reuses.
+                pass
+        row = self.by_hash(snapshot["stock_code"], snapshot["source_hash"]) or {}
+        return row, row.get("id") == snapshot_id
 
     def update_analysis(self, snapshot_id: str, *, status: str, provider: str, model: str,
                         analysis: dict[str, Any] | None = None, error: str = "") -> dict[str, Any]:

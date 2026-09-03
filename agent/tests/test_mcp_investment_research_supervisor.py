@@ -23,6 +23,8 @@ def test_supervisor_mcp_tools_are_registered() -> None:
     assert "ask_macro_policy_researcher" in names
     assert "ask_valuation_researcher" in names
     assert "ask_risk_researcher" in names
+    assert "get_value_strategy_events" in names
+    assert "get_value_watchpoints" in names
 
 
 def test_ask_supervisor_returns_serialized_read_only_brief(monkeypatch) -> None:

@@ -59,7 +59,7 @@ def test_builder_degrades_per_section_instead_of_failing(tmp_path, monkeypatch) 
 
     monkeypatch.setattr(builder.CioSectionBuilder, "_financial", _boom)
     sections = build_all_sections("CN", "605108.SH", "2026-08-28")
-    assert len(sections) == len(SECTION_TITLES) == 14
+    assert len(sections) == len(SECTION_TITLES) == 17
     statuses = {s["section_type"]: s["structured_payload"].get("status") for s in sections}
     # financial-dependent sections degrade; independent ones still build
     assert statuses["financial_path"] == "MISSING"
@@ -116,7 +116,7 @@ def test_section_reuse_marking_and_stale_classification(tmp_path, monkeypatch) -
 
     # Simulate a changed upstream: bump one section fingerprint.
     changed = _simple_sections()
-    changed[8]["input_fingerprint"] = "fp-moved"  # valuation section
+    next(x for x in changed if x["section_type"] == "valuation")["input_fingerprint"] = "fp-moved"
     monkeypatch.setattr(service_mod, "build_all_sections", lambda market, code, as_of: changed)
     rebuilt = svc.build_report("CN", "600460.SH", as_of="2026-08-28")
     statuses = {s["section_type"]: s["freshness_status"] for s in rebuilt["sections"]}
@@ -127,7 +127,7 @@ def test_section_reuse_marking_and_stale_classification(tmp_path, monkeypatch) -
     assert live["overall"] == "FRESH"
     # Move the source again → that section reads STALE without a rebuild.
     moved_again = _simple_sections()
-    moved_again[8]["input_fingerprint"] = "fp-moved-2"
+    next(x for x in moved_again if x["section_type"] == "valuation")["input_fingerprint"] = "fp-moved-2"
     monkeypatch.setattr(service_mod, "build_all_sections", lambda market, code, as_of: moved_again)
     live2 = svc.classify_report_sections("CN", "600460.SH", as_of="2026-08-28")
     assert live2["overall"] == "PARTIALLY_STALE"
@@ -293,6 +293,7 @@ def test_no_thesis_watchpoint_fallback_is_deterministic(monkeypatch) -> None:
         "forecast": {"scenarios": {"BASE": {"forecast": [{"year": "2028E", "revenue": 205.9e8}]}}},
     }
     builder._zones = lambda: {"valuation": {"fair_value_mid": 28.18}}  # type: ignore[method-assign]
+    builder._watchpoint_projection = lambda: {}  # type: ignore[method-assign]
     section = builder.build_thesis_watchpoints()
     text = section["narrative_md"]
     assert "尚未建立" in text and "确定性降级生成" in text
@@ -314,7 +315,7 @@ def test_section_failure_never_leaks_exception_text(monkeypatch) -> None:
     monkeypatch.setitem(builder_mod._BUILDERS, "leader_quality", _boom)
     sections = build_all_sections("CN", "600460.SH", "2026-08-28")
     all_text = "\n".join(s["narrative_md"] for s in sections)
-    assert len(sections) == 14
+    assert len(sections) == 17
     assert "ValueError" not in all_text and "Traceback" not in all_text
     assert "数据处理暂不可用" in all_text
 
@@ -361,7 +362,7 @@ def test_trading_language_still_filtered_from_all_sections() -> None:
     assert "买入" not in section["narrative_md"] and "仓位" not in section["narrative_md"]
 
 
-def test_thesis_invalid_conditions_render_dict_entries_as_text() -> None:
+def test_thesis_invalid_conditions_render_dict_entries_as_text(monkeypatch) -> None:
     """Round1 follow-up: invalid_conditions may be {condition,status} dicts."""
     builder = CioSectionBuilder("CN", "605108.SH", "2026-08-28")
     builder._thesis = lambda: {  # type: ignore[method-assign]
@@ -373,6 +374,7 @@ def test_thesis_invalid_conditions_render_dict_entries_as_text() -> None:
         ],
     }
     builder._financial = lambda: {"analysis": {"key_metrics_to_monitor": ["毛利率"]}}  # type: ignore[method-assign]
+    builder._watchpoint_projection = lambda: {}  # type: ignore[method-assign]
     text = builder.build_thesis_watchpoints()["narrative_md"]
     assert "- 盈利或经营现金流连续恶化。" in text
     assert "{'condition'" not in text and "AI 初步待复核" in text

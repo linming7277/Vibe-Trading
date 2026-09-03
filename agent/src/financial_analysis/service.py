@@ -884,8 +884,17 @@ class FinancialAnalysisService:
         }
 
     @staticmethod
-    def validate_claims(result: dict[str, Any], manifest: dict[str, dict[str, Any]]) -> dict[str, Any]:
-        """Validate the small claims contract before anything is persisted."""
+    def validate_claims(result: dict[str, dict[str, Any]] | dict[str, Any], manifest: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        """Per-claim validation: one violating claim rejects itself, never the batch.
+
+        Top-level structure (schema shape, summary presence, claim-count
+        ceiling, trading language in the single summary field) remains a
+        whole-result refusal.  Every claim-level rule — schema, type,
+        confidence, source existence, FACT/FORECAST source discipline, numeric
+        evidence, trading language in the claim text — is enforced
+        independently per claim; rejected claims are returned as diagnostics
+        alongside the accepted subset (2026-09-03 reliability fix).
+        """
         if set(result) != {"summary", "claims"}:
             raise ClaimValidationError("TOP_LEVEL_SCHEMA_INVALID", "claims schema must contain only summary and claims")
         summary = str(result.get("summary") or "").strip()
@@ -896,56 +905,78 @@ class FinancialAnalysisService:
             raise ClaimValidationError("TOP_LEVEL_SCHEMA_INVALID", "claims must be a list")
         if len(claims) > MAX_CLAIMS:
             raise ClaimValidationError("TOO_MANY_CLAIMS", f"claims exceeds max_claims={MAX_CLAIMS}")
-        if PROHIBITED_ACTIONS.search(json.dumps(result, ensure_ascii=False)):
-            raise ClaimValidationError("TRADING_LANGUAGE", "claims contain prohibited trading action")
+        if PROHIBITED_ACTIONS.search(summary):
+            raise ClaimValidationError("TRADING_LANGUAGE", "claims summary contains prohibited trading action")
         # Retain the existing small natural-language counters, while concrete
         # numbers must be supported by the claim's own cited Evidence.
         common_counters = {"1", "2", "3", "5", "8"}
         normalized: list[dict[str, Any]] = []
+        rejected: list[dict[str, Any]] = []
         for index, raw in enumerate(claims):
-            if not isinstance(raw, dict) or set(raw) != {"type", "text", "source_keys", "confidence"}:
-                raise ClaimValidationError("TOP_LEVEL_SCHEMA_INVALID", "invalid claim schema", claim_index=index)
-            claim_type = str(raw.get("type") or "").upper()
-            text = str(raw.get("text") or "").strip()
-            confidence = str(raw.get("confidence") or "").upper()
-            keys = raw.get("source_keys")
-            if claim_type not in CLAIM_TYPES:
-                raise ClaimValidationError("INVALID_CLAIM_TYPE", "invalid claim type", claim_index=index)
-            if confidence not in CLAIM_CONFIDENCES:
-                raise ClaimValidationError("INVALID_CONFIDENCE", "invalid claim confidence", claim_index=index)
-            if not text:
-                raise ClaimValidationError("EMPTY_CLAIM_TEXT", "claim text is required", claim_index=index)
-            if not isinstance(keys, list) or any(not isinstance(key, str) or not key.strip() for key in keys):
-                raise ClaimValidationError("UNKNOWN_SOURCE_KEY", "claim source_keys must be a string array", claim_index=index)
-            keys = list(dict.fromkeys(key.strip() for key in keys))
-            if claim_type != "UNKNOWN" and not keys:
-                codes = {"FACT": "FACT_WITHOUT_SOURCE", "INFERENCE": "INFERENCE_WITHOUT_SOURCE", "FORECAST": "FORECAST_WITHOUT_SOURCE"}
-                raise ClaimValidationError(codes[claim_type], f"{claim_type} requires source_keys", claim_index=index)
-            missing = sorted(set(keys) - set(manifest))
-            if missing:
-                raise ClaimValidationError("UNKNOWN_SOURCE_KEY", "claim references unknown source keys", claim_index=index, source_keys=missing)
-            forecast_keys = [key for key in keys if key.startswith("FORECAST_")]
-            if claim_type == "FACT" and forecast_keys:
-                raise ClaimValidationError("FACT_USING_FORECAST_SOURCE", "FACT cannot reference forecast source keys", claim_index=index, source_keys=forecast_keys)
-            if claim_type == "FORECAST" and (not keys or len(forecast_keys) != len(keys)):
-                raise ClaimValidationError("FORECAST_USING_NON_FORECAST_SOURCE", "FORECAST must reference forecast source keys only", claim_index=index, source_keys=keys)
-            if claim_type == "FORECAST" and not re.search(r"情景|预测|推演|forecast", text, re.I):
-                raise ClaimValidationError("FORECAST_USING_NON_FORECAST_SOURCE", "FORECAST text must identify a scenario or forecast", claim_index=index, source_keys=keys)
-            source_entries = [manifest[key] for key in keys]
-            allowed_numbers = _claim_numeric_values(source_entries) | common_counters
-            invented = sorted(
-                match.group(0)
-                for match in _NUMERIC_TOKEN.finditer(text)
-                if not _numeric_is_supported(
-                    token=match.group(0), token_start=match.start(), token_end=match.end(), text=text,
-                    source_entries=source_entries, allowed_tokens=allowed_numbers,
+            try:
+                normalized_claim = FinancialAnalysisService._validate_single_claim(
+                    raw, index, manifest, common_counters,
                 )
+            except ClaimValidationError as exc:
+                details = exc.audit_dict() if hasattr(exc, "audit_dict") else {}
+                rejected.append({
+                    "claim_index": index,
+                    "type": str(raw.get("type")) if isinstance(raw, dict) else None,
+                    "reason_code": str(details.get("validation_error_code") or "CLAIM_REJECTED"),
+                    "detail": str(details.get("error_summary") or details.get("detail") or ""),
+                })
+                continue
+            normalized.append(normalized_claim)
+        return {"summary": summary, "claims": normalized, "rejected_claims": rejected}
+
+    @staticmethod
+    def _validate_single_claim(raw: Any, index: int, manifest: dict[str, dict[str, Any]],
+                               common_counters: set[str]) -> dict[str, Any]:
+        """Enforce every claim-level rule for one claim; raise to reject only it."""
+        if not isinstance(raw, dict) or set(raw) != {"type", "text", "source_keys", "confidence"}:
+            raise ClaimValidationError("TOP_LEVEL_SCHEMA_INVALID", "invalid claim schema", claim_index=index)
+        claim_type = str(raw.get("type") or "").upper()
+        text = str(raw.get("text") or "").strip()
+        confidence = str(raw.get("confidence") or "").upper()
+        keys = raw.get("source_keys")
+        if claim_type not in CLAIM_TYPES:
+            raise ClaimValidationError("INVALID_CLAIM_TYPE", "invalid claim type", claim_index=index)
+        if confidence not in CLAIM_CONFIDENCES:
+            raise ClaimValidationError("INVALID_CONFIDENCE", "invalid claim confidence", claim_index=index)
+        if not text:
+            raise ClaimValidationError("EMPTY_CLAIM_TEXT", "claim text is required", claim_index=index)
+        if PROHIBITED_ACTIONS.search(text):
+            raise ClaimValidationError("TRADING_LANGUAGE", "claim contains prohibited trading action", claim_index=index)
+        if not isinstance(keys, list) or any(not isinstance(key, str) or not key.strip() for key in keys):
+            raise ClaimValidationError("UNKNOWN_SOURCE_KEY", "claim source_keys must be a string array", claim_index=index)
+        keys = list(dict.fromkeys(key.strip() for key in keys))
+        if claim_type != "UNKNOWN" and not keys:
+            codes = {"FACT": "FACT_WITHOUT_SOURCE", "INFERENCE": "INFERENCE_WITHOUT_SOURCE", "FORECAST": "FORECAST_WITHOUT_SOURCE"}
+            raise ClaimValidationError(codes[claim_type], f"{claim_type} requires source_keys", claim_index=index)
+        missing = sorted(set(keys) - set(manifest))
+        if missing:
+            raise ClaimValidationError("UNKNOWN_SOURCE_KEY", "claim references unknown source keys", claim_index=index, source_keys=missing)
+        forecast_keys = [key for key in keys if key.startswith("FORECAST_")]
+        if claim_type == "FACT" and forecast_keys:
+            raise ClaimValidationError("FACT_USING_FORECAST_SOURCE", "FACT cannot reference forecast source keys", claim_index=index, source_keys=forecast_keys)
+        if claim_type == "FORECAST" and (not keys or len(forecast_keys) != len(keys)):
+            raise ClaimValidationError("FORECAST_USING_NON_FORECAST_SOURCE", "FORECAST must reference forecast source keys only", claim_index=index, source_keys=keys)
+        if claim_type == "FORECAST" and not re.search(r"情景|预测|推演|forecast", text, re.I):
+            raise ClaimValidationError("FORECAST_USING_NON_FORECAST_SOURCE", "FORECAST text must identify a scenario or forecast", claim_index=index, source_keys=keys)
+        source_entries = [manifest[key] for key in keys]
+        allowed_numbers = _claim_numeric_values(source_entries) | common_counters
+        invented = sorted(
+            match.group(0)
+            for match in _NUMERIC_TOKEN.finditer(text)
+            if not _numeric_is_supported(
+                token=match.group(0), token_start=match.start(), token_end=match.end(), text=text,
+                source_entries=source_entries, allowed_tokens=allowed_numbers,
             )
-            if invented:
-                raise ClaimValidationError("NUMERIC_MISMATCH", "claim contains numbers absent from manifest", claim_index=index,
-                                           source_keys=keys, metadata={"numeric_tokens": invented})
-            normalized.append({"type": claim_type, "text": text, "source_keys": keys, "confidence": confidence})
-        return {"summary": summary, "claims": normalized}
+        )
+        if invented:
+            raise ClaimValidationError("NUMERIC_MISMATCH", "claim contains numbers absent from manifest", claim_index=index,
+                                       source_keys=keys, metadata={"numeric_tokens": invented})
+        return {"type": claim_type, "text": text, "source_keys": keys, "confidence": confidence}
 
     @staticmethod
     def _summary_only_claims(text: str | None) -> dict[str, Any]:
@@ -1011,7 +1042,14 @@ class FinancialAnalysisService:
         snapshot = self.prepare(stock_code, as_of=as_of)
         if refresh_error and refresh_error not in snapshot["data_gaps"]:
             snapshot["data_gaps"].append(refresh_error)
-        if snapshot["analysis_status"] == "COMPLETED" and not force:
+        if snapshot["analysis_status"] in {"COMPLETED", "PARTIAL"} and not force:
+            # COMPLETED and PARTIAL (SUMMARY_ONLY / all claims rejected) are
+            # both terminal for one source fingerprint: re-analysis requires
+            # explicit force (manual repair) or a changed fingerprint/formula
+            # (which prepares a different snapshot).  Background callers can
+            # never auto-upgrade a claim-less result (2026-09-03 fix).
+            if snapshot["analysis_status"] == "PARTIAL":
+                return {**snapshot, "idempotent_reuse": True}
             # research-cache plan §20.2: a completed narrative is reusable only
             # under the prompt/model contract that produced it.
             stored = dict(snapshot.get("analysis") or {})
@@ -1038,7 +1076,7 @@ class FinancialAnalysisService:
         capabilities = resolve_structured_output_capabilities(config)
         contract_schema = self.claims_contract_schema(manifest)
 
-        def invoke_structured(mode: StructuredOutputMode, response_format: dict[str, Any] | None) -> dict[str, Any]:
+        def invoke_once(mode: StructuredOutputMode, response_format: dict[str, Any] | None) -> dict[str, Any]:
             connection_invoke = getattr(self.runtime, "invoke_with_connection", None)
             if config.get("base_url") and callable(connection_invoke):
                 return connection_invoke(
@@ -1050,6 +1088,17 @@ class FinancialAnalysisService:
                 role="financial_analyst", phase="FINANCIAL_ANALYSIS", provider=config["provider"],
                 model=config["model"], instruction=instruction, payload=payload, target_schema=response_format,
             )
+
+        def invoke_structured(mode: StructuredOutputMode, response_format: dict[str, Any] | None) -> dict[str, Any]:
+            # Transport-transient errors (timeout / connection / 5xx / 429)
+            # get exactly one extra attempt per logical analysis.  Validation
+            # failures never reach this layer and are never retried.
+            try:
+                return invoke_once(mode, response_format)
+            except Exception as exc:
+                if mode is not StructuredOutputMode.TEXT_ONLY and self._transient_transport(exc):
+                    return invoke_once(mode, response_format)
+                raise
 
         try:
             outcome = self.structured_runtime.run(
@@ -1069,31 +1118,56 @@ class FinancialAnalysisService:
                 "error_types": outcome.error_types,
                 "provider": config["provider"], "model": config["model"],
             }
-            try:
-                if outcome.parsed is None:
-                    raise RuntimeError("all structured output modes failed")
+            rejected_claims: list[dict[str, Any]] = []
+            if outcome.parsed is not None:
                 claims_result = outcome.parsed
+                rejected_claims = list(claims_result.get("rejected_claims") or [])
                 quality_status, fallback_path = "STRUCTURED", "structured"
-            except Exception as validation_exc:
+                if not claims_result.get("claims"):
+                    # Every claim was rejected per-claim: keep the model's own
+                    # summary, expose diagnostics, and mark PARTIAL — a
+                    # claim-less result must never read as deep-complete.
+                    quality_status, fallback_path = "SUMMARY_ONLY", "all_claims_rejected"
+            elif str(outcome.text or "").strip():
                 structured_metadata["structured_output_mode_used"] = StructuredOutputMode.TEXT_ONLY.value
-                structured_metadata["error_types"] = [
-                    *outcome.error_types,
-                    {"mode": outcome.mode_used, "type": type(validation_exc).__name__},
-                ]
                 claims_result = self._summary_only_claims(outcome.text)
                 quality_status, fallback_path = "SUMMARY_ONLY", "summary_only"
+            else:
+                # Structured parse failed and even the TEXT_ONLY fallback
+                # produced nothing — a technical transport failure, not a
+                # content verdict (2026-09-03 fix: FAILED, not placeholder).
+                return self.store.update_agent_result(
+                    snapshot["id"], status="FAILED", provider=config["provider"], model=config["model"],
+                    error="FINANCIAL_ANALYSIS_TRANSPORT_FAILED: structured and text modes produced no output",
+                )
+            claims_status = "CLAIMS_READY" if quality_status == "STRUCTURED" and claims_result.get("claims") else "SUMMARY_ONLY"
+            final_status = "COMPLETED" if claims_status == "CLAIMS_READY" else "PARTIAL"
             analysis = self._compatibility_analysis(snapshot, claims_result, manifest,
                                                     quality_status=quality_status, fallback_path=fallback_path,
                                                     fallback_failure_types=structured_metadata["error_types"],
                                                     structured_metadata=structured_metadata)
+            analysis["claims_status"] = claims_status
+            analysis["rejected_claims"] = rejected_claims
             return self.store.update_agent_result(
-                snapshot["id"], status="COMPLETED", provider=config["provider"], model=config["model"], analysis=analysis,
+                snapshot["id"], status=final_status, provider=config["provider"], model=config["model"], analysis=analysis,
             )
         except Exception as exc:
             return self.store.update_agent_result(
                 snapshot["id"], status="FAILED", provider=config["provider"], model=config["model"],
                 error=f"{type(exc).__name__}: {exc}",
             )
+
+    @staticmethod
+    def _transient_transport(exc: Exception) -> bool:
+        """Classify clear transport-transient failures (retry-once eligible)."""
+        name = type(exc).__name__
+        if name in {"APITimeoutError", "APIConnectionError", "TimeoutError", "ConnectionError",
+                    "ReadTimeout", "RemoteDisconnected", "ConnectTimeout"}:
+            return True
+        if getattr(exc, "retryable", None) is True:
+            return True
+        status = getattr(exc, "status_code", None)
+        return bool(status) and (status in (408, 429) or status >= 500)
 
     def chat(self, stock_code: str, *, question: str, as_of: str | None = None,
              history: list[dict[str, str]] | None = None,

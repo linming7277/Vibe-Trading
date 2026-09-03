@@ -302,6 +302,34 @@ class TdxDataStore:
                     next_run_at TEXT,
                     updated_at TEXT NOT NULL
                 );
+                -- Point-in-time market-close qualification (PIT remediation
+                -- V1).  A view, not a copy: the status stays derivable for
+                -- every historical date from immutable run/dataset records
+                -- and is never backfilled or mutated retroactively.
+                CREATE VIEW IF NOT EXISTS v_market_close_qualifications AS
+                SELECT
+                    rr.market,
+                    rr.market_date,
+                    rr.snapshot_id,
+                    rr.status AS run_status,
+                    rr.completed_at,
+                    (SELECT ds.status FROM dataset_snapshots ds
+                      WHERE ds.snapshot_id = rr.snapshot_id AND ds.dataset = 'quotes') AS quotes_status,
+                    (SELECT ds.item_count FROM dataset_snapshots ds
+                      WHERE ds.snapshot_id = rr.snapshot_id AND ds.dataset = 'quotes') AS quotes_item_count,
+                    CASE
+                        WHEN rr.status = 'completed'
+                         AND (SELECT ds.status FROM dataset_snapshots ds
+                               WHERE ds.snapshot_id = rr.snapshot_id AND ds.dataset = 'quotes') = 'ready'
+                         AND COALESCE((SELECT ds.item_count FROM dataset_snapshots ds
+                               WHERE ds.snapshot_id = rr.snapshot_id AND ds.dataset = 'quotes'), 0) >= 5000
+                        THEN 'QUALIFIED'
+                        WHEN rr.status = 'completed' THEN 'PARTIAL'
+                        ELSE 'FAILED'
+                    END AS qualification,
+                    rr.rowid AS run_rowid
+                FROM refresh_runs rr
+                WHERE rr.profile = 'market_close';
                 """
             )
             module_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(module_state)")}
@@ -596,6 +624,34 @@ class TdxDataStore:
             "bar_count": 0, "first_date": None, "last_date": None, "coverage_status": "INSUFFICIENT",
             "source": "TongDaXin", "source_version": "get_market_data/front/v1",
             "fetched_at": None, "source_hash": "", "error": "not_cached",
+        }
+
+    def adjusted_daily_bar_status_as_of(
+        self, market: str, stock_code: str, *, adjustment_type: str = "front", as_of: str,
+    ) -> dict[str, Any]:
+        """Coverage metadata scoped to ``trade_date <= as_of`` only.
+
+        The persisted coverage row is a mutable latest-state projection; an
+        as-of read must never surface a ``last_date`` newer than the requested
+        business date.  This recomputes count/first/last/status from the same
+        stored bars the reader would select, read-only.
+        """
+        market, stock_code = str(market).upper(), str(stock_code).upper()
+        with self._lock:
+            row = self._conn.execute(
+                """SELECT COUNT(*) AS bar_count, MIN(trade_date) AS first_date, MAX(trade_date) AS last_date
+                   FROM adjusted_daily_bars
+                   WHERE market=? AND stock_code=? AND adjustment_type=? AND trade_date<=?""",
+                (market, stock_code, adjustment_type, str(as_of)[:10]),
+            ).fetchone()
+        count = int(row["bar_count"] if row else 0)
+        return {
+            "market": market, "stock_code": stock_code, "adjustment_type": adjustment_type,
+            "bar_count": count,
+            "first_date": row["first_date"] if row else None,
+            "last_date": row["last_date"] if row else None,
+            "coverage_status": self._daily_bar_coverage_status(count),
+            "as_of": str(as_of)[:10],
         }
 
     def get_adjusted_daily_bars(
@@ -1131,6 +1187,25 @@ class TdxDataStore:
                 (profile, market, market_date),
             ).fetchone()[0]
         return int(value)
+
+    def market_close_qualifications(self, market: str = "CN", *, limit: int = 60) -> list[dict[str, Any]]:
+        """Read-only QUALIFIED/PARTIAL/FAILED derivation per market date."""
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT * FROM v_market_close_qualifications
+                   WHERE market=? ORDER BY market_date DESC, run_rowid DESC LIMIT ?""",
+                (market.upper(), max(1, int(limit))),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def market_close_qualification(self, market_date: str, market: str = "CN") -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                """SELECT * FROM v_market_close_qualifications
+                   WHERE market=? AND market_date=? ORDER BY run_rowid DESC LIMIT 1""",
+                (market.upper(), str(market_date)[:10]),
+            ).fetchone()
+        return dict(row) if row else None
 
     @staticmethod
     def _decode_refresh_run(row: sqlite3.Row) -> dict[str, Any]:

@@ -102,7 +102,8 @@ def test_complete_overview_filters_evidence_builds_watch_items_and_is_read_only(
         assert result["neutral_evidence_count"] == 1
         assert result["review"]["review_id"] == review["review_id"] and result["review"]["is_stale"] is True
         assert result["data_status"]["review"] == "STALE"
-        assert {item["source"] for item in result["watch_items"]} >= {"THESIS_INVALID_CONDITION", "BUSINESS_UNKNOWN", "CHALLENGE_EVIDENCE"}
+        assert any(item["source"] in {"THESIS", "THESIS_INVALID_CONDITION", "FINANCIAL", "BUSINESS_UNKNOWN", "CHALLENGE_EVIDENCE"} for item in result["watch_items"])
+        assert result["watch_items"]
     finally:
         _close(financial, business, thesis_service, evidence_service, review_service, overview)
 

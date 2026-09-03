@@ -574,6 +574,8 @@ export interface CompanyThesis {
   source_draft_id?: string | null;
   created_by?: string;
   invalid_conditions?: Array<{ condition?: string; text?: string; status?: string }>;
+  supporting_conditions?: Array<{ condition?: string; text?: string; status?: string; role?: string }>;
+  key_metrics_to_monitor?: Array<{ condition?: string; text?: string; metric?: string; type?: string } | string>;
   created_at?: string;
   updated_at?: string;
 }
@@ -588,6 +590,8 @@ export interface CompanyThesisDraft {
   status: "FORMING" | "STRENGTHENING" | "UNCHANGED" | "WEAKENING" | "FALSIFIED";
   confidence: "LOW" | "MEDIUM" | "HIGH";
   invalid_conditions: Array<{ condition: string; status?: string }>;
+  key_assumptions?: Array<{ condition?: string; text?: string; type?: string }>;
+  key_metrics_to_monitor?: Array<{ condition?: string; text?: string; metric?: string; type?: string } | string>;
   source_data_as_of?: string | null;
   source_snapshots: Array<{ domain: string; snapshot_id?: string; data_as_of?: string }>;
   source_refs: Array<{ domain: string; type: string; text: string; source_keys: string[]; confidence: string }>;
@@ -658,6 +662,39 @@ export interface CompanyResearchOverviewCitation {
   period?: string | null;
 }
 
+export interface ValueWatchpoint {
+  category: string;
+  title: string;
+  current_state: string;
+  positive_condition: string;
+  negative_condition: string;
+  next_review_anchor?: string | null;
+  next_review_label?: string;
+  source_module: string;
+  source_module_label?: string;
+  source_refs: Array<Record<string, unknown>>;
+  research_as_of?: string | null;
+  formula_version: string;
+  importance_tier: "CRITICAL" | "HIGH" | "NORMAL" | "LOW" | string;
+  cautions: string[];
+  data_status?: string;
+}
+
+export interface ValueWatchpointProjection {
+  stock_code: string;
+  stock_name: string;
+  research_as_of?: string | null;
+  primary_action?: string | null;
+  focus_tier?: string | null;
+  watchpoints: ValueWatchpoint[];
+  top_watchpoints: ValueWatchpoint[];
+  data_gaps: Array<{ category: string; description: string; source_module: string; research_as_of?: string | null }>;
+  suggested_research_need?: string | null;
+  source_freshness?: Record<string, string | null | undefined>;
+  formula_version: string;
+  read_only?: boolean;
+}
+
 export interface CompanyResearchOverview {
   company: { market: string; stock_code: string; stock_name: string };
   business_summary: { status: string; snapshot_id: string | null; data_as_of?: string | null; main_business?: string; description?: string; products?: string[]; product_note?: string; business_model?: string; changes: string[]; claims: BusinessClaim[]; traceability_status?: string };
@@ -667,7 +704,9 @@ export interface CompanyResearchOverview {
   neutral_evidence_count: number;
   thesis: null | { thesis_id: string; title: string; core_thesis: string; status: string; status_label: string; confidence: string; version: number; updated_at?: string; invalid_conditions: Array<{ condition: string; status: string }>; history_count: number };
   review: null | { review_id: string; review_status: string; is_stale: boolean; support_count: number; challenge_count: number; neutral_count: number; recommended_status: string; recommended_confidence: string; review_reason: string; created_at: string };
-  watch_items: Array<{ source: string; text: string }>;
+  watch_items: Array<{ source: string; text: string; title?: string; current_state?: string }>;
+  top_watchpoints?: ValueWatchpoint[];
+  data_gaps?: Array<{ category: string; description: string; source_module: string; research_as_of?: string | null }>;
   data_status: { financial: string; business: string; thesis: "CREATED" | "NOT_CREATED"; review: "CURRENT" | "STALE" | "NOT_CREATED" };
 }
 
@@ -859,6 +898,19 @@ export interface HistoricalValuationHistory { stock_code: string; as_of: string 
 export interface EntryResearchZone { label: string; low: number | null; high: number | null; kind: string; strength?: string | null; }
 export interface EntryResearch { stock_code: string; as_of: string | null; current_price: number | null; entry_score: number; entry_level: "HIGH_ATTENTION" | "ATTENTION" | "WATCH" | "WAIT" | "BLOCKED"; entry_level_label: string; confidence: "HIGH" | "MEDIUM" | "LOW"; valuation_score: number; historical_valuation_score: number; support_score: number; thesis_score: number; thesis_status: string | null; thesis_confidence: string | null; safety_gate: string | null; focus_zones: Record<string, EntryResearchZone | null>; reason_codes: string[]; data_gaps: string[]; plain_explanation: string; formula_version: string; weights: Record<string, number>; }
 export interface ExitResearch { stock_code: string; as_of: string | null; current_price: number | null; exit_score: number; exit_level: "CRITICAL_REVIEW" | "REVIEW" | "WATCH" | "NORMAL"; exit_level_label: string; confidence: "HIGH" | "MEDIUM" | "LOW"; valuation_pressure: number; historical_valuation_pressure: number; resistance_pressure: number; thesis_risk: number; thesis_status: string | null; thesis_confidence: string | null; challenge_count: number; challenge_evidence: Array<{ evidence_id: string; confidence: string; text: string; created_at: string; source_title?: string | null; source_date?: string | null }>; latest_review: { review_id: string; review_status: string; recommended_status: string; is_stale: boolean; challenge_count?: number | null } | null; upper_review_zones: ValuePriceZone[]; focus_zones: Record<string, EntryResearchZone | null>; reason_codes: string[]; data_gaps: string[]; safety_gate: string | null; plain_explanation: string; formula_version: string; weights: Record<string, number>; }
+export interface ValueStrategyState {
+  stock_code: string; stock_name: string; market: "CN"; research_as_of: string | null;
+  eligibility: { status: "IN_VALUE_SCOPE" | "OUTSIDE_VALUE_SCOPE"; label: string; reason: string };
+  priority: { tier: "A" | "B" | "C" | "NOT_APPLICABLE"; label: string; reasons: string[] };
+  price_attention: { primary: boolean; raw_level: string; raw_label: string; effective_status: string; effective_label: string; score: number | null; valuation_reliability: { status: "RELIABLE" | "LIMITED" | "WEAK" | "INSUFFICIENT"; label: string; peer_sample_count: number; peer_sample_counts: number[]; flags: string[]; reasons: string[] }; reasons: string[]; cautions: string[] };
+  review_pressure: { primary: boolean; raw_level: string; effective_status: string; effective_label: string; score: number | null; reasons: string[]; cautions: string[] };
+  risk: { overall: string; trap: string | null; summary: string | null };
+  thesis: { status: string; authority: string; strategy_role: "AUTHORITATIVE" | "EXPLANATORY_ONLY" | "REJECTED"; caution: string | null };
+  leader: { rank: number | null; state: string; industry_name: string | null; as_of: string | null };
+  freshness: { market_price_as_of: string | null; low_value_as_of: string | null; focus_as_of: string | null; historical_valuation_as_of: string | null; price_structure_as_of: string | null; risk_as_of: string | null; thesis_as_of: string | null; notice: string | null; price_structure: { status: string; label: string; last_bar_date: string | null; current_quote_date: string | null; gap_calendar_days: number | null } };
+  summary: string; primary_action: { status: string; label: string }; reasons: string[]; cautions: string[]; formula_version: string; read_only: boolean;
+}
+export interface ValueStrategyEventBatch { transition_batch_id: string; stock_code: string; stock_name: string; severity: "INFO" | "MEDIUM" | "HIGH" | "CRITICAL"; delivery_mode: "IMMEDIATE" | "DAILY_DIGEST" | "HISTORY_ONLY"; title: string; summary: string; primary_reason: string; simultaneous_changes: string[]; research_as_of: string | null; status: "OPEN" | "ACKNOWLEDGED" | "CLOSED"; event_ids: string[]; events: Array<{ id: string; event_type: string; before_value: string; after_value: string; primary_reason: string }>; delivery?: { delivery_status: string }; }
 export interface RiskResearchItem { risk_type: string; severity: "LOW" | "MEDIUM" | "HIGH"; status: "CONFIRMED" | "WATCH" | "UNKNOWN"; text: string; why_it_matters: string; source_keys: string[]; evidence_ids: string[]; watch_item: string; }
 export interface RiskResearch { stock_code: string; market: string; as_of: string | null; status: "READY" | "PARTIAL" | "UNKNOWN" | "NOT_APPLICABLE"; overall_risk: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN"; summary: string; value_trap_risk: "LOW_TRAP_RISK" | "MEDIUM_TRAP_RISK" | "HIGH_TRAP_RISK" | "UNKNOWN" | "NOT_APPLICABLE"; is_current_l3_leader: boolean; valuation_status: string; data_quality: { financial: string; business: string; forecast: string; thesis: string; review_stale: boolean | null; missing: string[] }; risks: RiskResearchItem[]; formula_version: string; }
 export interface CompanyResearchConclusion { company: { market: string; stock_code: string; stock_name: string }; thesis: { status: string; label: string; confidence: string | null } | null; entry: { available: boolean; level: string | null; label: string; confidence: string | null; data_gaps: string[] }; exit: { available: boolean; level: string | null; label: string; confidence: string | null; data_gaps: string[] }; fair_value_range: EntryResearchZone | null; focus_zone: EntryResearchZone | null; evidence_counts: { support: number; challenge: number }; research_conclusion: string; data_status: Record<string, string>; formula_version: string; }
@@ -1223,6 +1275,13 @@ export const api = {
     request<EntryResearch>(`/api/value/companies/${encodeURIComponent(stockCode)}/entry-research?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
   getCompanyExitResearch: (stockCode: string, asOf?: string) =>
     request<ExitResearch>("/api/value/companies/" + encodeURIComponent(stockCode) + "/exit-research?market=CN" + (asOf ? "&as_of=" + encodeURIComponent(asOf) : "")),
+  getValueStrategyState: (stockCode: string, researchAsOf?: string) =>
+    request<ValueStrategyState>(`/api/value/companies/${encodeURIComponent(stockCode)}/strategy-state?market=CN${researchAsOf ? `&research_as_of=${encodeURIComponent(researchAsOf)}` : ""}`),
+  getValueWatchpoints: (stockCode: string, researchAsOf?: string, limit?: number) =>
+    request<ValueWatchpointProjection>(`/api/value/companies/${encodeURIComponent(stockCode)}/watchpoints?market=CN${researchAsOf ? `&research_as_of=${encodeURIComponent(researchAsOf)}` : ""}${limit != null ? `&limit=${limit}` : ""}`),
+  getValueStrategyEventBatches: (stockCode?: string, limit = 10) => request<{ items: ValueStrategyEventBatch[]; count: number }>(`/api/value/strategy-event-batches?limit=${limit}${stockCode ? `&stock_code=${encodeURIComponent(stockCode)}` : ""}`),
+  acknowledgeValueStrategyEvent: (eventId: string) => request(`/api/value/strategy-events/${encodeURIComponent(eventId)}/acknowledge`, { method: "POST" }),
+  closeValueStrategyEvent: (eventId: string) => request(`/api/value/strategy-events/${encodeURIComponent(eventId)}/close`, { method: "POST" }),
   getCompanyRiskResearch: (stockCode: string, asOf?: string) =>
     request<RiskResearch>("/api/value/companies/" + encodeURIComponent(stockCode) + "/risk-research?market=CN" + (asOf ? "&as_of=" + encodeURIComponent(asOf) : "")),
   getCompanyValuationHistory: (stockCode: string, asOf?: string) =>
@@ -1238,6 +1297,8 @@ export const api = {
   confirmCompanyThesisDraft: (stockCode: string, draftId: string, body: {
     title: string; core_thesis: string; status: CompanyThesisDraft["status"]; confidence: CompanyThesisDraft["confidence"];
     invalid_conditions: Array<{ condition: string; status?: string }>;
+    supporting_conditions?: Array<{ condition: string; status?: string }>;
+    key_metrics_to_monitor?: Array<{ text: string } | string>;
   }) => request<{ status: string; draft: CompanyThesisDraft; thesis: CompanyThesis }>(
     `/api/value/companies/${encodeURIComponent(stockCode)}/thesis/draft/${encodeURIComponent(draftId)}/confirm?market=CN`, { method: "POST", body: JSON.stringify(body) },
   ),

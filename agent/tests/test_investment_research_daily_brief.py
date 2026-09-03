@@ -21,6 +21,7 @@ from src.investment_research_supervisor.daily_brief_notification_service import 
     DailyBriefNotificationSettings,
     build_daily_brief_card,
 )
+from src.investment_research_supervisor.hermes_feishu import HermesSupervisorFeishuCredentials
 from src.investment_research_supervisor.daily_brief_service import InvestmentResearchDailyBriefService
 from src.investment_research_supervisor.daily_brief_store import InvestmentResearchDailyBriefRepository
 from src.low_value_leader_pool.store import LowValueLeaderPoolRepository
@@ -29,6 +30,28 @@ from src.risk_research_preparation.store import RiskResearchPreparationRepositor
 
 
 AS_OF = "2026-08-25"
+
+
+def test_hermes_supervisor_credentials_require_credentials_and_home_channel() -> None:
+    credentials = HermesSupervisorFeishuCredentials.load(values={
+        "FEISHU_APP_ID": "cli_supervisor",
+        "FEISHU_APP_SECRET": "secret",
+        "FEISHU_HOME_CHANNEL": "oc_daily_brief",
+        "FEISHU_DOMAIN": "feishu",
+    })
+
+    assert credentials.app_id == "cli_supervisor"
+    assert credentials.target_id == "oc_daily_brief"
+    assert credentials.domain == "feishu"
+
+
+def test_hermes_supervisor_credentials_reject_missing_home_channel() -> None:
+    import pytest
+
+    with pytest.raises(RuntimeError, match="home channel"):
+        HermesSupervisorFeishuCredentials.load(values={
+            "FEISHU_APP_ID": "cli_supervisor", "FEISHU_APP_SECRET": "secret",
+        })
 
 
 def test_bitable_payload_respects_existing_text_column_type() -> None:
@@ -142,10 +165,15 @@ def _seed(
     entry_research = FakeEntryResearchService({
         second["stock_code"]: {"low": 9.0, "high": 10.0, "strength": "HIGH"},
     })
+    class _FakeWatchpoints:
+        def get_watchpoints(self, *args, **kwargs):
+            return {"top_watchpoints": []}
+
     service = InvestmentResearchDailyBriefService(
         repository=briefs, pool_repository=pool, risk_repository=risk, financial_store=financial,
         entry_research_service=entry_research,
         focus_selection_service=focus_selection_service or FakeFocusSelection(),
+        watchpoint_projection_service=_FakeWatchpoints(),
         web_base_url="https://research.example.test",
     )
     thesis = service.thesis_repository.create_initial_thesis({
@@ -187,7 +215,7 @@ def test_daily_brief_uses_same_day_inputs_persists_once_and_preserves_priority_o
         "thesis_status": "WEAKENING", "source_data_as_of": AS_OF,
     }]
     assert brief["financial_changes"][0]["source_as_of"] == AS_OF
-    assert brief["formula_version"] == "daily-brief-v20"
+    assert brief["formula_version"] == "daily-brief-v25"
     deep_list = brief["brief_payload"]["deeply_undervalued_companies"]
     assert brief["brief_payload"]["deeply_undervalued_count"] == 1
     assert deep_list[0]["stock_code"] == "000002.SZ"
@@ -200,12 +228,12 @@ def test_daily_brief_uses_same_day_inputs_persists_once_and_preserves_priority_o
     assert "二、深度低估观察名单" not in executive_text
     assert "风险复核" not in executive_text
     assert "资料不足" not in executive_text
-    assert "一、今日投资判断变化" in executive_text
-    assert "二、重点研究观察" in executive_text
+    assert "二、今日投资判断变化" in executive_text
+    assert "三、重点研究观察" in executive_text
     assert "与「机会与风险」页 A 级重点研究一致" in executive_text
     assert "公司SZ / 000002.SZ" in executive_text
     assert "| 11.0 / 12.0 / 13.0 | 20.00% | 9.0–10.0 |" in executive_text
-    assert "三、低估龙头表格" in executive_text
+    assert "四、低估龙头表格" in executive_text
     assert "当前低估龙头池（不保留历史）" in executive_text
     assert "https://acnhfzsa8929.feishu.cn/base/WOxgbNUrVagmjCsfNNZcXCySndh" in executive_text
     assert brief["brief_payload"]["low_value_leader_bitable_url"].startswith("https://acnhfzsa8929.feishu.cn/base/")
@@ -236,23 +264,24 @@ def test_daily_brief_uses_same_day_inputs_persists_once_and_preserves_priority_o
     assert reused.brief["id"] == brief["id"]
 
 
-def test_daily_brief_card_renders_value_observations_as_columns(tmp_path: Path) -> None:
+def test_daily_brief_card_renders_value_observations_as_readable_summaries(tmp_path: Path) -> None:
     service, _ = _seed(tmp_path)
     brief = service.build(research_as_of=AS_OF).brief
 
     card = build_daily_brief_card(brief)
-    table_rows = [item for item in card["elements"] if item["tag"] == "column_set"]
+    content = "\n".join(str(item.get("content") or "") for item in card["elements"])
 
-    assert len(table_rows) == 2
-    assert [column["elements"][0]["content"] for column in table_rows[0]["columns"]] == [
-        "**公司 / 代码**", "**现价**", "**历史支撑**", "**合理价值范围**", "**中位值差距**",
-    ]
-    assert table_rows[1]["columns"][0]["elements"][0]["content"] == "公司SZ\n000002.SZ"
-    assert table_rows[1]["columns"][2]["elements"][0]["content"] == "9.0–10.0"
-    assert table_rows[1]["columns"][3]["elements"][0]["content"] == "11.0–13.0"
+    assert card["header"]["title"]["content"] == "投研主管｜每日简报"
+    assert "**研究日期** 2026-08-25" in content
+    assert "**重点研究 · 1 家**" in content
+    assert "**1. 公司SZ / 000002.SZ**" in content
+    assert "合理价值中枢 **12.0**" in content
+    assert "合理价值范围 11.0–13.0　｜　历史支撑 9.0–10.0" in content
+    assert not any(item["tag"] in {"column_set", "img"} for item in card["elements"])
+    assert any(item["tag"] == "action" for item in card["elements"])
 
 
-def test_daily_brief_card_uses_a_bordered_table_image_when_uploaded(tmp_path: Path) -> None:
+def test_daily_brief_card_keeps_responsive_rows_when_image_key_is_supplied(tmp_path: Path) -> None:
     service, _ = _seed(tmp_path)
     brief = service.build(research_as_of=AS_OF).brief
     output = render_value_observation_table(brief, tmp_path / "重点研究观察.png")
@@ -260,14 +289,8 @@ def test_daily_brief_card_uses_a_bordered_table_image_when_uploaded(tmp_path: Pa
     assert output.exists()
     assert output.stat().st_size > 1_000
     card = build_daily_brief_card(brief, value_table_image_key="img_value_table")
-    images = [item for item in card["elements"] if item["tag"] == "img"]
-    assert images == [{
-        "tag": "img",
-        "img_key": "img_value_table",
-        "alt": {"tag": "plain_text", "content": "重点研究观察表格"},
-        "scale_type": "fit_horizontal",
-    }]
-    assert not any(item["tag"] == "column_set" for item in card["elements"])
+    assert not any(item["tag"] == "img" for item in card["elements"])
+    assert any("公司SZ / 000002.SZ" in str(item.get("content") or "") for item in card["elements"])
 
 
 def test_daily_brief_dry_run_is_idempotent_and_does_not_call_sender(tmp_path: Path) -> None:
@@ -289,14 +312,12 @@ def test_daily_brief_dry_run_is_idempotent_and_does_not_call_sender(tmp_path: Pa
 
     assert first["status"] == "READY"
     assert first["covers_low_value"] is True
-    assert "今日投研简报" == first["card"]["header"]["title"]["content"]
-    assert "今日投资判断变化" in first["card"]["elements"][0]["content"]
-    assert any(element["tag"] == "column_set" for element in first["card"]["elements"])
-    assert any(
-        element.get("tag") == "markdown" and "低估龙头表格" in element.get("content", "")
-        for element in first["card"]["elements"]
-    )
-    assert "深度低估观察名单" not in first["card"]["elements"][0]["content"]
+    assert "投研主管｜每日简报" == first["card"]["header"]["title"]["content"]
+    assert "研究日期" in first["card"]["elements"][0]["content"]
+    assert not any(element["tag"] == "column_set" for element in first["card"]["elements"])
+    # Dry-run has no published Bitable delivery, so it intentionally omits
+    # the final navigation button.
+    assert not any(element.get("tag") == "action" for element in first["card"]["elements"])
     assert second["status"] == "REUSED"
     assert second["covers_low_value"] is True
 
@@ -481,7 +502,7 @@ def test_daily_brief_rebuilds_ready_record_when_template_version_changes(tmp_pat
 
     assert rebuilt.status == "READY"
     assert not rebuilt.reused
-    assert rebuilt.brief["formula_version"] == "daily-brief-v20"
+    assert rebuilt.brief["formula_version"] == "daily-brief-v25"
     assert "deeply_undervalued_companies" in rebuilt.brief["brief_payload"]
     assert reused.reused
 
@@ -700,6 +721,6 @@ def test_daily_brief_uses_bitable_link_without_excel_after_publication(tmp_path:
     result = notifier.notify(research_as_of=AS_OF)
 
     assert result["status"] == "READY"
-    assert sender.calls == ["table", "card"]
-    assert any(item.get("img_key") == "img_value_table" for item in sender.card["elements"])
+    assert sender.calls == ["card"]
+    assert not any(item["tag"] == "img" for item in sender.card["elements"])
     assert result["delivery"]["attachment_message_id"] is None

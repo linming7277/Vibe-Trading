@@ -34,6 +34,8 @@ class ThesisVersionRequest(ThesisCreateRequest):
 
 class ThesisDraftConfirmRequest(ThesisCreateRequest):
     """Human-edited content used to explicitly promote a draft to a Thesis."""
+    supporting_conditions: list[dict[str, Any]] | None = None
+    key_metrics_to_monitor: list[Any] | None = None
 
 
 class ThesisDraftRejectRequest(BaseModel):
@@ -87,6 +89,8 @@ def register_company_thesis_routes(app: FastAPI, require_auth: AuthDep) -> None:
                 _draft_service().confirm, draft_id, title=payload.title,
                 core_thesis=payload.core_thesis, status=payload.status,
                 confidence=payload.confidence, invalid_conditions=payload.invalid_conditions,
+                supporting_conditions=payload.supporting_conditions,
+                key_metrics_to_monitor=payload.key_metrics_to_monitor,
             )
         except KeyError as exc:
             raise HTTPException(404, str(exc)) from exc

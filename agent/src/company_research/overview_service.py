@@ -251,6 +251,35 @@ class CompanyResearchOverviewService:
                 break
         return output
 
+    @staticmethod
+    def _projection(
+        market: str,
+        stock_code: str,
+        as_of: str | None,
+        *,
+        thesis: dict[str, Any] | None = None,
+        financial_snapshot: dict[str, Any] | None = None,
+        business_snapshot: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from src.value_watchpoints.service import ValueWatchpointProjectionService
+
+            return ValueWatchpointProjectionService(
+                thesis_loader=lambda *_args, **_kwargs: thesis,
+                risk_loader=lambda *_args, **_kwargs: {},
+                financial_loader=lambda *_args, **_kwargs: financial_snapshot or {},
+                business_loader=lambda *_args, **_kwargs: business_snapshot or {},
+                strategy_loader=lambda *_args, **_kwargs: {},
+                normalized_loader=lambda *_args, **_kwargs: {},
+                cycle_loader=lambda *_args, **_kwargs: {},
+                reliability_loader=lambda *_args, **_kwargs: {},
+                moat_loader=lambda *_args, **_kwargs: {},
+                capital_loader=lambda *_args, **_kwargs: {},
+                deep_loader=lambda *_args, **_kwargs: {},
+            ).get_watchpoints(market, stock_code, research_as_of=as_of)
+        except Exception:  # noqa: BLE001
+            return {}
+
     def get_overview(self, market: str, stock_code: str, *, as_of: str | None = None) -> dict[str, Any]:
         normalized_market = normalize_market(market)
         symbol = normalize_symbol(normalized_market, stock_code)
@@ -294,6 +323,16 @@ class CompanyResearchOverviewService:
             or (financial_snapshot or {}).get("stock_name")
             or symbol
         )
+        projection = self._projection(
+            normalized_market, symbol, target,
+            thesis=thesis, financial_snapshot=financial_snapshot, business_snapshot=business_snapshot,
+        )
+        top_watchpoints = list((projection or {}).get("top_watchpoints") or [])
+        data_gaps = list((projection or {}).get("data_gaps") or [])
+        watch_items = [
+            {"source": str(item.get("category") or "WATCH"), "text": str(item.get("title") or ""), **item}
+            for item in top_watchpoints
+        ] if top_watchpoints else self._watch_items(thesis, financial, business, challenging)
         thesis_view = None if thesis is None else {
             "thesis_id": thesis.get("thesis_id"), "core_thesis": thesis.get("core_thesis"), "title": thesis.get("title"),
             "status": thesis.get("status"), "status_label": _THESIS_LABELS.get(str(thesis.get("status") or ""), thesis.get("status")),
@@ -317,7 +356,9 @@ class CompanyResearchOverviewService:
             "neutral_evidence_count": neutral_count,
             "thesis": thesis_view,
             "review": review_view,
-            "watch_items": self._watch_items(thesis, financial, business, challenging),
+            "watch_items": watch_items,
+            "top_watchpoints": top_watchpoints,
+            "data_gaps": data_gaps,
             "data_status": {
                 "financial": financial.get("status"), "business": business.get("status"),
                 "thesis": "CREATED" if thesis else "NOT_CREATED",

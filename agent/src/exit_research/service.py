@@ -38,8 +38,8 @@ THESIS_RISKS = {
 }
 LEVELS = ((85, "CRITICAL_REVIEW"), (70, "REVIEW"), (50, "WATCH"), (0, "NORMAL"))
 LEVEL_LABELS = {
-    "CRITICAL_REVIEW": "需要重点复核", "REVIEW": "建议认真检查",
-    "WATCH": "需要继续观察", "NORMAL": "暂未出现明显退出压力",
+    "CRITICAL_REVIEW": "需要立即复核核心研究逻辑", "REVIEW": "需要重点复核",
+    "WATCH": "存在复核事项", "NORMAL": "当前暂无明显复核压力",
 }
 THESIS_LABELS = {
     "STRENGTHENING": "逻辑正在增强", "UNCHANGED": "基本稳定", "FORMING": "正在形成",

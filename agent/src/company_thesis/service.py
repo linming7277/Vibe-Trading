@@ -38,11 +38,14 @@ class CompanyThesisService:
                               core_thesis: str, status: str, confidence: str,
                               invalid_conditions: list[dict[str, Any]] | None = None,
                               created_by: str = "HUMAN", source_data_as_of: str | None = None,
-                              authority_status: str | None = None, source_draft_id: str | None = None) -> dict[str, Any]:
+                              authority_status: str | None = None, source_draft_id: str | None = None,
+                              supporting_conditions: list[dict[str, Any]] | None = None,
+                              key_metrics_to_monitor: list[Any] | None = None) -> dict[str, Any]:
         payload = self._payload(
             market=market, stock_code=stock_code, title=title, core_thesis=core_thesis,
             status=status, confidence=confidence, invalid_conditions=invalid_conditions,
             created_by=created_by, source_data_as_of=source_data_as_of,
+            supporting_conditions=supporting_conditions, key_metrics_to_monitor=key_metrics_to_monitor,
         )
         payload["authority_status"] = self._authority(authority_status, payload["created_by"])
         payload["source_draft_id"] = str(source_draft_id or "").strip() or None
@@ -56,11 +59,14 @@ class CompanyThesisService:
                            evidence_ids: list[str] | None = None,
                            trigger_ref: str | None = None,
                            history_metadata: dict[str, Any] | None = None,
-                           authority_status: str | None = None, source_draft_id: str | None = None) -> dict[str, Any]:
+                           authority_status: str | None = None, source_draft_id: str | None = None,
+                           supporting_conditions: list[dict[str, Any]] | None = None,
+                           key_metrics_to_monitor: list[Any] | None = None) -> dict[str, Any]:
         payload = self._payload(
             market=market, stock_code=stock_code, title=title, core_thesis=core_thesis,
             status=status, confidence=confidence, invalid_conditions=invalid_conditions,
             created_by=updated_by, source_data_as_of=source_data_as_of,
+            supporting_conditions=supporting_conditions, key_metrics_to_monitor=key_metrics_to_monitor,
         )
         payload["authority_status"] = self._authority(authority_status, payload["created_by"])
         payload["source_draft_id"] = str(source_draft_id or "").strip() or None
@@ -84,7 +90,9 @@ class CompanyThesisService:
 
     def _payload(self, *, market: str, stock_code: str, title: str, core_thesis: str,
                  status: str, confidence: str, invalid_conditions: list[dict[str, Any]] | None,
-                 created_by: str, source_data_as_of: str | None) -> dict[str, Any]:
+                 created_by: str, source_data_as_of: str | None,
+                 supporting_conditions: list[dict[str, Any]] | None = None,
+                 key_metrics_to_monitor: list[Any] | None = None) -> dict[str, Any]:
         market, stock_code = self._company_key(market, stock_code)
         title, core_thesis = str(title or "").strip(), str(core_thesis or "").strip()
         if not title:
@@ -104,6 +112,8 @@ class CompanyThesisService:
             "core_thesis": core_thesis, "status": normalized_status,
             "confidence": normalized_confidence,
             "invalid_conditions": self._invalid_conditions(invalid_conditions),
+            "supporting_conditions": None if supporting_conditions is None else self._supporting_conditions(supporting_conditions),
+            "key_metrics_to_monitor": None if key_metrics_to_monitor is None else self._metrics(key_metrics_to_monitor),
             "created_by": actor, "updated_by": actor,
             "source_data_as_of": str(source_data_as_of).strip() if source_data_as_of else None,
         }
@@ -133,6 +143,39 @@ class CompanyThesisService:
                 raise ValueError("invalid condition status is required")
             normalized.append({"condition": condition, "status": state})
         return normalized
+
+    @staticmethod
+    def _supporting_conditions(value: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise ValueError("supporting_conditions must be a JSON array")
+        normalized: list[dict[str, Any]] = []
+        for item in value:
+            if isinstance(item, str):
+                text = item.strip()
+                if text:
+                    normalized.append({"condition": text, "status": "ACTIVE", "role": "SUPPORT"})
+                continue
+            if not isinstance(item, dict):
+                raise ValueError("each supporting condition must be an object")
+            condition = str(item.get("condition") or item.get("text") or "").strip()
+            if not condition:
+                continue
+            state = str(item.get("status") or "ACTIVE").strip().upper() or "ACTIVE"
+            row: dict[str, Any] = {"condition": condition, "status": state, "role": str(item.get("role") or "SUPPORT")}
+            if item.get("source_keys"):
+                row["source_keys"] = list(item.get("source_keys") or [])
+            normalized.append(row)
+        return normalized
+
+    @staticmethod
+    def _metrics(value: list[Any] | None) -> list[Any]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise ValueError("key_metrics_to_monitor must be a JSON array")
+        return list(value)
 
 
 _service: CompanyThesisService | None = None

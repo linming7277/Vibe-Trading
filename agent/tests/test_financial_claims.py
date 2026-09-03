@@ -49,8 +49,11 @@ def test_valid_fact_inference_forecast_unknown_and_max_claims() -> None:
     ],
 )
 def test_claim_validation_rejects_invalid_sources_types_and_numbers(bad: dict, message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        FinancialAnalysisService.validate_claims(result(bad), MANIFEST)
+    # Per-claim contract: the single violating claim is rejected (with the
+    # same message) while the rest of the result survives.
+    out = FinancialAnalysisService.validate_claims(result(bad), MANIFEST)
+    assert out["claims"] == []
+    assert out["rejected_claims"] and message in out["rejected_claims"][0]["detail"]
 
 
 def test_claim_validation_accepts_exact_float_amount_abbreviation_and_directional_negative() -> None:
@@ -78,9 +81,9 @@ def test_claim_validation_keeps_numeric_sign_and_unit_requirements() -> None:
         claim("FACT", ["FEATURE_OCF_CHANGE_2026Q1"], text="经营现金流同比增长143.273%"),
         claim("FACT", ["FIN_REVENUE_2025"], text="2025年收入为393.53"),
     ):
-        with pytest.raises(ClaimValidationError, match="numbers absent") as caught:
-            FinancialAnalysisService.validate_claims(result(invalid), manifest)
-        assert caught.value.code == "NUMERIC_MISMATCH"
+        out = FinancialAnalysisService.validate_claims(result(invalid), manifest)
+        assert out["claims"] == []
+        assert out["rejected_claims"][0]["reason_code"] == "NUMERIC_MISMATCH"
 
 
 @pytest.mark.parametrize(
@@ -102,10 +105,17 @@ def test_claim_validation_keeps_numeric_sign_and_unit_requirements() -> None:
     ],
 )
 def test_claim_validation_error_codes(bad: dict, code: str) -> None:
-    with pytest.raises(ClaimValidationError) as caught:
-        FinancialAnalysisService.validate_claims(bad, MANIFEST)
-    assert caught.value.code == code
-    assert caught.value.audit_dict()["validation_error_code"] == code
+    # Per-claim contract (2026-09-03): top-level failures still raise;
+    # claim-level failures reject only that claim with the same code.
+    if code in {"TOP_LEVEL_SCHEMA_INVALID", "TOO_MANY_CLAIMS"}:
+        with pytest.raises(ClaimValidationError) as caught:
+            FinancialAnalysisService.validate_claims(bad, MANIFEST)
+        assert caught.value.code == code
+        assert caught.value.audit_dict()["validation_error_code"] == code
+        return
+    out = FinancialAnalysisService.validate_claims(bad, MANIFEST)
+    assert out["claims"] == []
+    assert out["rejected_claims"] and out["rejected_claims"][0]["reason_code"] == code
 
 
 def test_manifest_keys_are_stable_and_include_snapshot_metadata() -> None:

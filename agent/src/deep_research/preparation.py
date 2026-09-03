@@ -161,6 +161,19 @@ class DeepResearchPreparationService:
 
         # STEP 5 — moat research is a pure read; nothing to prepare.
 
+        # STEP 5b — historical valuation on-demand backfill (stabilization §6.3).
+        # Pool-external companies like 600460 have zero valuation history;
+        # pool companies may have fallen behind.  Backfill to latest close.
+        if include_p1:
+            try:
+                val_status = self._backfill_valuation(market, code, research_as_of)
+                if val_status == "BACKFILLED":
+                    prepared.append("historical_valuation")
+                elif val_status == "REUSED":
+                    reused.append("historical_valuation")
+            except Exception as exc:  # noqa: BLE001
+                failed.append({"capability": "historical_valuation", "error": f"{type(exc).__name__}: {exc}"[:200]})
+
         # STEP 6 — thesis DRAFT only, never promote (task §5 STEP 6).
         if include_p1:
             try:
@@ -196,6 +209,31 @@ class DeepResearchPreparationService:
                             llm_calls, network_documents, thesis_draft_status, invalidated)
 
     # ------------------------------------------------------------------
+    def _backfill_valuation(self, market: str, code: str, research_as_of: str) -> str:
+        """On-demand historical valuation backfill for one company (§6.3).
+
+        If the valuation series is missing or stale relative to the research
+        date, refresh just this company.  Idempotent: up-to-date → REUSED.
+        """
+        from src.historical_valuation.service import get_historical_valuation_service
+
+        service = get_historical_valuation_service()
+        try:
+            series = service.get_valuation_history(market, code, as_of=research_as_of) or {}
+            coverage = dict(series.get("coverage") or {})
+            last_date = str(coverage.get("last_date") or "")[:10]
+            if last_date >= research_as_of:
+                return "REUSED"
+        except Exception:  # noqa: BLE001 — missing series is the backfill trigger
+            pass
+        # Backfill this single company (fetches bars + computes PE/PB series).
+        try:
+            service.refresh_company(market, code, as_of=research_as_of)
+            return "BACKFILLED"
+        except Exception:
+            # Some companies may lack bars/financial data — not a hard failure.
+            return "INSUFFICIENT_DATA"
+
     def _prepare_thesis_draft(self, market: str, code: str, research_as_of: str) -> str:
         from src.company_thesis.draft_service import CompanyThesisDraftService
         from src.company_thesis.store import CompanyThesisRepository

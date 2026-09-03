@@ -39,6 +39,7 @@ _INTENT_PATTERNS = (
     ("LOW_VALUE", re.compile(r"低估龙头池|低估池|低估事件|进入低估|退出低估", re.I)),
     ("RISK", re.compile(r"风险|风险点|价值陷阱", re.I)),
     ("BUSINESS", re.compile(r"主要做什么|主营|业务|经营|产品|商业模式", re.I)),
+    ("WATCHPOINT", re.compile(r"接下来|重点看什么|验证什么|最需要验证|盯什么|盯哪些|下一份财报|关注哪些指标|核心验证点", re.I)),
     ("FINANCIAL", re.compile(r"财务|财报|营收|收入|利润|现金流|毛利|净利|ROE|负债", re.I)),
     ("VALUATION", re.compile(r"估值|合理价值|价格区间|高估|低估|PE|PB|市盈率|市净率", re.I)),
     ("COMPANY_OVERVIEW", re.compile(r"总结一下|公司总览|研究总览|整体情况|公司情况", re.I)),
@@ -52,11 +53,11 @@ _VALUATION_LABELS = {
     "FAIR": "恢复合理估值区间",
     "OVERVALUED": "离开低估区域，估值偏高",
     "DEEPLY_OVERVALUED": "离开低估区域，估值偏高",
-    "NO_LONGER_LEADER": "不再属于当前L3龙头",
+    "NO_LONGER_LEADER": "已移出低估龙头研究范围：当前不再属于三级行业Top1/Top2",
 }
 _EXIT_REASON_LABELS = {
     "VALUATION_RECOVERED": "估值恢复至非低估区间",
-    "NO_LONGER_LEADER": "不再属于当前L3龙头",
+    "NO_LONGER_LEADER": "已移出低估龙头研究范围：当前不再属于三级行业Top1/Top2",
 }
 
 # Compact display labels for the composite answer.  Raw enum codes never
@@ -625,11 +626,61 @@ class InvestmentResearchSupervisorService:
             return []
         return lines
 
+    def _watchpoint_brief(self, stock_code: str, stock_name: str, research_as_of: str) -> ResearchBrief:
+        from src.value_watchpoints import get_value_watchpoint_projection_service
+
+        projection = get_value_watchpoint_projection_service().get_watchpoints(
+            "CN", stock_code, research_as_of,
+        )
+        tops = list(projection.get("top_watchpoints") or [])
+        if not tops:
+            gaps = [str(item.get("description") or "").strip() for item in list(projection.get("data_gaps") or [])]
+            gaps = [item for item in gaps if item]
+            answer = "当前没有足够结构化验证条件。"
+            if gaps:
+                answer += "资料缺口：" + "；".join(gaps[:3]) + "。"
+            return ResearchBrief(
+                "WATCHPOINT", research_as_of, answer, (),
+                stock_code, stock_name, "UNKNOWN",
+                sources={"watchpoints": projection},
+                data_gaps=tuple(gaps[:6]),
+            )
+        lines = [f"{stock_name}接下来重点验证："]
+        for index, item in enumerate(tops, 1):
+            next_label = str(item.get("next_review_label") or item.get("next_review_anchor") or "人工复核")
+            source = str(item.get("source_module_label") or item.get("source_module") or "")
+            lines.append(
+                f"{index}. {item.get('title')}。当前：{item.get('current_state')}。"
+                f"有利：{item.get('positive_condition')}。不利：{item.get('negative_condition')}。"
+                f"下次：{next_label}。来源：{source}。"
+            )
+        return ResearchBrief(
+            "WATCHPOINT", research_as_of, "\n".join(lines), (),
+            stock_code, stock_name, "READY",
+            sources={"watchpoints": projection},
+        )
+
     @classmethod
     def _forward_watchpoints(
         cls, financial: dict[str, Any], annual: list[dict[str, Any]],
+        *, stock_code: str = "", research_as_of: str = "",
     ) -> list[str]:
-        """Forward watch points: model output first, else derived from history."""
+        """Forward watch points: projection first, else saved metrics, else history."""
+        if stock_code:
+            try:
+                from src.value_watchpoints import get_value_watchpoint_projection_service
+
+                projection = get_value_watchpoint_projection_service().get_watchpoints(
+                    "CN", stock_code, research_as_of or None,
+                )
+                tops = list(projection.get("top_watchpoints") or [])
+                if tops:
+                    return [
+                        "**前瞻验证点**（来自研究验证点投影，不是交易信号）",
+                        *[f"- {item.get('title')}：{item.get('current_state')}" for item in tops],
+                    ]
+            except (OSError, RuntimeError, TypeError, ValueError):
+                pass
         metrics = [str(item) for item in list((financial.get("analysis") or {}).get("key_metrics_to_monitor") or []) if str(item).strip()]
         if metrics:
             return ["**前瞻验证点**（来自已保存的财务分析结论）", *[f"- {item}" for item in metrics[:6]]]
@@ -698,7 +749,7 @@ class InvestmentResearchSupervisorService:
             f"（合理区间 {_number(valuation.get('fair_value_low'))}–{_number(valuation.get('fair_value_high'))} 元）"
             f" · 总体风险 {risk_label}"
             f" · {'当前L3龙头池成员' if leader else '非当前L3龙头池成员'}"
-            f" · 入场研究「{entry.get('entry_level_label') or '资料不足'}」"
+            f" · 价格与估值关注条件「{entry.get('entry_level_label') or '资料不足'}」"
         )
         main_business = str(business.get("main_business") or "").strip()
         if main_business and main_business != "UNKNOWN":
@@ -846,9 +897,9 @@ class InvestmentResearchSupervisorService:
                 peer_text = f"（{peer_count} 家可比：P25/P50/P75 = {multiples}）" if peer_count and multiples else ""
                 lines.append(f"- 方法：{name}{peer_text}")
             if entry.get("entry_level_label"):
-                lines.append(f"- 入场研究「{entry['entry_level_label']}」：{entry.get('plain_explanation') or ''}")
+                lines.append(f"- 价格与估值关注条件「{entry['entry_level_label']}」：{entry.get('plain_explanation') or ''}")
             if exit_result.get("exit_level_label"):
-                lines.append(f"- 退出研究「{exit_result['exit_level_label']}」：{exit_result.get('plain_explanation') or ''}")
+                lines.append(f"- 研究复核压力「{exit_result['exit_level_label']}」：{exit_result.get('plain_explanation') or ''}")
 
         # --- 情景推演（客观对照，非交易指令）---------------------------------
         try:
@@ -885,7 +936,9 @@ class InvestmentResearchSupervisorService:
                 lines.append(f"- 低估陷阱风险：{trap}")
 
         # --- 前瞻验证点 -----------------------------------------------------
-        watch_lines = self._forward_watchpoints(financial, annual_rows)
+        watch_lines = self._forward_watchpoints(
+            financial, annual_rows, stock_code=stock_code, research_as_of=research_as_of,
+        )
         if watch_lines:
             lines.append("")
             lines.extend(watch_lines)
@@ -961,6 +1014,8 @@ class InvestmentResearchSupervisorService:
         stock_name = str(company.get("name") or company.get("stock_name") or stock_code)
         if not stock_code:
             return ResearchBrief(intent, research_as_of, "未能识别出具体公司。请补充 A 股公司名称或六位股票代码。", (), status="UNKNOWN", data_gaps=("SECURITY",))
+        if intent == "WATCHPOINT":
+            return self._watchpoint_brief(stock_code, stock_name, research_as_of)
         if intent == "FINANCIAL":
             result = self._read_financial(stock_code, research_as_of)
             answer = self._summary_from_financial(result) if result else "尚未保存该公司的财务研究，暂无法可靠说明。"

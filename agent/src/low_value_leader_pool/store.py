@@ -149,6 +149,15 @@ class LowValueLeaderPoolRepository:
                 self._conn.execute("ALTER TABLE company_low_value_leader_pool ADD COLUMN support_zone_low REAL")
             if "support_zone_high" not in pool_columns:
                 self._conn.execute("ALTER TABLE company_low_value_leader_pool ADD COLUMN support_zone_high REAL")
+            # PIT remediation: mark how each immutable snapshot came to exist.
+            # Existing rows were written by the day-after archival path from
+            # the genuine EOD product, so FORWARD_CAPTURED is their honest
+            # default; a controlled reconstruction labels itself explicitly.
+            snap_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(company_low_value_leader_pool_snapshots)")}
+            if "snapshot_origin" not in snap_columns:
+                self._conn.execute(
+                    "ALTER TABLE company_low_value_leader_pool_snapshots ADD COLUMN snapshot_origin TEXT NOT NULL DEFAULT 'FORWARD_CAPTURED'"
+                )
 
     def close(self) -> None:
         with self._lock:
@@ -204,6 +213,60 @@ class LowValueLeaderPoolRepository:
     def active_map(self, market: str = "CN") -> dict[str, dict[str, Any]]:
         return {item["stock_code"]: item for item in self.active(market)}
 
+    def materialize_daily_snapshot(self, source_as_of: str, source_pool_id: str, *, market: str = "CN", snapshot_origin: str = "FORWARD_CAPTURED") -> dict[str, Any]:
+        """Archive today's ACTIVE projection on the same day it was produced.
+
+        The day-after archival in ``synchronize_refresh`` remains as a second
+        audit path, but replay readiness must not depend on a *future* run
+        happening: after a completed refresh this writes the immutable daily
+        snapshot immediately, idempotently, and without recomputing anything.
+        """
+        if snapshot_origin not in {"FORWARD_CAPTURED", "SAFE_RECONSTRUCTED"}:
+            raise ValueError(f"unsupported snapshot_origin: {snapshot_origin}")
+        normalized_market = market.upper()
+        timestamp = _now()
+        with self._lock, self._conn:
+            rows = self._conn.execute(
+                """SELECT * FROM company_low_value_leader_pool
+                   WHERE market=? AND source_as_of=? AND pool_status='ACTIVE'""",
+                (normalized_market, source_as_of),
+            ).fetchall()
+            for row in rows:
+                archived = self._row(row)
+                self._conn.execute(
+                    """INSERT OR IGNORE INTO company_low_value_leader_pool_snapshots(
+                        id,market,stock_code,source_as_of,source_pool_id,pool_status,payload_json,archived_at,snapshot_origin
+                    ) VALUES(?,?,?,?,?,?,?,?,?)""",
+                    (
+                        f"lvpoolsnap_{uuid.uuid4().hex[:20]}", str(row["market"]), str(row["stock_code"]),
+                        str(row["source_as_of"]), str(row["source_pool_id"]), str(row["pool_status"]),
+                        json.dumps(archived, ensure_ascii=False, sort_keys=True), timestamp, snapshot_origin,
+                    ),
+                )
+        return self.daily_snapshot_status(source_as_of, market=normalized_market)
+
+    def daily_snapshot_status(self, source_as_of: str, *, market: str = "CN") -> dict[str, Any]:
+        """Count immutable snapshot rows materialized for one research date."""
+        normalized_market = market.upper()
+        with self._lock:
+            archived = self._conn.execute(
+                """SELECT COUNT(*) AS n, SUM(CASE WHEN snapshot_origin='SAFE_RECONSTRUCTED' THEN 1 ELSE 0 END) AS reconstructed
+                   FROM company_low_value_leader_pool_snapshots
+                   WHERE market=? AND source_as_of=? AND pool_status='ACTIVE'""",
+                (normalized_market, source_as_of),
+            ).fetchone()
+            active = self._conn.execute(
+                """SELECT COUNT(*) AS n FROM company_low_value_leader_pool
+                   WHERE market=? AND source_as_of=? AND pool_status='ACTIVE'""",
+                (normalized_market, source_as_of),
+            ).fetchone()
+        return {
+            "source_as_of": source_as_of,
+            "archived_rows": int(archived["n"] or 0) if archived else 0,
+            "safe_reconstructed_rows": int(archived["reconstructed"] or 0) if archived else 0,
+            "active_rows": int(active["n"] or 0) if active else 0,
+        }
+
     def refresh_status(self, *, source_as_of: str, source_pool_id: str) -> dict[str, Any] | None:
         row = self._conn.execute(
             """SELECT * FROM low_value_leader_pool_refreshes
@@ -215,6 +278,21 @@ class LowValueLeaderPoolRepository:
         item = dict(row)
         item["errors"] = _loads(item.pop("errors_json"), [])
         return item
+
+    def refresh_history(self, market: str = "CN", *, limit: int = 60) -> list[dict[str, Any]]:
+        """Completion markers per research date, newest first (read-only)."""
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT * FROM low_value_leader_pool_refreshes
+                   ORDER BY source_as_of DESC LIMIT ?""",
+                (max(1, min(int(limit), 200)),),
+            ).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            item["errors"] = _loads(item.pop("errors_json"), [])
+            items.append(item)
+        return items
 
     def record_refresh(
         self,
@@ -418,8 +496,8 @@ class LowValueLeaderPoolRepository:
                 archived = self._row(row)
                 self._conn.execute(
                     """INSERT OR IGNORE INTO company_low_value_leader_pool_snapshots(
-                        id,market,stock_code,source_as_of,source_pool_id,pool_status,payload_json,archived_at
-                    ) VALUES(?,?,?,?,?,?,?,?)""",
+                        id,market,stock_code,source_as_of,source_pool_id,pool_status,payload_json,archived_at,snapshot_origin
+                    ) VALUES(?,?,?,?,?,?,?,?, 'FORWARD_CAPTURED')""",
                     (
                         f"lvpoolsnap_{uuid.uuid4().hex[:20]}", str(row["market"]), str(row["stock_code"]),
                         str(row["source_as_of"]), str(row["source_pool_id"]), str(row["pool_status"]),

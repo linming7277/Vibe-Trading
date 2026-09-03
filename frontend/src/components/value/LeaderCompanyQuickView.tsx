@@ -268,7 +268,7 @@ export function DataExplanationModal({ zones, currentPrice, entry, onClose }: { 
               {methods.map((method) => <div key={method.label} className="rounded-md bg-muted/40 px-3 py-2"><div className="flex items-center justify-between gap-3"><strong className="text-foreground">{method.label}</strong><span className="tabular-nums text-foreground">{method.range || "本次未使用（数据不足）"}</span></div>{method.range ? <p className="mt-1 text-xs">{method.note}</p> : null}{method.sourceNames.length ? <p className="mt-1 text-[11px]">已有来源：{method.sourceNames.join("；")}</p> : null}</div>)}
             </div>
             <p>综合有效方法形成合理价值区间：<strong className="text-foreground">{moneyRange(valuation?.fair_value_low, valuation?.fair_value_high)}</strong>。</p>
-            <p>合理价值中枢：<strong className="text-foreground">{money(fairMid)}</strong>；当前价格相对中枢：<strong className="text-foreground">{midpointDistance(currentPrice, fairMid ?? null)}</strong>。中枢只是中心参考值，不是目标价，也不保证未来达到。</p>
+            <p>合理价值中枢：<strong className="text-foreground">{money(fairMid)}</strong>；当前价格相对中枢：<strong className="text-foreground">{midpointDistance(currentPrice, fairMid ?? null)}</strong>。中枢只是研究参考值，不是未来价格预测，也不保证未来达到。</p>
             <div className="rounded-md border border-border px-3 py-2"><strong className="text-foreground">当前价值状态：{valuationStatusLabel(valuation?.status)}</strong><p className="mt-1">{valuationStatusReason(zones, currentPrice)}</p></div>
           </ExplanationDetail>
 
@@ -280,12 +280,12 @@ export function DataExplanationModal({ zones, currentPrice, entry, onClose }: { 
           <ExplanationDetail title="支撑详情">
             <div className="grid gap-2 sm:grid-cols-3"><DetailField label="最近历史支撑" value={support ? moneyRange(support.low, support.high) : "资料不足"} /><DetailField label="当前价格" value={money(currentPrice)} /><DetailField label="当前关系" value={supportStatus.judgment} /></div>
             {support?.reasons?.length ? <p>形成依据：{support.reasons.join("；")}。</p> : <p>当前没有可展示的支撑形成依据。</p>}
-            {confluence ? <div className="rounded-md bg-muted/40 px-3 py-2"><p>价值区域：<strong className="text-foreground">{valueSource ? moneyRange(valueSource.low, valueSource.high) : "已有价值区域"}</strong></p><p>支撑区域：<strong className="text-foreground">{supportSource ? moneyRange(supportSource.low, supportSource.high) : "已有支撑区域"}</strong></p><p>重合区域：<strong className="text-foreground">{moneyRange(confluence.low, confluence.high)}</strong></p><p className="mt-1">估值区域和历史价格区域出现重合，但这不是买入信号。</p></div> : <p>当前没有形成价值和支撑重合区域。</p>}
+            {confluence ? <div className="rounded-md bg-muted/40 px-3 py-2"><p>价值区域：<strong className="text-foreground">{valueSource ? moneyRange(valueSource.low, valueSource.high) : "已有价值区域"}</strong></p><p>支撑区域：<strong className="text-foreground">{supportSource ? moneyRange(supportSource.low, supportSource.high) : "已有支撑区域"}</strong></p><p>重合区域：<strong className="text-foreground">{moneyRange(confluence.low, confluence.high)}</strong></p><p className="mt-1">估值区域和历史价格区域出现重合，但它仍只是价格研究条件。</p></div> : <p>当前没有形成价值和支撑重合区域。</p>}
           </ExplanationDetail>
 
           <ExplanationDetail title="当前研究判断详情">
             <p>当前研究等级：<strong className="text-foreground">{entryExplanationLabel(entry)}</strong></p>
-            <p>{entry?.plain_explanation || "当前缺少可用的入场研究解释。"}</p>
+            <p>{entry?.plain_explanation || "当前缺少可用的价格关注条件解释。"}</p>
             {entryReasons.length ? <ul className="list-disc space-y-1 pl-5">{entryReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : <p>当前没有可展示的分项原因。</p>}
             {entry?.data_gaps?.length ? <p>资料缺口：{entry.data_gaps.join("、")}。</p> : null}
           </ExplanationDetail>
@@ -294,10 +294,10 @@ export function DataExplanationModal({ zones, currentPrice, entry, onClose }: { 
         <section className="border-t border-border pt-4"><h3 className="text-sm font-semibold">指标含义</h3><p className="mt-1 text-xs text-muted-foreground">下面保留 V1 的通用解释，便于理解各项数据代表什么。</p></section>
         <ExplanationSection title="1. 当前价格">股票当前的市场交易价格，用来比较合理价值和历史价格位置。价格日期可能与财务报告日期不同。</ExplanationSection>
         <ExplanationSection title="2. 合理价值区间">系统参考公司的盈利能力、资产价值和同行业估值水平，估算一个可供研究的价格范围。可用参考包括预测利润估值、PE 估值、PB 估值和行业比较；资料不足的方法不会被强行补齐。</ExplanationSection>
-        <ExplanationSection title="3. 合理价值中枢">合理价值范围中的中心参考位置。例如范围为 80–120 元时，中枢可接近 100 元。它用于理解当前价格相对价值中心的位置，不是目标价，也不代表未来一定达到的价格。</ExplanationSection>
+        <ExplanationSection title="3. 合理价值中枢">合理价值范围中的中心参考位置。例如范围为 80–120 元时，中枢可接近 100 元。它用于理解当前价格相对价值中心的位置，不是未来价格预测。</ExplanationSection>
         <ExplanationSection title="4. 历史估值位置">把当前 PE、PB、股息率与公司自身历史水平比较。偏低表示当前估值低于历史多数时期；正常表示处在历史中间范围；偏高表示高于历史多数时期。它和合理价值区间是两个不同角度，可以同时存在。</ExplanationSection>
         <ExplanationSection title="5. 历史支撑区域">过去价格运行中，市场曾出现较多交易或反弹的位置。系统参考历史重要低点、成交密集区域和长周期均线附近形成区间。它是历史价格结构参考，不代表未来一定会获得支撑。</ExplanationSection>
-        <ExplanationSection title="6. 价值与支撑关系">当估值较低的区域与历史价格支撑区域出现交集时，表示价值判断和价格位置同时提供参考。它不是买入信号，仍需要结合公司的经营和风险资料核验。</ExplanationSection>
+        <ExplanationSection title="6. 价值与支撑关系">当估值较低的区域与历史价格支撑区域出现交集时，表示价值判断和价格位置同时提供参考。它仍需结合公司的经营和风险资料核验。</ExplanationSection>
         <ExplanationSection title="7. 是否值得进一步研究">当前页面状态为“{entryExplanationLabel(entry)}”。它综合当前价值位置、历史估值位置、历史价格位置和公司核心逻辑，用来帮助安排研究优先级，不是买卖建议。</ExplanationSection>
         <ExplanationSection title="8. PE / PB / 股息率"><p>PE：市场给予公司盈利的估值倍数参考。</p><p>PB：市场给予公司净资产的估值倍数参考。</p><p>股息率：公司过去分红收益水平参考。</p></ExplanationSection>
       </div>

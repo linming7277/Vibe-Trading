@@ -134,6 +134,48 @@ def test_unknown_and_high_trap_are_soft_but_profile_partial_and_ai_provisional_r
     assert "风险资料不足" in result["B"][0]["focus_cautions"][0]
 
 
+def test_sparse_or_extreme_valuation_is_demoted_to_b_without_changing_pool_membership():
+    item = pool_item("605108.SH", score=100)
+    item["current_price"] = 13.23
+    item["fair_value_mid"] = 316.07
+    item["metadata"] = {
+        "valuation_quality": {
+            "method_count": 1,
+            "min_peer_count": 3,
+            "method_names": ["同三级行业 PB 可比"],
+        },
+    }
+    service, *_ = build_service([item])
+
+    result = service.get_focus_selection()
+
+    assert result["A"] == []
+    assert [row["stock_code"] for row in result["B"]] == ["605108.SH"]
+    assert result["B"][0]["primary_demotion_reason"] == "合理价值依据需要先核验"
+    assert result["B"][0]["valuation_quality"]["status"] == "REVIEW_REQUIRED"
+    assert "合理价值仅由单一估值方法支撑，需要先核验" in result["B"][0]["focus_cautions"]
+
+
+def test_extreme_midpoint_gap_is_demoted_even_when_multiple_methods_are_available():
+    item = pool_item("000786.SZ", score=100)
+    item["current_price"] = 5.0
+    item["fair_value_mid"] = 30.0
+    item["metadata"] = {
+        "valuation_quality": {
+            "method_count": 2,
+            "min_peer_count": 12,
+            "method_names": ["预测利润 + 同三级行业 PE 可比", "同三级行业 PB 可比"],
+        },
+    }
+    service, *_ = build_service([item])
+
+    result = service.get_focus_selection()
+
+    assert result["A"] == []
+    assert result["B"][0]["primary_demotion_reason"] == "合理价值依据需要先核验"
+    assert "合理价值中枢与现价偏离过大，需要先核验估值输入" in result["B"][0]["focus_cautions"]
+
+
 @pytest.mark.parametrize(
     ("code", "risk_data", "thesis_data", "entry", "prep_data", "expected"),
     [

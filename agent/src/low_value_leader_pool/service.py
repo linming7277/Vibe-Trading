@@ -26,6 +26,7 @@ class LowValueLeaderPoolService:
         price_zone_service: ValuePriceZoneService | Any | None = None,
         entry_research_service: Any | None = None,
         risk_snapshot_repository: Any | None = None,
+        method_recorder: Any | None = None,
     ) -> None:
         self.repository = repository or LowValueLeaderPoolRepository()
         self.leader_service = leader_service or get_level3_leader_service()
@@ -37,6 +38,13 @@ class LowValueLeaderPoolService:
             from src.low_value_risk_snapshot.store import LowValueRiskSnapshotRepository
             risk_snapshot_repository = LowValueRiskSnapshotRepository(self.repository.db_path)
         self.risk_snapshot_repository = risk_snapshot_repository
+        if method_recorder is None:
+            # Observational PIT provenance recorder; owns its additive tables in
+            # the same research.db.  Never alters pool membership or valuation.
+            from src.pit_replay.recorder import ValuationMethodRecorder
+            from src.pit_replay.store import PITReplayStore
+            method_recorder = ValuationMethodRecorder(PITReplayStore(self.repository.db_path))
+        self.method_recorder = method_recorder
 
     @staticmethod
     def _primary_members(pool: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -97,14 +105,39 @@ class LowValueLeaderPoolService:
     def _snapshot(self, member: dict[str, Any], zones: dict[str, Any], *, pool_id: str, source_as_of: str) -> dict[str, Any]:
         valuation = dict(zones.get("valuation") or {})
         historical = dict(zones.get("historical_valuation") or {})
+        valuation_methods = [
+            method for method in list(valuation.get("methods") or [])
+            if isinstance(method, dict)
+            and str(method.get("status") or "") == "READY"
+            and isinstance(method.get("fair_values"), list)
+            and len(method.get("fair_values") or []) == 3
+        ]
+        peer_counts = [
+            int(method["peer_count"])
+            for method in valuation_methods
+            if isinstance(method.get("peer_count"), (int, float)) and int(method["peer_count"]) > 0
+        ]
+        valuation_quality = {
+            "method_count": len(valuation_methods),
+            "min_peer_count": min(peer_counts) if peer_counts else None,
+            "method_names": [str(method.get("name") or "") for method in valuation_methods],
+        }
         code = str(member["stock_code"]).upper()
         entry_level: str | None = None
+        entry_score: Any = None
         try:
             entry = self.entry_research_service.get_entry_research("CN", code, as_of=source_as_of)
             entry_level = entry.get("entry_level")
+            entry_score = entry.get("entry_score")
         except Exception:
             # Entry Research is display-only. Its absence never changes membership.
             entry_level = None
+        # Persist the full reliability verdict (status + reasons) so a replay
+        # reads the day's own provenance instead of recomputing it from
+        # mutable current data.  Observational only; rules live in the shared
+        # versioned contract.
+        from src.value_strategy import valuation_reliability
+        reliability = valuation_reliability(zones)
         return {
             "market": "CN", "stock_code": code, "company_name": str(member.get("stock_name") or code),
             "industry_code": str(member.get("level3_code") or ""), "industry_name": str(member.get("level3_name") or ""),
@@ -123,7 +156,15 @@ class LowValueLeaderPoolService:
                 "price_as_of": zones.get("price_as_of"),
                 "price_source": dict((zones.get("data_quality") or {}).get("price") or {}).get("source"),
                 "leader_memberships": member.get("_memberships") or [],
+                "leader_state": member.get("lifecycle_status"),
+                "leader_formula_version": member.get("leader_formula_version"),
+                "entry_v1_level": entry_level,
+                "entry_v1_score": entry_score,
                 "data_quality": zones.get("data_quality") or {},
+                # This is an audit snapshot of existing ValuePriceZone methods;
+                # it does not recalculate or alter the low-value entry rule.
+                "valuation_quality": {**valuation_quality, "as_of": zones.get("as_of")},
+                "valuation_reliability": reliability,
             },
         }
 
@@ -173,6 +214,16 @@ class LowValueLeaderPoolService:
                 snapshot = self._snapshot(member, zones, pool_id=source_pool_id, source_as_of=source_as_of)
                 status = snapshot["valuation_status"]
                 evaluated[code] = status
+                # PIT provenance: persist the method bundle for every evaluated
+                # L3 Top1/Top2 candidate on the same zones object the pool used,
+                # so a replay sees exactly the day's own peer evidence.  The
+                # pool rule itself is untouched.
+                try:
+                    self.method_recorder.record(
+                        "CN", code, research_as_of=source_as_of, zones=zones, source_pool_id=source_pool_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    errors.append({"stock_code": code, "error": f"PIT_BUNDLE_RECORD_FAILED: {type(exc).__name__}: {exc}"[:500]})
                 if status in LOW_VALUE_STATES:
                     eligible[code] = snapshot
             except Exception as exc:
@@ -194,6 +245,22 @@ class LowValueLeaderPoolService:
             changes=changes,
             errors=errors,
         )
+        # Materialize the immutable daily snapshot on the same day it was
+        # produced, so replay readiness never depends on a future EOD run
+        # happening.  Idempotent; no valuation is recomputed here.
+        try:
+            self.repository.materialize_daily_snapshot(source_as_of, source_pool_id, market="CN")
+        except Exception as exc:  # noqa: BLE001
+            errors.append({"stock_code": "", "error": f"DAILY_SNAPSHOT_MATERIALIZATION_FAILED: {type(exc).__name__}: {exc}"[:500]})
+            status = "PARTIAL"
+            self.repository.record_refresh(
+                source_as_of=source_as_of,
+                source_pool_id=source_pool_id,
+                status=status,
+                active_count=len(self.repository.active("CN")),
+                changes=changes,
+                errors=errors,
+            )
         self._record_freshness_manifest(source_pool_id, source_as_of)
 
         return {

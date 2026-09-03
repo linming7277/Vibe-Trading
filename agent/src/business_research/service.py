@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import threading
+import time
 from typing import Any, Protocol
 
 from src.disclosure_materials.store import DisclosureMaterialStore
@@ -195,18 +198,71 @@ class BusinessResearchService:
                 availability[material_type] = "READY"
         return result, availability
 
+    def _pit_profile(self, stock_code: str, *, as_of: str | None) -> tuple[dict[str, Any] | None, str]:
+        """PIT-select the business profile for ``as_of`` (shared by prepare and
+        input_fingerprint so both always see the same input).
+
+        Guard semantics are content-based, never touch-based:
+
+        - The profile's content fields come from the ``fundamentals`` and
+          ``security_details`` datasets; their ``data_as_of`` entries are the
+          closest available business-publication date for that content.  The
+          ``securities`` row only carries the company name and is rewritten
+          daily with identical content, so its touch timestamp never guards.
+        - A current-state cache rewrite after ``as_of`` is acceptable when the
+          content provably existed at ``as_of``: either the content hash is
+          unchanged (proven against a snapshot persisted <= as_of), or the
+          prior profile is restored from such a snapshot's embedded profile.
+        - Without any provably-valid version, future content is never served
+          for a historical as_of (PIT_DATA_UNAVAILABLE).
+        """
+        profile = self.profiles.profile(stock_code)
+        if profile is None:
+            return None, "NO_PROFILE"
+        if not as_of:
+            return profile, "OK"
+        content_dates = [str(item.get("data_as_of") or "") for item in (profile.get("source") or [])]
+        content_date = max(content_dates)[:10] if content_dates else ""
+        if not content_date or content_date <= str(as_of)[:10]:
+            return profile, "OK"
+        # The cache was rewritten after as_of.  Recover a provably-valid
+        # profile from the snapshot sequence: a snapshot is admissible for
+        # as_of when the profile content embedded in it (its source business
+        # dates, falling back to the snapshot's own date) was valid <= as_of —
+        # a snapshot persisted after as_of may still carry such content.
+        for row in self.store.list_snapshots(profile["stock_code"]):
+            candidate = ((row or {}).get("snapshot") or {}).get("profile") or {}
+            if not candidate:
+                continue
+            candidate_dates = [str(item.get("data_as_of") or "") for item in (candidate.get("source") or [])]
+            candidate_date = max(candidate_dates)[:10] if candidate_dates else ""
+            valid = (not candidate_date or candidate_date <= str(as_of)[:10]) or (
+                str(row.get("data_as_of") or "")[:10] <= str(as_of)[:10]
+            )
+            if not valid:
+                continue
+            if str(candidate.get("source_hash") or "") == str(profile.get("source_hash") or ""):
+                return profile, "PROVEN_BY_SNAPSHOT"
+            return candidate, "HISTORICAL_PROFILE"
+        return None, "PIT_DATA_UNAVAILABLE"
+
     def input_fingerprint(self, stock_code: str, *, as_of: str | None = None) -> dict[str, Any] | None:
         """Recompute the current business source hash without any write.
 
         Mirrors prepare()'s hash inputs (profile, disclosure text hashes,
         previous snapshot pairing) for ResearchFreshnessService comparison
         (plan §7/§9).  Pure reads only.
+
+        Profile selection is shared with prepare() via ``_pit_profile`` so the
+        freshness fingerprint and the prepare input contract can never diverge:
+        disclosure inputs are PIT-truncated by ``announcement_date <= as_of``
+        and the profile is content-PIT-selected (a daily ``securities`` cache
+        rewrite of identical content does not disable the signal; genuinely
+        future, unprovable profile content makes the fingerprint unavailable).
         """
         try:
-            profile = self.profiles.profile(stock_code)
-            if profile is None:
-                return None
-            if as_of and str(profile.get("updated_at") or "")[:10] > str(as_of)[:10]:
+            profile, pit_guard = self._pit_profile(stock_code, as_of=as_of)
+            if profile is None or pit_guard == "PIT_DATA_UNAVAILABLE":
                 return None
             disclosure_sources, _availability = self._disclosure_manifest(profile["stock_code"], as_of=as_of)
             latest = self.store.latest(profile["stock_code"], as_of=as_of)
@@ -231,11 +287,14 @@ class BusinessResearchService:
             return None
 
     def prepare(self, stock_code: str, *, as_of: str | None = None) -> dict[str, Any]:
-        profile = self.profiles.profile(stock_code)
-        if profile is None:
+        profile, pit_guard = self._pit_profile(stock_code, as_of=as_of)
+        if pit_guard == "NO_PROFILE":
             raise ValueError(f"business profile not found for {stock_code.upper()}")
-        if as_of and str(profile.get("updated_at") or "")[:10] > str(as_of)[:10]:
-            raise ValueError(f"business_profile_after_as_of:{stock_code.upper()}:{profile.get('updated_at')}")
+        if pit_guard == "PIT_DATA_UNAVAILABLE":
+            raise ValueError(
+                f"business_profile_pit_unavailable:{stock_code.upper()}:{as_of}:"
+                "profile content changed after as_of and no provably-valid version exists"
+            )
         current_sources = self._source_manifest(profile)
         disclosure_sources, disclosure_availability = self._disclosure_manifest(profile["stock_code"], as_of=as_of)
         latest = self.store.latest(profile["stock_code"], as_of=as_of)
@@ -373,7 +432,9 @@ class BusinessResearchService:
                             "source_keys": {"type": "array", "items": {"type": "string", "enum": sorted(manifest)}},
                             "confidence": {"type": "string", "enum": sorted(BUSINESS_CONFIDENCES)},
                         },
-                        "required": ["type", "topic", "text", "source_keys", "confidence"],
+                        # Five-field completeness is enforced per claim by
+                        # validate_claims (a missing field rejects that claim
+                        # only), so the provider-side schema stays permissive.
                         "additionalProperties": False,
                     },
                 },
@@ -384,6 +445,16 @@ class BusinessResearchService:
 
     @staticmethod
     def validate_claims(result: dict[str, Any], manifest: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        """Per-claim validation: one violating claim rejects itself, never the batch.
+
+        Top-level structure (summary present, no trading language, plain-language
+        summary, claim-count ceiling) remains a whole-result refusal because the
+        summary is a single field with no per-claim recovery.  Every claim-level
+        rule — schema, type/topic/confidence, five-field completeness, source
+        existence, change dual-period sourcing, jargon, unsupported share,
+        numeric mismatch — is enforced independently per claim; rejected claims
+        are returned as diagnostics alongside the accepted subset.
+        """
         if set(result) != {"summary", "claims"} or not isinstance(result.get("claims"), list):
             raise BusinessClaimValidationError("TOP_LEVEL_SCHEMA_INVALID", "business claims schema is invalid")
         summary = str(result.get("summary") or "").strip()
@@ -396,58 +467,68 @@ class BusinessResearchService:
         claims = result["claims"]
         if len(claims) > MAX_BUSINESS_CLAIMS:
             raise BusinessClaimValidationError("TOO_MANY_CLAIMS", "too many business claims")
-        normalized: list[dict[str, Any]] = []
+        accepted: list[dict[str, Any]] = []
+        rejected: list[dict[str, Any]] = []
         for index, raw in enumerate(claims):
-            if not isinstance(raw, dict) or set(raw) != {"type", "topic", "text", "source_keys", "confidence"}:
-                keys = sorted(str(key) for key in raw) if isinstance(raw, dict) else []
-                raise BusinessClaimValidationError(
-                    "CLAIM_SCHEMA_INVALID", f"business claim schema is invalid; keys={keys}",
-                    claim_index=index,
-                )
-            claim_type = str(raw.get("type") or "").upper()
-            topic = str(raw.get("topic") or "").upper()
-            text = str(raw.get("text") or "").strip()
-            confidence = str(raw.get("confidence") or "").upper()
-            keys = raw.get("source_keys")
-            if claim_type not in BUSINESS_CLAIM_TYPES:
-                raise BusinessClaimValidationError("INVALID_CLAIM_TYPE", "invalid business claim type", claim_index=index)
-            if topic not in BUSINESS_TOPICS:
-                raise BusinessClaimValidationError("INVALID_TOPIC", "invalid business claim topic", claim_index=index)
-            if confidence not in BUSINESS_CONFIDENCES:
-                raise BusinessClaimValidationError("INVALID_CONFIDENCE", "invalid business claim confidence", claim_index=index)
-            if not text:
-                raise BusinessClaimValidationError("EMPTY_CLAIM_TEXT", "business claim text is required", claim_index=index)
-            if not _plain_language(text):
-                raise BusinessClaimValidationError("JARGON_WITHOUT_EXPLANATION", "claim contains unexplained jargon", claim_index=index)
-            if not isinstance(keys, list) or any(not isinstance(key, str) for key in keys):
-                raise BusinessClaimValidationError("UNKNOWN_SOURCE_KEY", "source_keys must be a string array", claim_index=index)
-            keys = list(dict.fromkeys(key.strip() for key in keys if key.strip()))
-            if claim_type in {"FACT", "INFERENCE"} and not keys:
-                raise BusinessClaimValidationError(f"{claim_type}_WITHOUT_SOURCE", f"{claim_type} requires sources", claim_index=index)
-            missing = sorted(set(keys) - set(manifest))
-            if missing:
-                raise BusinessClaimValidationError("UNKNOWN_SOURCE_KEY", "unknown business source key", claim_index=index, source_keys=missing)
-            if topic == "BUSINESS_CHANGE" and claim_type in {"FACT", "INFERENCE"}:
-                roles = {str(manifest[key].get("profile_role") or "CURRENT") for key in keys}
-                if not {"CURRENT", "PREVIOUS"} <= roles:
-                    raise BusinessClaimValidationError("CHANGE_WITHOUT_COMPARISON", "business change requires current and previous sources", claim_index=index, source_keys=keys)
-            source_text = " ".join(str(manifest[key].get("value") or "") for key in keys)
-            unsupported_numbers = [token for token in NUMERIC_TOKEN.findall(text) if token not in source_text]
-            if unsupported_numbers:
-                raise BusinessClaimValidationError("NUMERIC_MISMATCH", "claim contains numbers absent from sources", claim_index=index, source_keys=keys)
-            share_match = re.search(r"占比(?:最高|最大)|贡献(?:最高|最大)|收入占比", text)
-            if share_match and not re.search(r"占比|贡献", source_text):
-                nearby = text[max(0, share_match.start() - 16):share_match.start()]
-                if not re.search(r"没有|未说明|未披露|无法|不能|不足以|看不出", nearby):
+            try:
+                if not isinstance(raw, dict) or set(raw) != {"type", "topic", "text", "source_keys", "confidence"}:
+                    keys = sorted(str(key) for key in raw) if isinstance(raw, dict) else []
                     raise BusinessClaimValidationError(
-                        "UNSUPPORTED_PRODUCT_SHARE", "product contribution is absent from sources",
-                        claim_index=index, source_keys=keys,
+                        "CLAIM_SCHEMA_INVALID", f"business claim schema is invalid; keys={keys}",
+                        claim_index=index,
                     )
-            normalized.append({
-                "type": claim_type, "topic": topic, "text": text,
-                "source_keys": keys, "confidence": confidence,
-            })
-        return {"summary": summary, "claims": normalized}
+                claim_type = str(raw.get("type") or "").upper()
+                topic = str(raw.get("topic") or "").upper()
+                text = str(raw.get("text") or "").strip()
+                confidence = str(raw.get("confidence") or "").upper()
+                keys = raw.get("source_keys")
+                if claim_type not in BUSINESS_CLAIM_TYPES:
+                    raise BusinessClaimValidationError("INVALID_CLAIM_TYPE", "invalid business claim type", claim_index=index)
+                if topic not in BUSINESS_TOPICS:
+                    raise BusinessClaimValidationError("INVALID_TOPIC", "invalid business claim topic", claim_index=index)
+                if confidence not in BUSINESS_CONFIDENCES:
+                    raise BusinessClaimValidationError("INVALID_CONFIDENCE", "invalid business claim confidence", claim_index=index)
+                if not text:
+                    raise BusinessClaimValidationError("EMPTY_CLAIM_TEXT", "business claim text is required", claim_index=index)
+                if not _plain_language(text):
+                    raise BusinessClaimValidationError("JARGON_WITHOUT_EXPLANATION", "claim contains unexplained jargon", claim_index=index)
+                if not isinstance(keys, list) or any(not isinstance(key, str) for key in keys):
+                    raise BusinessClaimValidationError("UNKNOWN_SOURCE_KEY", "source_keys must be a string array", claim_index=index)
+                keys = list(dict.fromkeys(key.strip() for key in keys if key.strip()))
+                if claim_type in {"FACT", "INFERENCE"} and not keys:
+                    raise BusinessClaimValidationError(f"{claim_type}_WITHOUT_SOURCE", f"{claim_type} requires sources", claim_index=index)
+                missing = sorted(set(keys) - set(manifest))
+                if missing:
+                    raise BusinessClaimValidationError("UNKNOWN_SOURCE_KEY", "unknown business source key", claim_index=index, source_keys=missing)
+                if topic == "BUSINESS_CHANGE" and claim_type in {"FACT", "INFERENCE"}:
+                    roles = {str(manifest[key].get("profile_role") or "CURRENT") for key in keys}
+                    if not {"CURRENT", "PREVIOUS"} <= roles:
+                        raise BusinessClaimValidationError("CHANGE_WITHOUT_COMPARISON", "business change requires current and previous sources", claim_index=index, source_keys=keys)
+                source_text = " ".join(str(manifest[key].get("value") or "") for key in keys)
+                unsupported_numbers = [token for token in NUMERIC_TOKEN.findall(text) if token not in source_text]
+                if unsupported_numbers:
+                    raise BusinessClaimValidationError("NUMERIC_MISMATCH", "claim contains numbers absent from sources", claim_index=index, source_keys=keys)
+                share_match = re.search(r"占比(?:最高|最大)|贡献(?:最高|最大)|收入占比", text)
+                if share_match and not re.search(r"占比|贡献", source_text):
+                    nearby = text[max(0, share_match.start() - 16):share_match.start()]
+                    if not re.search(r"没有|未说明|未披露|无法|不能|不足以|看不出", nearby):
+                        raise BusinessClaimValidationError(
+                            "UNSUPPORTED_PRODUCT_SHARE", "product contribution is absent from sources",
+                            claim_index=index, source_keys=keys,
+                        )
+                accepted.append({
+                    "type": claim_type, "topic": topic, "text": text,
+                    "source_keys": keys, "confidence": confidence,
+                })
+            except BusinessClaimValidationError as exc:
+                details = exc.audit_dict() if hasattr(exc, "audit_dict") else {}
+                rejected.append({
+                    "claim_index": index,
+                    "topic": str(raw.get("topic")) if isinstance(raw, dict) else None,
+                    "reason_code": str(details.get("validation_error_code") or "CLAIM_REJECTED"),
+                    "detail": str(details.get("error_summary") or details.get("detail") or ""),
+                })
+        return {"summary": summary, "claims": accepted, "rejected_claims": rejected}
 
     @staticmethod
     def _instruction() -> str:
@@ -456,6 +537,8 @@ class BusinessResearchService:
             "只允许 summary 和 claims。claims 最多 8 条，type 只允许 FACT、INFERENCE、UNKNOWN，"
             "topic 只允许 MAIN_BUSINESS、PRODUCT、BUSINESS_MODEL、BUSINESS_CHANGE。"
             "每条 claim 必须且只能包含 type、topic、text、source_keys、confidence；"
+            "source_keys 是字符串数组（UNKNOWN 时可为空数组），绝不能省略该字段。"
+            "输出前逐条检查：keys 是否恰好为 type/topic/text/source_keys/confidence 五个。"
             "confidence 只允许 LOW、MEDIUM、HIGH。"
             "FACT 和 INFERENCE 必须引用 allowed_source_keys 中逐字一致的键名；"
             "source_keys 只能填写 Manifest 对象最外层的键，不能填写 source_id、股票代码或字段值；"
@@ -473,7 +556,13 @@ class BusinessResearchService:
 
     def analyze(self, stock_code: str, *, force: bool = False, as_of: str | None = None) -> dict[str, Any]:
         prepared = self.prepare(stock_code, as_of=as_of)
-        if prepared.get("analysis_status") == "COMPLETED" and not force:
+        status = str(prepared.get("analysis_status") or "")
+        if status in {"COMPLETED", "PARTIAL"} and not force:
+            # COMPLETED and PARTIAL are both terminal for one source
+            # fingerprint: a re-analysis requires an explicit force (manual
+            # repair) or a genuinely changed fingerprint/formula version
+            # (which prepares a different snapshot hash).  Background
+            # pipelines therefore can never auto-upgrade a PARTIAL result.
             return self.citation_resolver.resolve_snapshot(prepared)
         config, configured = self._agent_config()
         manifest = dict(prepared.get("sources") or {})
@@ -519,6 +608,26 @@ class BusinessResearchService:
             "module_version": BUSINESS_RESEARCH_VERSION,
         }
         capabilities = resolve_structured_output_capabilities(config)
+        lease_key = f"CN:{prepared['stock_code']}:{prepared['source_hash']}:{BUSINESS_RESEARCH_VERSION}"
+        lease_owner = f"pid{os.getpid()}:tid{threading.get_ident()}"
+        if not self.store.acquire_analysis_lease(lease_key, prepared["stock_code"],
+                                                 prepared["source_hash"], lease_owner):
+            # Single-flight: another caller is already analysing this exact
+            # source fingerprint.  Wait briefly for its terminal result and
+            # reuse it; never issue a second concurrent model request.
+            deadline = time.monotonic() + 15.0
+            while time.monotonic() < deadline:
+                time.sleep(1.0)
+                row = self.store.by_hash(prepared["stock_code"], prepared["source_hash"])
+                if row and str(row.get("analysis_status") or "") in {"COMPLETED", "PARTIAL", "FAILED"}:
+                    return self.citation_resolver.resolve_snapshot(self._public(row, idempotent_reuse=True))
+            return {
+                "id": prepared.get("id"), "stock_code": prepared["stock_code"],
+                "company_name": prepared.get("company_name"),
+                "analysis_status": "BUSINESS_ANALYSIS_IN_PROGRESS",
+                "detail": "同源指纹经营分析正在进行（single-flight），本次调用未产生模型请求",
+                "source_hash": prepared["source_hash"],
+            }
 
         def invoke(mode: StructuredOutputMode, response_format: dict[str, Any] | None) -> dict[str, Any]:
             connection_invoke = getattr(self.runtime, "invoke_with_connection", None)
@@ -544,35 +653,51 @@ class BusinessResearchService:
                 text_instruction="资料不足，无法生成可验证经营 Claims。", text_payload={},
                 invoke_structured=invoke, validate=lambda value: self.validate_claims(value, manifest),
             )
-            if outcome.parsed is None:
+            accepted = list((outcome.parsed or {}).get("claims") or [])
+            rejected = list((outcome.parsed or {}).get("rejected_claims") or [])
+            if not accepted:
+                # Either structured output failed wholesale (parsed None) or
+                # per-claim validation rejected every claim.  Both are PARTIAL:
+                # a legal terminal state that background pipelines must reuse,
+                # never auto-upgrade.
                 analysis = {
-                    "summary": "现有模型没有生成通过来源校验的经营结论，请先看确定性业务资料。",
+                    "summary": (outcome.parsed or {}).get("summary")
+                               or "现有模型没有生成通过来源校验的经营结论，请先看确定性业务资料。",
                     "claims": [],
+                    "rejected_claims": rejected,
                     "analysis_metadata": {
                         "quality_status": "SUMMARY_ONLY", "structured_attempts": outcome.attempts,
                         "error_types": outcome.error_types, "module_version": BUSINESS_RESEARCH_VERSION,
+                        "claims_accepted": 0, "claims_rejected": len(rejected),
                     },
                 }
-            else:
-                analysis = {
-                    **outcome.parsed,
-                    "analysis_metadata": {
-                        "quality_status": "STRUCTURED", "structured_mode": outcome.mode_used,
-                        "structured_attempts": outcome.attempts, "error_types": outcome.error_types,
-                        "module_version": BUSINESS_RESEARCH_VERSION,
-                    },
-                }
+                row = self.store.update_analysis(
+                    prepared["id"], status="PARTIAL", provider=str(config.get("provider") or ""),
+                    model=str(config["model"]), analysis=analysis,
+                )
+                return self.citation_resolver.resolve_snapshot(self._public(row, idempotent_reuse=False))
+            analysis = {
+                **outcome.parsed,
+                "analysis_metadata": {
+                    "quality_status": "STRUCTURED", "structured_mode": outcome.mode_used,
+                    "structured_attempts": outcome.attempts, "error_types": outcome.error_types,
+                    "module_version": BUSINESS_RESEARCH_VERSION,
+                    "claims_accepted": len(accepted), "claims_rejected": len(rejected),
+                },
+            }
             row = self.store.update_analysis(
                 prepared["id"], status="COMPLETED", provider=str(config.get("provider") or ""),
-                model=str(config.get("model") or ""), analysis=analysis,
+                model=str(config["model"]), analysis=analysis,
             )
             return self.citation_resolver.resolve_snapshot(self._public(row, idempotent_reuse=False))
         except Exception as exc:
             row = self.store.update_analysis(
                 prepared["id"], status="FAILED", provider=str(config.get("provider") or ""),
-                model=str(config.get("model") or ""), error=f"{type(exc).__name__}: {exc}",
+                model=str(config["model"]), error=f"{type(exc).__name__}: {exc}",
             )
             return self.citation_resolver.resolve_snapshot(self._public(row, idempotent_reuse=False))
+        finally:
+            self.store.release_analysis_lease(lease_key, lease_owner)
 
 
 _service: BusinessResearchService | None = None

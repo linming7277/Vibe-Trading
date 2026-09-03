@@ -50,6 +50,40 @@ def _discount_to_mid(item: dict[str, Any]) -> float | None:
     return round((midpoint - price) / midpoint, 6)
 
 
+def _fair_value_gap_percent(item: dict[str, Any]) -> float | None:
+    price, midpoint = _number(item.get("current_price")), _number(item.get("fair_value_mid"))
+    if price is None or midpoint is None or price <= 0:
+        return None
+    return round((midpoint / price - 1) * 100, 2)
+
+
+def _valuation_quality(item: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Read valuation-method evidence already persisted with the pool row.
+
+    The low-value pool membership remains untouched.  This only prevents a
+    sparse or extreme comparable-based value range from being presented as an
+    A-tier research conclusion before its inputs are reviewed.
+    """
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    raw = metadata.get("valuation_quality") if isinstance(metadata.get("valuation_quality"), dict) else {}
+    method_count = _number(raw.get("method_count"))
+    min_peer_count = _number(raw.get("min_peer_count"))
+    fair_value_gap_percent = _fair_value_gap_percent(item)
+    cautions: list[str] = []
+    if method_count is not None and int(method_count) < 2:
+        cautions.append("合理价值仅由单一估值方法支撑，需要先核验")
+    if min_peer_count is not None and int(min_peer_count) < 5:
+        cautions.append(f"估值可比样本仅 {int(min_peer_count)} 家，需要先核验")
+    if fair_value_gap_percent is not None and fair_value_gap_percent >= 300.0:
+        cautions.append("合理价值中枢与现价偏离过大，需要先核验估值输入")
+    return {
+        "method_count": int(method_count) if method_count is not None else None,
+        "min_peer_count": int(min_peer_count) if min_peer_count is not None else None,
+        "method_names": [str(value) for value in raw.get("method_names") or [] if value],
+        "status": "REVIEW_REQUIRED" if cautions else "READY",
+    }, cautions
+
+
 class FocusSelectionService:
     """Classify active low-value leaders without changing upstream research."""
 
@@ -136,8 +170,11 @@ class FocusSelectionService:
         preparation: dict[str, Any] | None,
         thesis: dict[str, Any] | None,
         peer_count: int | None,
+        valuation_quality_cautions: list[str],
     ) -> tuple[list[str], bool]:
-        cautions: list[str] = []
+        # Method quality comes first: a sparse or extreme comparable-based
+        # value range must not be visually buried below generic risk notes.
+        cautions: list[str] = list(valuation_quality_cautions)
         soft = False
         overall = str((risk or {}).get("overall_risk") or "UNKNOWN")
         trap = str((risk or {}).get("value_trap_risk") or "UNKNOWN")
@@ -168,7 +205,7 @@ class FocusSelectionService:
         # case (605108) and make the A tier a data-completeness ranking.
         if str((preparation or {}).get("business_profile_status") or "MISSING") == "PARTIAL":
             cautions.append("主营业务资料仅部分完整")
-        if peer_count is not None and peer_count < 5:
+        if peer_count is not None and peer_count < 5 and not any("估值可比样本" in note for note in cautions):
             cautions.append(f"同行有效样本仅 {peer_count} 家，同行比较需谨慎解读")
         return cautions[:3], soft
 
@@ -199,8 +236,13 @@ class FocusSelectionService:
         )
         thesis = self._thesis_for_as_of(self.thesis_repository.get_current_thesis(market, code), as_of)
         peer_count = self._peer_count(item)
+        valuation_quality, valuation_quality_cautions = _valuation_quality(item)
         hard = self._hard_reason(risk=risk, preparation=preparation, thesis=thesis, item=item)
-        cautions, soft = self._cautions(risk=risk, preparation=preparation, thesis=thesis, peer_count=peer_count)
+        cautions, soft = self._cautions(
+            risk=risk, preparation=preparation, thesis=thesis, peer_count=peer_count,
+            valuation_quality_cautions=valuation_quality_cautions,
+        )
+        soft = soft or bool(valuation_quality_cautions)
         discount = _discount_to_mid(item)
         source_dates = {
             "low_value_pool": _day(item.get("source_as_of")),
@@ -230,6 +272,7 @@ class FocusSelectionService:
             "financial_status": str((preparation or {}).get("financial_status") or "MISSING"),
             "business_profile_status": str((preparation or {}).get("business_profile_status") or "MISSING"),
             "peer_count": peer_count,
+            "valuation_quality": valuation_quality,
             "focus_reasons": self._reasons(item),
             "focus_cautions": cautions,
             "primary_demotion_reason": HARD_C_REASONS.get(hard) if hard else None,
@@ -274,7 +317,9 @@ class FocusSelectionService:
 
         a = [self._public(item, "A") for item in a_source]
         b = [self._public(item, "B", primary_demotion_reason=(
-            "存在需要继续观察的风险或资料缺口" if item["_soft"] else "A 档名额已满，当前排序位于后续研究序列"
+            "合理价值依据需要先核验" if str((item.get("valuation_quality") or {}).get("status") or "") == "REVIEW_REQUIRED"
+            else "存在需要继续观察的风险或资料缺口" if item["_soft"]
+            else "A 档名额已满，当前排序位于后续研究序列"
         )) for item in b_source]
         c = [self._public(item, "C", primary_demotion_reason=(
             item.get("primary_demotion_reason") or "当前排序未进入优先研究范围"

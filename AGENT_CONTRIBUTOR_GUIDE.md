@@ -3,7 +3,6 @@
 This guide is for AI-assisted and automation-assisted contributors working on
 Vibe-Trading. It does not replace `CONTRIBUTING.md`, `SECURITY.md`, or the pull
 request template. It makes the repo's agent-facing safety and verification
-expectations explicit.
 
 ## Repository Shape
 
@@ -19,7 +18,6 @@ expectations explicit.
 
 Do not copy local `.env` files, token caches, broker exports, run artifacts,
 private notebooks, generated reports, or local agent memory into this repository
-unless they are explicitly sanitized fixtures.
 
 ## Safe Local Checks
 

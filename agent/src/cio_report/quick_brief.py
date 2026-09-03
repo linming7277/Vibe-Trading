@@ -144,20 +144,30 @@ def build_quick_brief(report: dict[str, Any]) -> CioQuickBrief:
         thesis_summary = "当前尚未建立正式核心逻辑。"
         thesis_authority = ""
 
-    # 6) Watchpoints — thesis metrics first, else the Round-1 deterministic fallback.
-    watchpoints = [
-        _clean(w) for w in list(thesis.get("key_metrics_to_monitor") or [])
-        if str(w).strip()
-    ]
-    if not thesis.get("thesis_title"):
-        watchpoints = [_clean(w) for w in list(thesis.get("fallback_watchpoints") or []) if str(w).strip()]
-    if not watchpoints:
-        # invalid_conditions may be {condition, status} dicts — extract text.
+    # 6) Watchpoints — unified projection first; legacy metrics/invalid/fallback only if missing.
+    projected = list(thesis.get("top_watchpoints") or [])
+    if projected:
+        watchpoints = []
+        for item in projected[:_MAX_ITEMS]:
+            if not isinstance(item, dict):
+                continue
+            title = _clean(str(item.get("title") or ""))
+            current = _clean(str(item.get("current_state") or ""))
+            watchpoints.append(f"{title}：{current}" if current else title)
+        watchpoints = [item for item in watchpoints if item]
+    else:
         watchpoints = [
-            _clean(w.get("condition") or w.get("text") or "") if isinstance(w, dict) else _clean(w)
-            for w in list(thesis.get("invalid_conditions") or [])
+            _clean(w) for w in list(thesis.get("key_metrics_to_monitor") or [])
+            if str(w).strip()
         ]
-        watchpoints = [w for w in watchpoints if w]
+        if not thesis.get("thesis_title"):
+            watchpoints = [_clean(w) for w in list(thesis.get("fallback_watchpoints") or []) if str(w).strip()]
+        if not watchpoints:
+            watchpoints = [
+                _clean(w.get("condition") or w.get("text") or "") if isinstance(w, dict) else _clean(w)
+                for w in list(thesis.get("invalid_conditions") or [])
+            ]
+            watchpoints = [w for w in watchpoints if w]
 
     synthesis_status = str(report.get("synthesis_status")
                            or report.get("synthesis_source") or SYNTHESIS_LLM_COMPLETED)

@@ -20,7 +20,7 @@ from .daily_brief_bitable_service import LOW_VALUE_LEADER_BITABLE_URL
 from .daily_brief_store import InvestmentResearchDailyBriefRepository
 
 
-FORMULA_VERSION = "daily-brief-v20"
+FORMULA_VERSION = "daily-brief-v25"
 _TRADING_TERMS = ("买入", "卖出", "推荐", "止盈", "止损", "仓位", "加仓", "减仓")
 _FINANCIAL_METRIC_LABELS = {
     "revenue": "营业收入",
@@ -111,6 +111,7 @@ class InvestmentResearchDailyBriefService:
         review_repository: CompanyThesisReviewRepository | None = None,
         entry_research_service: Any | None = None,
         focus_selection_service: Any | None = None,
+        watchpoint_projection_service: Any | None = None,
         web_base_url: str = "",
     ) -> None:
         self.repository = repository or InvestmentResearchDailyBriefRepository()
@@ -130,6 +131,7 @@ class InvestmentResearchDailyBriefService:
             risk_snapshot_repository=self.risk_repository,
             thesis_repository=self.thesis_repository,
         )
+        self.watchpoint_projection_service = watchpoint_projection_service
         self.web_base_url = web_base_url
 
     def build(self, *, research_as_of: str) -> DailyBriefBuildResult:
@@ -222,12 +224,16 @@ class InvestmentResearchDailyBriefService:
             business_changes=business_changes,
             research_as_of=research_as_of,
         )
+        strategy_changes = self._strategy_changes(research_as_of)
         watchlist_basis = "FOCUS_A" if focus_available else "DEEP_FALLBACK"
+        focus_watchpoints = self._focus_watchpoints(focus_a if focus_available else [], research_as_of)
         rendered = self._render_executive(
             research_as_of=research_as_of,
             situations=executive_situations,
             watchlist=executive_watchlist,
             watchlist_basis=watchlist_basis,
+            strategy_changes=strategy_changes,
+            focus_watchpoints=focus_watchpoints,
         )
         if any(term in rendered for term in _TRADING_TERMS):
             raise ValueError("daily brief contains prohibited trading language")
@@ -240,6 +246,7 @@ class InvestmentResearchDailyBriefService:
             "risk_summary": {**risk_summary, "important_companies": risk_details},
             "thesis_changes": thesis_changes,
             "financial_changes": [*financial_changes, *business_changes],
+            "strategy_changes": strategy_changes,
             "data_gaps": data_gaps,
             "brief_payload": {
                 "text": rendered,
@@ -247,6 +254,7 @@ class InvestmentResearchDailyBriefService:
                 "executive_situations": executive_situations,
                 "executive_watchlist": executive_watchlist,
                 "executive_watchlist_basis": watchlist_basis,
+                "strategy_changes": strategy_changes,
                 "low_value_leader_table": low_value_leader_table,
                 "low_value_leader_bitable_url": LOW_VALUE_LEADER_BITABLE_URL,
                 "deeply_undervalued_count": len(deeply_undervalued),
@@ -581,6 +589,54 @@ class InvestmentResearchDailyBriefService:
             return [], [gap], False
         return list(selection.get("A") or []), [], True
 
+    def _focus_watchpoints(self, focus_a: list[dict[str, Any]], research_as_of: str) -> list[dict[str, Any]]:
+        """At most five Focus A companies, one top watchpoint each. Never pad."""
+        if not focus_a:
+            return []
+        service = self.watchpoint_projection_service
+        if service is None:
+            try:
+                from src.value_watchpoints import get_value_watchpoint_projection_service
+
+                service = get_value_watchpoint_projection_service()
+            except Exception:  # noqa: BLE001
+                return []
+        candidates = [str(item.get("stock_code") or "").upper() for item in focus_a[:10]]
+        candidates = [code for code in candidates if code]
+        # One shared read scope for the whole Focus A slice; the per-company
+        # result is identical to calling ``get_watchpoints`` individually.
+        batch: dict[str, dict[str, Any]] = {}
+        batch_loader = getattr(service, "get_watchpoints_batch", None)
+        if batch_loader is not None:
+            try:
+                batch = dict(batch_loader("CN", candidates, research_as_of) or {})
+            except Exception:  # noqa: BLE001
+                batch = {}
+        rows: list[dict[str, Any]] = []
+        for item in focus_a[:10]:
+            if len(rows) >= 5:
+                break
+            code = str(item.get("stock_code") or "").upper()
+            if not code:
+                continue
+            projection = batch.get(code)
+            if projection is None:
+                try:
+                    projection = service.get_watchpoints("CN", code, research_as_of)
+                except Exception:  # noqa: BLE001
+                    continue
+            tops = list(projection.get("top_watchpoints") or [])
+            if not tops:
+                continue
+            top = tops[0]
+            rows.append({
+                "stock_code": code,
+                "company_name": item.get("stock_name") or projection.get("stock_name") or code,
+                "title": top.get("title"),
+                "current_state": top.get("current_state"),
+            })
+        return rows
+
     def _executive_watchlist(
         self,
         *,
@@ -826,6 +882,34 @@ class InvestmentResearchDailyBriefService:
                 )
         return situations
 
+    def _strategy_changes(self, research_as_of: str) -> dict[str, Any]:
+        """Event-first strategy changes; legacy comparisons remain untouched as fallback."""
+        try:
+            from src.value_strategy import ValueStrategyEventDeliveryPolicy, get_value_strategy_event_service
+            events = get_value_strategy_event_service(self.repository.db_path).repository.list_events(
+                market="CN", research_as_of=research_as_of, limit=500,
+            )
+            batches = ValueStrategyEventDeliveryPolicy().aggregate(events)
+            visible = [item for item in batches if item["delivery_mode"] != "HISTORY_ONLY" and item.get("status") != "CLOSED"]
+            groups = {"重点处理": [], "研究优先级变化": [], "风险和逻辑变化": [], "其他研究状态变化": [], "今日已即时提醒": []}
+            for item in visible:
+                types = {str(event.get("event_type")) for event in item.get("events") or []}
+                if item["delivery_mode"] == "IMMEDIATE":
+                    key = "今日已即时提醒"
+                elif item["severity"] in {"HIGH", "CRITICAL"}:
+                    key = "重点处理"
+                elif types & {"PRIORITY_CHANGED", "VALUE_SCOPE_ENTERED", "VALUE_SCOPE_EXITED"}:
+                    key = "研究优先级变化"
+                elif types & {"RISK_CHANGED", "THESIS_STATUS_CHANGED", "THESIS_AUTHORITY_CHANGED", "VALUE_TRAP_CHANGED"}:
+                    key = "风险和逻辑变化"
+                else:
+                    key = "其他研究状态变化"
+                if len(groups[key]) < 5:
+                    groups[key].append(item)
+            return {"event_first": True, "groups": groups, "overflow": max(0, len(visible) - sum(len(v) for v in groups.values()))}
+        except Exception as exc:  # legacy brief remains available when Phase 2 data cannot be read
+            return {"event_first": False, "groups": {}, "overflow": 0, "fallback_reason": f"{type(exc).__name__}: {exc}"}
+
     @staticmethod
     def _render_executive(
         *,
@@ -833,11 +917,33 @@ class InvestmentResearchDailyBriefService:
         situations: list[dict[str, Any]],
         watchlist: list[dict[str, Any]],
         watchlist_basis: str = "FOCUS_A",
+        strategy_changes: dict[str, Any] | None = None,
+        focus_watchpoints: list[dict[str, Any]] | None = None,
     ) -> str:
         def cell(value: Any) -> str:
             return str(value if value is not None else "—").replace("|", "／").replace("\n", "；")
 
-        lines = ["【投资研究日报】", f"研究日期：{research_as_of}", "", "一、今日投资判断变化"]
+        lines = ["【投资研究日报】", f"研究日期：{research_as_of}", "", "一、研究状态变化"]
+        changes = strategy_changes or {}
+        if changes.get("event_first"):
+            visible = False
+            for heading, items in (changes.get("groups") or {}).items():
+                if not items:
+                    continue
+                visible = True
+                lines.append(f"- {heading}：")
+                for item in items:
+                    if heading == "今日已即时提醒":
+                        # The alert already carries the full transition batch.
+                        # The daily brief is an index, not a duplicate push.
+                        lines.append(f"  - {item['title']}（已即时提醒）。")
+                    else:
+                        lines.append(f"  - {item['title']}：{item['summary']}。")
+            if not visible:
+                lines.append("- 当日没有需要主动展示的研究状态变化。")
+        else:
+            lines.append("- 策略事件数据暂不可用，以下保留原有比较结果作为兼容说明。")
+        lines.extend(["", "二、今日投资判断变化"])
         if situations:
             lines.append("- 仅列示相对上一份日报已经改变核心逻辑、合理价值锚或风险状态的事项。")
             for item in situations:
@@ -846,7 +952,7 @@ class InvestmentResearchDailyBriefService:
                 lines.append(f"  判断影响：{item['impact']}")
         else:
             lines.append("- 相对上一份日报，今日无已确认的核心逻辑、合理价值锚或风险状态变化。")
-        lines.extend(["", "二、重点研究观察"])
+        lines.extend(["", "三、重点研究观察"])
         if watchlist_basis == "FOCUS_A":
             lines.append("- 名单与「机会与风险」页 A 级重点研究一致：已通过风险与资料条件筛选，最多 10 家。")
         else:
@@ -881,13 +987,20 @@ class InvestmentResearchDailyBriefService:
                 )
         else:
             lines.append(
-                "- 今日暂无通过风险与资料条件筛选的 A 级重点研究。"
+                "- 今日暂无通过风险、资料与估值质量条件筛选的 A 级重点研究。"
                 if watchlist_basis == "FOCUS_A"
                 else "- 今日暂无可纳入重点观察的完整估值证据。"
             )
+        if focus_watchpoints:
+            lines.extend(["", "三（附）、重点验证事项"])
+            for item in focus_watchpoints:
+                lines.append(
+                    f"- {cell(item.get('company_name'))} / {cell(item.get('stock_code'))}："
+                    f"{cell(item.get('title'))}（当前：{cell(item.get('current_state'))}）"
+                )
         lines.extend([
             "",
-            "三、低估龙头表格",
+            "四、低估龙头表格",
             f"- [打开当前低估龙头池（不保留历史）]({LOW_VALUE_LEADER_BITABLE_URL})",
             f"- 链接：{LOW_VALUE_LEADER_BITABLE_URL}",
         ])

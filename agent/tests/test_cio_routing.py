@@ -7,6 +7,7 @@ from src.cio_report.routing import (
     QUICK,
     REFRESH,
     SPECIALIST_RISK,
+    WATCHPOINT,
     classify_company_question,
 )
 from src.mcp_answer_cache import bypass_cache
@@ -29,6 +30,12 @@ def test_ordinary_question_is_quick() -> None:
     assert classify_company_question("士兰微现在怎么看？") == QUICK
     assert classify_company_question("分析一下士兰微") == QUICK
     assert classify_company_question("同庆楼值得关注吗") == QUICK
+
+
+def test_watchpoint_questions_are_not_quick() -> None:
+    assert classify_company_question("士兰微接下来重点看什么") == WATCHPOINT
+    assert classify_company_question("中原环保最需要验证什么") == WATCHPOINT
+    assert classify_company_question("格力下一份财报看什么") == WATCHPOINT
 
 
 def test_domain_deepening_is_specialist() -> None:

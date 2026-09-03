@@ -482,15 +482,21 @@ class CompanyThesisDraftService:
         return True, None
 
     def confirm(self, draft_id: str, *, title: str, core_thesis: str, status: str,
-                confidence: str, invalid_conditions: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+                confidence: str, invalid_conditions: list[dict[str, Any]] | None = None,
+                supporting_conditions: list[dict[str, Any]] | None = None,
+                key_metrics_to_monitor: list[Any] | None = None) -> dict[str, Any]:
         draft = self.repository.get(draft_id)
         if not draft:
             raise KeyError("thesis draft not found")
+        supporting = supporting_conditions if supporting_conditions is not None else list(draft.get("key_assumptions") or [])
+        metrics = key_metrics_to_monitor if key_metrics_to_monitor is not None else list(draft.get("key_metrics_to_monitor") or [])
+        invalids = invalid_conditions if invalid_conditions is not None else draft["invalid_conditions"]
         current = self.thesis_service.get_current_thesis(draft["market"], draft["stock_code"])
         if draft["draft_status"] == "CONFIRMED" and current and current.get("authority_status") == "AI_PROVISIONAL":
             thesis = self.thesis_service.create_new_version(
                 market=draft["market"], stock_code=draft["stock_code"], title=title, core_thesis=core_thesis,
-                status=status, confidence=confidence, invalid_conditions=invalid_conditions or draft["invalid_conditions"],
+                status=status, confidence=confidence, invalid_conditions=invalids,
+                supporting_conditions=supporting, key_metrics_to_monitor=metrics,
                 change_reason="人工确认当前公司核心逻辑", updated_by="HUMAN", source_data_as_of=draft.get("research_as_of"),
                 authority_status="HUMAN_CONFIRMED", source_draft_id=draft_id,
                 history_metadata={"authority_from": "AI_PROVISIONAL", "authority_to": "HUMAN_CONFIRMED", "source_draft_id": draft_id},
@@ -501,8 +507,10 @@ class CompanyThesisDraftService:
         thesis = self.thesis_service.create_initial_thesis(
             market=draft["market"], stock_code=draft["stock_code"], title=title,
             core_thesis=core_thesis, status=status, confidence=confidence,
-            invalid_conditions=invalid_conditions if invalid_conditions is not None else draft["invalid_conditions"],
+            invalid_conditions=invalids,
+            supporting_conditions=supporting, key_metrics_to_monitor=metrics,
             created_by="HUMAN", source_data_as_of=draft.get("source_data_as_of"),
+            authority_status="HUMAN_CONFIRMED", source_draft_id=draft_id,
         )
         confirmed = self.repository.confirm(draft_id, thesis_id=thesis["thesis_id"], actor="HUMAN")
         return {"status": "APPROVED", "draft": confirmed, "thesis": thesis}
@@ -525,7 +533,10 @@ class CompanyThesisDraftService:
         thesis = self.thesis_service.create_initial_thesis(
             market=draft["market"], stock_code=draft["stock_code"], title=draft["title"],
             core_thesis=draft["core_thesis"], status="FORMING", confidence=draft["confidence"],
-            invalid_conditions=draft["invalid_conditions"], created_by="AGENT",
+            invalid_conditions=draft["invalid_conditions"],
+            supporting_conditions=list(draft.get("key_assumptions") or []),
+            key_metrics_to_monitor=list(draft.get("key_metrics_to_monitor") or []),
+            created_by="AGENT",
             source_data_as_of=draft.get("research_as_of"), authority_status="AI_PROVISIONAL",
             source_draft_id=draft["draft_id"],
         )

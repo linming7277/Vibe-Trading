@@ -10,7 +10,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from bisect import bisect_right
 from datetime import date, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -34,14 +36,22 @@ def _number(value: Any) -> float | None:
     return result if math.isfinite(result) else None
 
 
-def _date_text(value: Any) -> str | None:
-    raw = str(value or "").strip().replace("-", "")[:8]
+@lru_cache(maxsize=65536)
+def _parse_date_text(text: str) -> str | None:
+    raw = text.strip().replace("-", "")[:8]
     if len(raw) != 8 or not raw.isdigit():
         return None
     try:
         return datetime.strptime(raw, "%Y%m%d").date().isoformat()
     except ValueError:
         return None
+
+
+def _date_text(value: Any) -> str | None:
+    # Every dividend event re-reads the whole share-capital timeline, so the
+    # same handful of raw date strings is normalized hundreds of thousands of
+    # times per company.  The parse is pure, so it is memoized by input text.
+    return _parse_date_text(str(value or ""))
 
 
 def _hash(value: Any) -> str:
@@ -236,8 +246,9 @@ class CapitalAllocationFactService:
         *,
         as_of: str | None,
         detail_updated_at: str | None,
+        parsed: tuple[list[dict[str, Any]], list[dict[str, Any]]] | None = None,
     ) -> dict[str, Any]:
-        points, invalid = self._capital_points(raw)
+        points, invalid = parsed if parsed is not None else self._capital_points(raw)
         points = [item for item in points if not as_of or _date_text(item["raw"].get("Date")) <= as_of]
         events: list[dict[str, Any]] = []
         previous: dict[str, Any] | None = None
@@ -271,9 +282,16 @@ class CapitalAllocationFactService:
         }
 
     @staticmethod
-    def _shares_as_of(points: list[dict[str, Any]], event_date: str) -> float | None:
-        usable = [item for item in points if (_date_text(item["raw"].get("Date")) or "9999-12-31") <= event_date]
-        return usable[-1]["total_shares"] if usable else None
+    def _shares_timeline(points: list[dict[str, Any]]) -> list[str]:
+        return [(_date_text(item["raw"].get("Date")) or "9999-12-31") for item in points]
+
+    @staticmethod
+    def _shares_as_of(points: list[dict[str, Any]], event_date: str, timeline: list[str] | None = None) -> float | None:
+        # ``_capital_points`` emits points in date order, so the newest point
+        # at or before the event is the one just left of the insertion index.
+        dates = timeline if timeline is not None else CapitalAllocationFactService._shares_timeline(points)
+        index = bisect_right(dates, event_date)
+        return points[index - 1]["total_shares"] if index else None
 
     @staticmethod
     def _linked_annual(annual_rows: list[dict[str, Any]], event_date: str) -> dict[str, Any] | None:
@@ -289,8 +307,10 @@ class CapitalAllocationFactService:
         detail_updated_at: str | None,
         annual_rows: list[dict[str, Any]],
         capital_raw: Any,
+        capital_points: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        points, _ = self._capital_points(capital_raw)
+        points = capital_points if capital_points is not None else self._capital_points(capital_raw)[0]
+        shares_timeline = self._shares_timeline(points)
         events: list[dict[str, Any]] = []
         raw_unknown_fields: list[dict[str, Any]] = []
         for index, value in enumerate(raw if isinstance(raw, list) else []):
@@ -308,7 +328,7 @@ class CapitalAllocationFactService:
                 raw_unknown_fields.append({"source_index": index, "event_date": event_date, "raw": value, "status": "UNKNOWN_RAW_FIELD"})
                 continue
             cash_per_share = bonus / 10
-            shares = self._shares_as_of(points, event_date)
+            shares = self._shares_as_of(points, event_date, shares_timeline)
             cash_total = cash_per_share * shares if shares is not None else None
             linked = self._linked_annual(annual_rows, event_date)
             trace = self._detail_trace(
@@ -391,12 +411,17 @@ class CapitalAllocationFactService:
         timeline, annual_rows = self._annual_timeline(symbol, target)
         detail, detail_updated_at = self._detail_payload(self.tdx_store, symbol)
         has_detail = bool(detail)
+        # Both the share-capital timeline and every dividend event resolve
+        # against the same raw share-capital records; parse them once.
+        parsed_capital = self._capital_points(detail.get("capital"))
         capital = self._share_capital_history(
             symbol, detail.get("capital"), as_of=target, detail_updated_at=detail_updated_at,
+            parsed=parsed_capital,
         )
         dividends = self._dividend_history(
             symbol, detail.get("dividends"), as_of=target, detail_updated_at=detail_updated_at,
             annual_rows=annual_rows, capital_raw=detail.get("capital"),
+            capital_points=parsed_capital[0],
         )
         actions = self._prepared_actions(normalized_market, symbol, target)
         self._apply_action_reasons(capital, actions)

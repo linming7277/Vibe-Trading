@@ -47,7 +47,7 @@ function lowValueLabel(status: string) { return status === "DEEPLY_UNDERVALUED" 
 function statusLabel(status: string | null | undefined) {
   const labels: Record<string, string> = {
     DEEPLY_UNDERVALUED: "深度低估", UNDERVALUED: "低估关注", FAIR: "合理观察",
-    OVERVALUED: "估值偏高", DEEPLY_OVERVALUED: "明显偏高", NO_LONGER_LEADER: "不再属于有效行业龙头",
+    OVERVALUED: "估值偏高", DEEPLY_OVERVALUED: "明显偏高", NO_LONGER_LEADER: "已移出研究范围：当前不再属于三级行业Top1/Top2",
   };
   return status ? labels[status] || status : "无历史记录";
 }

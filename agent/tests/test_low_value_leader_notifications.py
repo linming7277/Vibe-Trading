@@ -224,7 +224,7 @@ def test_sent_events_never_retry_and_card_has_no_trading_semantics(tmp_path: Pat
     assert service.notify(research_as_of=AS_OF)["status"] == "REUSED"
     assert len(sender.calls) == 1
     payload = json.dumps(sender.calls[0][1], ensure_ascii=False)
-    assert "不再属于当前L3龙头" in payload
+    assert "已移出低估龙头研究范围" in payload
     assert all(word not in payload for word in ("买入", "卖出", "推荐", "止盈", "止损", "仓位"))
 
 

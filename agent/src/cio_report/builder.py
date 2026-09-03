@@ -27,7 +27,9 @@ SECTION_TITLES: dict[str, str] = {
     "moat": "07 竞争优势",
     "capital_allocation": "08 资本配置",
     "valuation": "09 当前估值",
-    "scenarios": "10 Bear / Base / Bull",
+    "normalized_earnings": "09b 正常化盈利参考",
+    "scenarios": "10 财务情景预测",
+    "cycle_profit_scenario": "10b 周期利润情景",
     "why_research": "11 为什么值得继续研究",
     "why_caution": "12 为什么需要谨慎",
     "thesis_watchpoints": "13 核心逻辑、证伪条件与验证点",
@@ -80,6 +82,13 @@ def _pct(value: Any) -> str:
         return f"{float(value):.2f}%"
     except (TypeError, ValueError):
         return "—"
+
+
+def _f(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 class CioSectionBuilder:
@@ -449,8 +458,10 @@ class CioSectionBuilder:
         payload = {
             "overall_risk": risk.get("overall_risk"),
             "summary": risk.get("summary"),
-            "risks": [{"risk_type": r.get("risk_type"), "severity": r.get("severity"),
-                       "text": r.get("text")} for r in risks],
+            "risks": [{"risk_type": r.get("risk_type"), "status": r.get("status"),
+                       "severity": r.get("severity"), "text": r.get("text"),
+                       "why_it_matters": r.get("why_it_matters"), "watch_item": r.get("watch_item")}
+                      for r in risks],
             "value_trap_risk": risk.get("value_trap_risk"),
             "fact_observations": observations,
         }
@@ -470,6 +481,13 @@ class CioSectionBuilder:
     def build_business_structure(self) -> dict[str, Any]:
         business = self._business()
         claims = [dict(c) for c in list(business.get("claims") or [])[:8]]
+        # Business Driver Evidence projection (task §17, CIO minimal integration).
+        driver_profile: dict[str, Any] = {}
+        try:
+            from src.business_driver import get_business_driver_profile_service
+            driver_profile = get_business_driver_profile_service().profile(self.code)
+        except Exception:  # noqa: BLE001 - enrichment must never block
+            driver_profile = {}
         if not business.get("main_business"):
             # Profile-only fallback (deep-research audit §3).
             profile_main = ""
@@ -493,14 +511,44 @@ class CioSectionBuilder:
                         "source_keys": c.get("source_keys")} for c in claims],
             "data_as_of": business.get("data_as_of"),
             "source_count": len(business.get("sources") or {}),
+            "driver_profile": driver_profile if driver_profile.get("status") == "READY" else None,
         }
         lines = [f"主营业务：{business.get('main_business')}"]
         products = business.get("products") or []
         if products:
             lines.append(f"主要产品/服务：{'、'.join(str(p) for p in products[:8])}。")
-        note = business.get("product_note")
-        if note and "产品收入占比" in str(note):
-            lines.append("当前系统尚无可靠分部收入比例，不能给出各产品收入占比。")
+
+        # Structured business driver data from annual report tables (task §17).
+        if driver_profile.get("status") == "READY":
+            dp_products = [p for p in list(driver_profile.get("products") or [])
+                           if p.get("revenue") and not p.get("level")]
+            if dp_products:
+                lines.append("")
+                lines.append("**业务结构（来自年报分产品数据）**")
+                for p in dp_products[:5]:
+                    rev = float(p["revenue"]) / 1e8
+                    yoy = p.get("revenue_yoy")
+                    gm = p.get("gross_margin")
+                    yoy_text = f"（同比 {yoy:+.1f}%）" if yoy is not None else ""
+                    gm_text = f"，毛利率 {gm:.1f}%" if gm is not None else ""
+                    lines.append(f"- {p['name']}：收入 {rev:.1f} 亿{yoy_text}{gm_text}")
+            dp_volumes = list(driver_profile.get("product_volumes") or [])
+            if dp_volumes:
+                lines.append("")
+                lines.append("**产销变化**")
+                for v in dp_volumes[:4]:
+                    lines.append(
+                        f"- {v['name']}：生产 {v.get('production')}，销售 {v.get('sales')} {v.get('unit') or ''}")
+            dp_cust = driver_profile.get("customer_concentration")
+            if dp_cust:
+                lines.append("")
+                share = dp_cust.get("top5_share")
+                lines.append(f"**客户集中度**：前五大客户销售占比 {share}%。")
+        else:
+            note = business.get("product_note")
+            if note and "产品收入占比" in str(note):
+                lines.append("当前系统尚无可靠分部收入比例，不能给出各产品收入占比。")
+
         changes = business.get("business_changes") or []
         real_changes = [str(c) for c in changes if str(c).strip() and not str(c).startswith("UNKNOWN")]
         if real_changes:
@@ -511,7 +559,7 @@ class CioSectionBuilder:
             lines.append("披露事实：")
             for c in claims:
                 lines.append(f"- [{c.get('type')}] {c.get('statement')}")
-        if not real_changes and not claims:
+        if not real_changes and not claims and driver_profile.get("status") != "READY":
             lines.append("当前系统尚无可靠分部收入比例与经营变化资料。")
         return self._section("business_structure", payload, "\n".join(lines))
 
@@ -651,7 +699,54 @@ class CioSectionBuilder:
         )
         return self._section("valuation", payload, narrative)
 
+    # -- 09b 正常化盈利参考（只进入 CIO 估值节，非估值方法） -------------------
+    def build_normalized_earnings(self) -> dict[str, Any]:
+        """Read-only normalized earnings reference (plan §10, CIO-only)."""
+        try:
+            from src.normalized_earnings import get_normalized_earnings_reference_service
+
+            ref = get_normalized_earnings_reference_service().reference(
+                self.market, self.code, as_of=self.as_of)
+        except Exception as exc:  # noqa: BLE001 - enrichment must never block
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "normalized earnings failed for %s: %s", self.code, exc)
+            ref = {"status": "ERROR", "error": str(exc)[:200]}
+        return {
+            "section_type": "normalized_earnings",
+            "title": "09b 正常化盈利参考",
+            "input_fingerprint": _digest({"v": "norm-earn-v1", "payload": _fingerprint_safe(ref)}),
+            "freshness_status": "FRESH",
+            "structured_payload": ref,
+            "narrative_md": "",
+            "source_refs": [],
+        }
+
     # -- 10 Bear/Base/Bull ------------------------------------------------
+    def build_cycle_profit_scenario(self) -> dict[str, Any]:
+        """Three-tier cycle profit scenario (task §15, CIO scenario section)."""
+        try:
+            from src.cycle_profit_scenario import get_cycle_profit_scenario_service
+
+            result = get_cycle_profit_scenario_service().scenario(
+                self.market, self.code, as_of=self.as_of)
+        except Exception as exc:  # noqa: BLE001
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "cycle profit scenario failed for %s: %s", self.code, exc)
+            result = {"status": "ERROR", "error": str(exc)[:200]}
+        return {
+            "section_type": "cycle_profit_scenario",
+            "title": "10b 周期利润情景",
+            "input_fingerprint": _digest({"v": "cycle-profit-v1", "payload": _fingerprint_safe(result)}),
+            "freshness_status": "FRESH",
+            "structured_payload": result,
+            "narrative_md": "",
+            "source_refs": [],
+        }
+
     def build_scenarios(self) -> dict[str, Any]:
         financial = self._financial()
         forecast = dict(financial.get("forecast") or {})
@@ -765,16 +860,20 @@ class CioSectionBuilder:
             "AI_PROVISIONAL": "AI 初步待复核", "HUMAN_CONFIRMED": "Human Confirmed",
             "LEGACY_UNVERIFIED": "Legacy Unverified", "HUMAN_REJECTED": "Human Rejected",
         }
+        projection = self._watchpoint_projection()
         payload = {
             "thesis_title": thesis.get("title"), "thesis_status": thesis.get("status"),
             "authority_status": thesis.get("authority_status"),
             "authority_label": authority_labels.get(str(thesis.get("authority_status")), str(thesis.get("authority_status") or "")),
             "invalid_conditions": thesis.get("invalid_conditions"),
+            "supporting_conditions": thesis.get("supporting_conditions") or [],
             "key_metrics_to_monitor": metrics,
             "fallback_watchpoints": [] if thesis or metrics else self._fallback_watchpoints(),
-            # Deep-research task §8: a valid DRAFT is a middle state — shown
-            # as "AI 研究草稿 · 待人工确认", never as a formal thesis.
             "thesis_draft": self._thesis_draft_payload() if not thesis else None,
+            "top_watchpoints": list(projection.get("top_watchpoints") or []),
+            "all_watchpoints": list(projection.get("watchpoints") or []),
+            "data_gaps": list(projection.get("data_gaps") or []),
+            "projection_formula_version": projection.get("formula_version"),
         }
         lines = []
         if thesis:
@@ -786,8 +885,6 @@ class CioSectionBuilder:
             invalid = thesis.get("invalid_conditions")
             if invalid:
                 items = invalid if isinstance(invalid, list) else [invalid]
-                # Conditions may arrive as plain strings or as
-                # {condition, status} dicts — extract the text, never repr.
                 conditions = [
                     str(item.get("condition") or item.get("text") or "") if isinstance(item, dict) else str(item)
                     for item in items[:5]
@@ -797,13 +894,55 @@ class CioSectionBuilder:
                     lines.append("证伪条件：\n" + "\n".join(f"- {c}" for c in conditions))
         else:
             lines.append("核心逻辑：尚未建立（本节验证点为无核心逻辑时的确定性降级生成，非公司论点）。")
-        if metrics:
+        tops = list(payload.get("top_watchpoints") or [])
+        if tops:
+            lines.append("接下来重点验证：")
+            for item in tops:
+                lines.append(f"- {item.get('title')}: 当前 {item.get('current_state')}")
+        elif metrics:
             lines.append("关键跟踪指标（来自已保存财务研究）：\n" + "\n".join(f"- {m}" for m in metrics))
         elif not thesis:
             lines.append("验证点（确定性降级生成）：")
             for item in payload["fallback_watchpoints"]:
                 lines.append(f"- {item}")
         return self._section("thesis_watchpoints", payload, "\n".join(lines))
+
+    def _watchpoint_projection(self) -> dict[str, Any]:
+        try:
+            from src.value_watchpoints.service import ValueWatchpointProjectionService
+
+            thesis = self._thesis()
+            risk = self._risk()
+            financial = self._financial()
+
+            class _Thesis:
+                def get_current_thesis(self, *_args, **_kwargs):
+                    return thesis
+
+                def thesis_as_of(self, *_args, **_kwargs):
+                    return thesis
+
+            class _Risk:
+                def get_risk_research(self, *_args, **_kwargs):
+                    return risk
+
+            def _thesis_loader(*_args, **_kwargs):
+                return thesis
+
+            def _risk_loader(*_args, **_kwargs):
+                return risk
+
+            def _financial_loader(*_args, **_kwargs):
+                return financial
+
+            return ValueWatchpointProjectionService(
+                thesis_loader=_thesis_loader,
+                risk_loader=_risk_loader,
+                financial_loader=_financial_loader,
+                business_loader=lambda *_a, **_k: self._business(),
+            ).get_watchpoints(self.market, self.code, research_as_of=self.as_of)
+        except Exception:  # noqa: BLE001
+            return {}
 
     def _thesis_draft_payload(self) -> dict[str, Any] | None:
         """Latest valid thesis DRAFT for the §13 middle state (draft ≠ thesis)."""
@@ -898,7 +1037,9 @@ _BUILDERS: dict[str, Callable[[CioSectionBuilder], dict[str, Any]]] = {
     "moat": CioSectionBuilder.build_moat,
     "capital_allocation": CioSectionBuilder.build_capital_allocation,
     "valuation": CioSectionBuilder.build_valuation,
+    "normalized_earnings": CioSectionBuilder.build_normalized_earnings,
     "scenarios": CioSectionBuilder.build_scenarios,
+    "cycle_profit_scenario": CioSectionBuilder.build_cycle_profit_scenario,
     "why_research": CioSectionBuilder.build_why_research,
     "why_caution": CioSectionBuilder.build_why_caution,
     "thesis_watchpoints": CioSectionBuilder.build_thesis_watchpoints,

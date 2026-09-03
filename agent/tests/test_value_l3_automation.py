@@ -110,10 +110,15 @@ def _install_completed_stage_fakes(monkeypatch: pytest.MonkeyPatch, *, pool_read
         def publish(self, *, research_as_of: str):
             return {"status": "READY", "research_as_of": research_as_of}
 
+    class BriefCards:
+        def notify(self, *, research_as_of: str):
+            return {"status": "READY", "covers_low_value": True}
+
     monkeypatch.setattr(low_value_module, "get_low_value_leader_pool_service", lambda: focus)
     monkeypatch.setattr(risk_module, "get_low_value_pool_risk_snapshot_service", lambda: risk)
     monkeypatch.setattr(supervisor_module, "get_investment_research_daily_brief_service", lambda: Briefs())
     monkeypatch.setattr(supervisor_module, "get_daily_brief_bitable_publisher", lambda: BitablePublisher())
+    monkeypatch.setattr(supervisor_module, "get_daily_brief_notification_service", lambda: BriefCards())
     return focus, risk
 
 
@@ -224,6 +229,101 @@ def test_automation_bar_backfill_failure_never_blocks_the_chain(
         assert state["last_status"] == "completed"
         assert "LOW_VALUE_DAILY_BAR_READY=PARTIAL" in state["last_error"]
         assert focus.calls == ["2026-08-19"]
+    finally:
+        verify.close()
+
+
+def test_automation_card_still_sends_when_bitable_publish_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.low_value_risk_snapshot as risk_module
+    import src.investment_research_supervisor as supervisor_module
+
+    db_path = tmp_path / "research.db"
+    store = Level3LeaderStore(db_path)
+    try:
+        store.update_automation(enabled=True)
+        pool = build(store, "run-current", "2026-08-19", [
+            leader("2026-08-19", "I1", "000001.SZ", 1, 90),
+        ])
+        _mark_pool_financial_ready(store, pool)
+    finally:
+        store.close()
+
+    class FakeTdx:
+        def latest_qualified_close_snapshot(self):
+            return True, "", {"market_date": "2026-08-19"}
+
+    monkeypatch.setattr(automation, "Level3LeaderStore", lambda: Level3LeaderStore(db_path))
+    monkeypatch.setattr(automation, "get_tdx_service", lambda: FakeTdx())
+    focus, risk = _install_completed_stage_fakes(monkeypatch, pool_ready=False, risk_ready=False)
+
+    card_calls: list[str] = []
+
+    class FailingPublisher:
+        def publish(self, *, research_as_of: str):
+            return {"status": "FAILED", "error": "feishu down"}
+
+    class BriefCards:
+        def notify(self, *, research_as_of: str):
+            card_calls.append(research_as_of)
+            return {"status": "READY"}
+
+    monkeypatch.setattr(supervisor_module, "get_daily_brief_bitable_publisher", lambda: FailingPublisher())
+    monkeypatch.setattr(supervisor_module, "get_daily_brief_notification_service", lambda: BriefCards())
+
+    automation.ValueResearchScheduler().tick(datetime(2026, 8, 19, 17, 0, tzinfo=SHANGHAI))
+
+    verify = Level3LeaderStore(db_path)
+    try:
+        state = verify.get_automation()
+        assert state["last_status"] == "completed"
+        assert "FEISHU_BITABLE_READY=FAILED" in state["last_error"]
+        assert "DAILY_BRIEF_CARD_READY=READY" in state["last_error"]
+        assert card_calls == ["2026-08-19"]
+    finally:
+        verify.close()
+
+
+def test_automation_card_failure_marks_partial_but_publish_succeeded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.low_value_risk_snapshot as risk_module
+    import src.investment_research_supervisor as supervisor_module
+
+    db_path = tmp_path / "research.db"
+    store = Level3LeaderStore(db_path)
+    try:
+        store.update_automation(enabled=True)
+        pool = build(store, "run-current", "2026-08-19", [
+            leader("2026-08-19", "I1", "000001.SZ", 1, 90),
+        ])
+        _mark_pool_financial_ready(store, pool)
+    finally:
+        store.close()
+
+    class FakeTdx:
+        def latest_qualified_close_snapshot(self):
+            return True, "", {"market_date": "2026-08-19"}
+
+    monkeypatch.setattr(automation, "Level3LeaderStore", lambda: Level3LeaderStore(db_path))
+    monkeypatch.setattr(automation, "get_tdx_service", lambda: FakeTdx())
+    focus, risk = _install_completed_stage_fakes(monkeypatch, pool_ready=False, risk_ready=False)
+
+    class FailingCards:
+        def notify(self, *, research_as_of: str):
+            return {"status": "FAILED", "error": "card rejected"}
+
+    monkeypatch.setattr(supervisor_module, "get_daily_brief_notification_service", lambda: FailingCards())
+
+    automation.ValueResearchScheduler().tick(datetime(2026, 8, 19, 17, 0, tzinfo=SHANGHAI))
+
+    verify = Level3LeaderStore(db_path)
+    try:
+        state = verify.get_automation()
+        assert state["last_status"] == "partial"
+        assert "FEISHU_BITABLE_READY=READY" in state["last_error"]
+        assert "DAILY_BRIEF_CARD_READY=FAILED" in state["last_error"]
     finally:
         verify.close()
 
@@ -510,19 +610,23 @@ def test_daily_brief_failure_retries_without_rerunning_completed_stages(tmp_path
             return type("Result", (), {"status": "FAILED" if self.calls == 1 else "READY", "reused": False})()
 
     class BriefNotification:
+        def __init__(self): self.calls: list[str] = []
         def notify(self, *, research_as_of: str):
-            raise AssertionError("scheduled Value Line work must not send a daily-brief chat message")
+            # 调度链路在表格发布成功后发送简报卡片（2026-09 产品决策）。
+            self.calls.append(research_as_of)
+            return {"status": "READY"}
 
     class Notification:
         def prepare_activation(self): pass
         def notify(self, *, research_as_of: str): return {"status": "READY"}
 
     briefs = Briefs()
+    brief_cards = BriefNotification()
     monkeypatch.setattr(automation, "Level3LeaderStore", lambda: Level3LeaderStore(db_path))
     monkeypatch.setattr(automation, "get_tdx_service", lambda: FakeTdx())
     focus, risk = _install_completed_stage_fakes(monkeypatch, pool_ready=True, risk_ready=True)
     monkeypatch.setattr(supervisor_module, "get_investment_research_daily_brief_service", lambda: briefs)
-    monkeypatch.setattr(supervisor_module, "get_daily_brief_notification_service", lambda: BriefNotification())
+    monkeypatch.setattr(supervisor_module, "get_daily_brief_notification_service", lambda: brief_cards)
     monkeypatch.setattr(notification_module, "get_low_value_leader_notification_service", lambda: Notification())
 
     scheduler = automation.ValueResearchScheduler()
@@ -534,8 +638,11 @@ def test_daily_brief_failure_retries_without_rerunning_completed_stages(tmp_path
         state = verify.get_automation()
         assert state["last_status"] == "completed"
         assert "L3_READY=REUSED" in state["last_error"]
+        assert "STRATEGY_STATE_EVENTS_READY=REUSED" in state["last_error"]
         assert "DAILY_RESEARCH_BRIEF_READY=READY" in state["last_error"]
     finally:
         verify.close()
     assert briefs.calls == 2
+    # 第一次 build FAILED 时不得发卡；第二次 READY 后正常发送。
+    assert brief_cards.calls == ["2026-08-19"]
     assert focus.calls == [] and risk.calls == []

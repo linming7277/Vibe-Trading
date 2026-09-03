@@ -187,7 +187,9 @@ def register_strategy_routes(app: FastAPI, require_auth: AuthDep | None = None) 
     async def value_policies(status: str | None = None, limit: int = Query(100, ge=1, le=500)):
         return {"items": get_value_line_service().policies(status, limit)}
 
-    @app.get("/strategy/value/signals", dependencies=[Depends(require_auth)])
+    # Legacy paper-strategy surface.  Kept for simulation compatibility, but
+    # intentionally isolated from the current Value Line owner experience.
+    @app.get("/strategy/value/signals", dependencies=[Depends(require_auth)], deprecated=True)
     async def value_signals(
         market: str = Query("CN"), scope: str = Query("strategy"),
         status: str | None = Query(default=None), symbol: str | None = Query(default=None),

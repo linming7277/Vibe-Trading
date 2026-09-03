@@ -131,6 +131,8 @@ from src.api.exit_research_routes import register_exit_research_routes  # noqa: 
 from src.api.risk_research_routes import register_risk_research_routes  # noqa: E402
 from src.api.risk_research_preparation_routes import register_risk_research_preparation_routes  # noqa: E402
 from src.api.focus_selection_routes import register_focus_selection_routes  # noqa: E402
+from src.api.value_strategy_routes import register_value_strategy_routes  # noqa: E402
+from src.api.value_strategy_event_routes import register_value_strategy_event_routes  # noqa: E402
 from src.api.research_freshness_routes import register_research_freshness_routes  # noqa: E402
 from src.api.cio_report_routes import register_cio_report_routes  # noqa: E402
 from src.api.deep_research_routes import register_deep_research_routes  # noqa: E402
@@ -387,6 +389,8 @@ register_exit_research_routes(app, require_auth)
 register_risk_research_routes(app, require_auth)
 register_risk_research_preparation_routes(app, require_auth)
 register_focus_selection_routes(app, require_auth)
+register_value_strategy_routes(app, require_auth)
+register_value_strategy_event_routes(app, require_auth)
 register_research_freshness_routes(app, require_auth)
 register_cio_report_routes(app, require_auth)
 register_deep_research_routes(app, require_auth)

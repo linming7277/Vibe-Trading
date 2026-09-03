@@ -8,7 +8,6 @@ from tempfile import TemporaryDirectory
 from typing import Any, Protocol
 
 from src.investment_research_supervisor.daily_brief_excel import export_daily_brief_workbook
-from src.investment_research_supervisor.daily_brief_table_image import render_value_observation_table
 
 from src.channels.config import load_channels_config
 from src.investment_research_supervisor.daily_brief_store import InvestmentResearchDailyBriefRepository
@@ -20,6 +19,7 @@ class DailyBriefNotificationSettings:
     target_id: str = ""
     web_base_url: str = ""
     dry_run: bool = True
+    delivery_channel: str = "feishu_supervisor"
 
     @classmethod
     def from_channels_config(cls) -> "DailyBriefNotificationSettings":
@@ -27,12 +27,34 @@ class DailyBriefNotificationSettings:
         supervisor = channels.get("feishu_supervisor") if isinstance(channels.get("feishu_supervisor"), dict) else {}
         raw = supervisor.get("daily_research_brief_notification") if isinstance(supervisor, dict) else {}
         values = raw if isinstance(raw, dict) else {}
-        return cls(
-            enabled=bool(values.get("enabled", False)),
-            target_id=str(values.get("target_id") or "").strip(),
-            web_base_url=str(values.get("web_base_url") or "").strip(),
-            dry_run=bool(values.get("dry_run", True)),
-        )
+        enabled = bool(values.get("enabled", False))
+        target_id = str(values.get("target_id") or "").strip()
+        # A disabled backend channel must never be revived merely because an
+        # old nested daily-brief setting remains in its config. Hermes owns
+        # the bot lifecycle; use its outbound credentials below instead.
+        if bool(supervisor.get("enabled", False)) and enabled and target_id:
+            return cls(
+                enabled=True,
+                target_id=target_id,
+                web_base_url=str(values.get("web_base_url") or "").strip(),
+                dry_run=bool(values.get("dry_run", True)),
+            )
+
+        # Inbound legacy channels remain disabled: Hermes owns all bot
+        # conversations.  Daily reports are a separate outbound capability
+        # and use the Hermes supervisor application's existing credentials.
+        try:
+            from .hermes_feishu import HermesSupervisorFeishuCredentials
+
+            credentials = HermesSupervisorFeishuCredentials.load()
+            return cls(
+                enabled=True,
+                target_id=credentials.target_id,
+                dry_run=False,
+                delivery_channel="hermes_feishu_supervisor",
+            )
+        except RuntimeError:
+            return cls()
 
 
 class DailyBriefNotificationSender(Protocol):
@@ -84,96 +106,272 @@ class ExistingFeishuSupervisorSender:
         return channel
 
 
+class ShortLivedFeishuBriefSender:
+    """Short-lived SDK client sender for when no long-connection channel runs.
+
+    The Value Line runtime deliberately keeps backend Feishu channels
+    disabled while Hermes gateways own the bots, so durable notifications
+    use a request-scoped SDK client built from the same supervisor
+    credentials (same approach as the Bitable publisher).
+    """
+
+    _client: Any = None
+
+    @classmethod
+    def _sdk_client(cls) -> Any:
+        if cls._client is None:
+            from .hermes_feishu import HermesSupervisorFeishuCredentials
+
+            cls._client = HermesSupervisorFeishuCredentials.load().create_lark_client()
+        return cls._client
+
+    def send_interactive_card(self, *, target_id: str, card: dict[str, Any]) -> str:
+        import json
+
+        from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
+
+        client = self._sdk_client()
+        receive_id_type = "chat_id" if target_id.startswith("oc_") else "open_id"
+        request = (
+            CreateMessageRequest.builder()
+            .receive_id_type(receive_id_type)
+            .request_body(
+                CreateMessageRequestBody.builder()
+                .receive_id(target_id)
+                .msg_type("interactive")
+                .content(json.dumps(card, ensure_ascii=False))
+                .build()
+            )
+            .build()
+        )
+        response = client.im.v1.message.create(request)
+        if not response.success():
+            raise RuntimeError(f"Feishu card delivery failed: code={response.code}, msg={response.msg}")
+        return str(response.data.message_id)
+
+    def upload_image(self, *, file_path: str) -> str:
+        from lark_oapi.api.im.v1 import CreateImageRequest, CreateImageRequestBody
+
+        client = self._sdk_client()
+        with open(file_path, "rb") as handle:
+            request = (
+                CreateImageRequest.builder()
+                .request_body(
+                    CreateImageRequestBody.builder().image_type("message").image(handle).build()
+                )
+                .build()
+            )
+            response = client.im.v1.image.create(request)
+        if not response.success():
+            raise RuntimeError(f"Feishu image upload failed: code={response.code}, msg={response.msg}")
+        return str(response.data.image_key)
+
+    def send_file(self, *, target_id: str, file_path: str) -> str:
+        import json
+
+        from lark_oapi.api.im.v1 import (
+            CreateFileRequest,
+            CreateFileRequestBody,
+            CreateMessageRequest,
+            CreateMessageRequestBody,
+        )
+
+        client = self._sdk_client()
+        with open(file_path, "rb") as handle:
+            request = (
+                CreateFileRequest.builder()
+                .request_body(
+                    CreateFileRequestBody.builder()
+                    .file_type("stream")
+                    .file_name(Path(file_path).name)
+                    .file(handle)
+                    .build()
+                )
+                .build()
+            )
+            response = client.im.v1.file.create(request)
+        if not response.success():
+            raise RuntimeError(f"Feishu file upload failed: code={response.code}, msg={response.msg}")
+        file_key = str(response.data.file_key)
+        receive_id_type = "chat_id" if target_id.startswith("oc_") else "open_id"
+        message_request = (
+            CreateMessageRequest.builder()
+            .receive_id_type(receive_id_type)
+            .request_body(
+                CreateMessageRequestBody.builder()
+                .receive_id(target_id)
+                .msg_type("file")
+                .content(json.dumps({"file_key": file_key}, ensure_ascii=False))
+                .build()
+            )
+            .build()
+        )
+        message_response = client.im.v1.message.create(message_request)
+        if not message_response.success():
+            raise RuntimeError(f"Feishu file delivery failed: code={message_response.code}, msg={message_response.msg}")
+        return str(message_response.data.message_id)
+
+
+class AutoFeishuBriefSender:
+    """Prefer a running supervisor channel; fall back to short-lived SDK."""
+
+    def __init__(self) -> None:
+        self._short_lived: ShortLivedFeishuBriefSender | None = None
+
+    def _short(self) -> ShortLivedFeishuBriefSender:
+        if self._short_lived is None:
+            self._short_lived = ShortLivedFeishuBriefSender()
+        return self._short_lived
+
+    def send_interactive_card(self, *, target_id: str, card: dict[str, Any]) -> str:
+        try:
+            return ExistingFeishuSupervisorSender().send_interactive_card(target_id=target_id, card=card)
+        except Exception:  # noqa: BLE001 - channel not running is the common case
+            return self._short().send_interactive_card(target_id=target_id, card=card)
+
+    def send_file(self, *, target_id: str, file_path: str) -> str:
+        try:
+            return ExistingFeishuSupervisorSender().send_file(target_id=target_id, file_path=file_path)
+        except Exception:  # noqa: BLE001
+            return self._short().send_file(target_id=target_id, file_path=file_path)
+
+    def upload_image(self, *, file_path: str) -> str:
+        try:
+            return ExistingFeishuSupervisorSender().upload_image(file_path=file_path)
+        except Exception:  # noqa: BLE001
+            return self._short().upload_image(file_path=file_path)
+
+
 def _card_value(value: Any) -> str:
     if value is None:
         return "—"
     return str(value)
 
 
+def _short_text(value: Any, *, limit: int = 76) -> str:
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= limit else f"{text[:limit - 1]}…"
+
+
+def _summary_metrics(payload: dict[str, Any]) -> str:
+    changes = dict(payload.get("strategy_changes") or {})
+    groups = changes.get("groups") if isinstance(changes.get("groups"), dict) else {}
+    visible_changes = sum(len(items or []) for items in groups.values())
+    overflow = int(changes.get("overflow") or 0)
+    watchlist_count = len(list(payload.get("executive_watchlist") or []))
+    as_of = _card_value(payload.get("research_as_of"))
+    change_text = str(visible_changes + overflow) if visible_changes + overflow else "无"
+    return f"**研究日期** {as_of}　｜　**重点研究** {watchlist_count} 家　｜　**状态变化** {change_text} 项"
+
+
+def _compact_strategy_changes(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Keep the card concise; the persisted brief remains the audit record."""
+    changes = dict(payload.get("strategy_changes") or {})
+    groups = changes.get("groups") if isinstance(changes.get("groups"), dict) else {}
+    order = ("重点处理", "风险和逻辑变化", "研究优先级变化", "其他研究状态变化", "今日已即时提醒")
+    rows: list[dict[str, Any]] = []
+    shown = 0
+    for heading in order:
+        items = list(groups.get(heading) or [])
+        if not items or shown >= 5:
+            continue
+        if not rows:
+            rows.append({"tag": "markdown", "content": "**今日变化**"})
+        rows.append({"tag": "markdown", "content": f"_{heading} · {len(items)} 项_"})
+        for item in items:
+            if shown >= 5:
+                break
+            summary = _short_text(item.get("summary") or item.get("primary_reason") or "研究状态已更新")
+            rows.append({"tag": "markdown", "content": f"• **{_card_value(item.get('stock_name'))}**　{summary}"})
+            shown += 1
+    if not rows:
+        rows.append({"tag": "markdown", "content": "**今日变化**\n当日没有需要主动展示的研究状态变化。"})
+    overflow = int(changes.get("overflow") or 0)
+    if overflow or shown < sum(len(items or []) for items in groups.values()):
+        rows.append({"tag": "note", "elements": [{
+            "tag": "plain_text",
+            "content": "其余研究状态变化已记录在系统中，避免日报重复堆叠。",
+        }]})
+    return rows
+
+
+def _compact_investment_changes(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    situations = list(payload.get("executive_situations") or [])[:3]
+    if not situations:
+        return []
+    rows: list[dict[str, Any]] = [{"tag": "markdown", "content": "**判断变化**"}]
+    for item in situations:
+        company, code = _card_value(item.get("company_name")), _card_value(item.get("stock_code"))
+        basis = _short_text(item.get("basis") or "研究判断已更新")
+        rows.append({"tag": "markdown", "content": f"• **{company} / {code}**　{basis}"})
+    return rows
+
+
 def _value_observation_table(brief: dict[str, Any]) -> list[dict[str, Any]]:
+    """Render readable vertical summaries instead of a cramped wide table."""
     payload = dict(brief.get("brief_payload") or {})
     watchlist = list(payload.get("executive_watchlist") or [])
     if not watchlist:
-        return [{"tag": "markdown", "content": "暂无可展示的完整估值观察。"}]
+        return [{"tag": "markdown", "content": "暂无通过风险、资料与估值质量条件筛选的重点研究。"}]
 
-    def column(content: str, *, weight: int) -> dict[str, Any]:
-        return {
-            "tag": "column",
-            "width": "weighted",
-            "weight": weight,
-            "vertical_align": "top",
-            "elements": [{"tag": "markdown", "content": content}],
-        }
-
-    elements = [{
-        "tag": "column_set",
-        "flex_mode": "none",
-        "columns": [
-            column("**公司 / 代码**", weight=2),
-            column("**现价**", weight=1),
-            column("**历史支撑**", weight=2),
-            column("**合理价值范围**", weight=3),
-            column("**中位值差距**", weight=1),
-        ],
-    }]
-    for item in watchlist:
+    elements: list[dict[str, Any]] = []
+    for index, item in enumerate(watchlist, start=1):
         support = dict(item.get("historical_support") or {})
         support_text = (
             f"{_card_value(support.get('low'))}–{_card_value(support.get('high'))}"
             if support.get("low") is not None and support.get("high") is not None
-            else "—"
+            else "资料不足"
         )
         gap = item.get("valuation_gap_percent")
-        gap_text = f"{gap:.2f}%" if isinstance(gap, (int, float)) else "—"
+        gap_text = f"{gap:.2f}%" if isinstance(gap, (int, float)) else "资料不足"
         fair_value_range = f"{_card_value(item.get('fair_value_low'))}–{_card_value(item.get('fair_value_high'))}"
-        elements.append({
-            "tag": "column_set",
-            "flex_mode": "none",
-            "columns": [
-                column(
-                    f"{_card_value(item.get('company_name'))}\n"
-                    f"{_card_value(item.get('stock_code'))}",
-                    weight=2,
-                ),
-                column(_card_value(item.get("current_price")), weight=1),
-                column(support_text, weight=2),
-                column(fair_value_range, weight=3),
-                column(gap_text, weight=1),
-            ],
-        })
+        priority = _short_text(item.get("research_priority_reason") or item.get("research_change"), limit=58)
+        cautions = list(item.get("research_cautions") or [])
+        caution = _short_text(cautions[0] if cautions else item.get("valuation_caveat"), limit=58)
+        content = (
+            f"**{index}. {_card_value(item.get('company_name'))} / {_card_value(item.get('stock_code'))}**　{_card_value(item.get('industry_name'))}\n"
+            f"现价 **{_card_value(item.get('current_price'))}**　｜　合理价值中枢 **{_card_value(item.get('fair_value_mid'))}**　｜　差距 **{gap_text}**\n"
+            f"合理价值范围 {fair_value_range}　｜　历史支撑 {support_text}"
+        )
+        if priority:
+            content += f"\n研究重点：{priority}"
+        if caution:
+            content += f"\n注意：{caution}"
+        elements.append({"tag": "markdown", "content": content})
     return elements
 
 
 def build_daily_brief_card(
     brief: dict[str, Any], *, value_table_image_key: str | None = None,
+    include_bitable_link: bool = True,
 ) -> dict[str, Any]:
     payload = dict(brief.get("brief_payload") or {})
-    text = str(payload.get("text") or "资料不足")
-    investment_changes = text.split("\n\n二、重点研究观察", 1)[0]
     bitable_url = str(payload.get("low_value_leader_bitable_url") or "").strip()
-    value_table = (
-        [{
-            "tag": "img",
-            "img_key": value_table_image_key,
-            "alt": {"tag": "plain_text", "content": "重点研究观察表格"},
-            "scale_type": "fit_horizontal",
-        }]
-        if value_table_image_key
-        else _value_observation_table(brief)
-    )
     elements: list[dict[str, Any]] = [
-        {"tag": "markdown", "content": investment_changes},
+        {"tag": "markdown", "content": _summary_metrics(payload)},
         {"tag": "hr"},
-        {"tag": "markdown", "content": "**二、重点研究观察**"},
-        *value_table,
+        *_compact_strategy_changes(payload),
+        *_compact_investment_changes(payload),
         {"tag": "hr"},
-        {"tag": "markdown", "content": "**三、低估龙头表格**"},
+        {"tag": "markdown", "content": f"**重点研究 · {len(list(payload.get('executive_watchlist') or []))} 家**"},
+        {"tag": "note", "elements": [{
+            "tag": "plain_text",
+            "content": "按低估程度、龙头质量、价值空间及风险资料条件筛选；不构成买卖建议。",
+        }]},
+        *_value_observation_table(brief),
     ]
-    if bitable_url:
-        elements.append({"tag": "markdown", "content": f"[打开当前低估龙头池（不保留历史）]({bitable_url})"})
+    if bitable_url and include_bitable_link:
+        elements.extend([
+            {"tag": "hr"},
+            {"tag": "action", "actions": [{
+                "tag": "button", "type": "default",
+                "text": {"tag": "plain_text", "content": "查看完整低估龙头池"},
+                "url": bitable_url,
+            }]},
+        ])
     return {
         "config": {"wide_screen_mode": True},
-        "header": {"title": {"tag": "plain_text", "content": "今日投研简报"}},
+        "header": {"title": {"tag": "plain_text", "content": "投研主管｜每日简报"}},
         "elements": elements,
     }
 
@@ -196,7 +394,7 @@ class DailyBriefNotificationService:
         brief = self.repository.get_completed(research_as_of)
         if not brief:
             return {"status": "FAILED", "research_as_of": research_as_of, "error": "daily brief is not ready"}
-        channel = "feishu_supervisor"
+        channel = self.settings.delivery_channel
         target_id = self.settings.target_id
         delivery = self.repository.delivery(
             research_as_of=research_as_of, channel=channel, target_id=target_id,
@@ -225,7 +423,7 @@ class DailyBriefNotificationService:
                 status="SKIPPED_DISABLED",
             )
             return {"status": "DISABLED", "research_as_of": research_as_of, "delivery": delivery, "covers_low_value": False}
-        card = build_daily_brief_card(brief)
+        card = build_daily_brief_card(brief, include_bitable_link=bitable_published)
         if self.settings.dry_run:
             delivery = self.repository.record_delivery(
                 research_as_of=research_as_of, channel=channel, target_id=target_id, status="DRY_RUN",
@@ -253,15 +451,10 @@ class DailyBriefNotificationService:
                     attachment_message_id=attachment_message_id,
                 )
             if not message_id:
-                value_table_image_key: str | None = None
-                upload_image = getattr(self.sender, "upload_image", None)
-                if callable(upload_image):
-                    with TemporaryDirectory(prefix="daily_brief_table_") as directory:
-                        image_path = render_value_observation_table(
-                            brief, Path(directory) / f"重点研究观察_{research_as_of}.png",
-                        )
-                        value_table_image_key = str(upload_image(file_path=str(image_path)))
-                card = build_daily_brief_card(brief, value_table_image_key=value_table_image_key)
+                card = build_daily_brief_card(
+                    brief,
+                    include_bitable_link=bitable_published,
+                )
                 message_id = self.sender.send_interactive_card(target_id=target_id, card=card)
         except Exception as exc:
             delivery = self.repository.record_delivery(
@@ -286,5 +479,5 @@ _service: DailyBriefNotificationService | None = None
 def get_daily_brief_notification_service() -> DailyBriefNotificationService:
     global _service
     if _service is None:
-        _service = DailyBriefNotificationService()
+        _service = DailyBriefNotificationService(sender=AutoFeishuBriefSender())
     return _service

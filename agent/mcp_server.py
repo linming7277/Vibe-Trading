@@ -594,6 +594,28 @@ def get_investment_research_daily_brief(as_of: str = "") -> str:
         return _json_error(str(exc), error_type="daily_brief_unavailable")
 
 
+@mcp.tool
+def get_value_strategy_events(stock_code: str = "", status: str = "", since: str = "", limit: int = 20) -> str:
+    """Read saved Value Line research-state changes without refreshing research.
+
+    Use for questions such as “今天有哪些公司研究状态变了” or “某公司为什么降级”.
+    This tool returns deterministic event facts and never calls financial, risk,
+    valuation, or other specialist agents.
+    """
+    try:
+        from src.research_workspace.store import normalize_symbol
+        from src.value_strategy import ValueStrategyEventDeliveryPolicy, get_value_strategy_event_service
+        service = get_value_strategy_event_service()
+        code = normalize_symbol("CN", stock_code) if stock_code.strip() else None
+        events = service.repository.list_events(
+            market="CN", stock_code=code, status=status.strip().upper() or None,
+            since=since.strip() or None, limit=max(1, min(int(limit), 100)),
+        )
+        return _json_ok(batches=ValueStrategyEventDeliveryPolicy().aggregate(events), count=len(events))
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        return _json_error(str(exc), error_type="strategy_events_unavailable")
+
+
 def _company_answer_fingerprint(question: str) -> dict[str, Any] | None:
     """Cache dimensions for a company-scoped specialist answer (plan §6, basic).
 
@@ -886,6 +908,50 @@ def prepare_deep_research(stock_code: str, as_of: str = "") -> str:
         return _json_error(str(exc), error_type="deep_prepare_rejected")
     except (OSError, TypeError, ValueError) as exc:
         return _json_error(str(exc), error_type="deep_prepare_failed")
+
+
+@mcp.tool
+def get_value_strategy_state(stock_code: str, as_of: str = "") -> str:
+    """Read the unified Value Line research state for one A-share company.
+
+    Use this first for questions such as "值得关注吗", "为什么是A",
+    "现在是买点吗" or "现在该怎么办".  The result separates value-scope
+    eligibility, research priority, price/valuation attention conditions,
+    review pressure, risk, Thesis authority, and data freshness.  It is a
+    read-only research projection and never returns an order or position.
+    """
+    try:
+        from src.value_strategy import get_value_strategy_state_service
+
+        state = get_value_strategy_state_service().get_strategy_state(
+            "CN", _resolve_cio_stock_code(stock_code), research_as_of=as_of or None,
+        )
+        return _json_ok(strategy_state=state)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        return _json_error(str(exc), error_type="value_strategy_state_unavailable")
+
+
+@mcp.tool
+def get_value_watchpoints(stock_code: str, as_of: str = "", limit: int = 0) -> str:
+    """Read the 1-3 most important research verification points for one A-share company.
+
+    Use for "接下来重点看什么", "最需要验证什么", "下一份财报看什么".
+    This is a read-only projection of saved research: zero model calls,
+    never a trade signal, and never a research-task creator.
+    ``stock_code`` accepts a company name, a six-digit code, or a suffixed code.
+    """
+    try:
+        from src.value_watchpoints import get_value_watchpoint_projection_service
+
+        projection = get_value_watchpoint_projection_service().get_watchpoints(
+            "CN",
+            _resolve_cio_stock_code(stock_code),
+            as_of or None,
+            limit or None,
+        )
+        return _json_ok(**projection)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        return _json_error(str(exc), error_type="value_watchpoints_unavailable")
 
 
 @mcp.tool

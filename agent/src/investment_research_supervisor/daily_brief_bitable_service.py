@@ -84,24 +84,9 @@ class ExistingFeishuBitableGateway:
             # is intentionally disabled.
             pass
 
-        from src.channels.config import load_channels_config
-        from src.channels.feishu import _load_lark_runtime
+        from src.investment_research_supervisor.hermes_feishu import HermesSupervisorFeishuCredentials
 
-        config = dict(load_channels_config().get("feishu_supervisor") or {})
-        app_id = str(config.get("app_id") or "").strip()
-        app_secret = str(config.get("app_secret") or "").strip()
-        if not app_id or not app_secret:
-            raise RuntimeError("Feishu supervisor credentials are not configured for Bitable publication")
-        lark, feishu_domain, lark_domain = _load_lark_runtime()
-        domain = lark_domain if str(config.get("domain") or "feishu") == "lark" else feishu_domain
-        return (
-            lark.Client.builder()
-            .app_id(app_id)
-            .app_secret(app_secret)
-            .domain(domain)
-            .log_level(lark.LogLevel.INFO)
-            .build()
-        )
+        return HermesSupervisorFeishuCredentials.load().create_lark_client()
 
     @staticmethod
     def _require_success(response: Any) -> Any:
@@ -319,12 +304,40 @@ class DailyBriefBitablePublisher:
     ) -> None:
         self.repository = repository or InvestmentResearchDailyBriefRepository()
         self.settings = settings or DailyBriefBitableSettings()
+        self._gateway_was_injected = gateway is not None
         self.gateway = gateway or ExistingFeishuBitableGateway(self.settings)
+
+    # Bitable is an optional archival channel.  When credentials are absent
+    # (e.g. the backend Feishu channels were deliberately disabled in favour
+    # of Hermes gateways), skip gracefully instead of triggering a retry storm.
+    MAX_PUBLISH_ATTEMPTS = 20
+
+    def _credentials_available(self) -> bool:
+        try:
+            from src.investment_research_supervisor.hermes_feishu import HermesSupervisorFeishuCredentials
+
+            HermesSupervisorFeishuCredentials.load()
+            return True
+        except Exception:  # noqa: BLE001
+            return False
 
     def publish(self, *, research_as_of: str) -> dict[str, Any]:
         brief = self.repository.get_completed(research_as_of)
         if not brief:
             return {"status": "FAILED", "research_as_of": research_as_of, "error": "daily brief is not ready"}
+        # Bitable is optional archival: when credentials are absent (backend
+        # Feishu channels deliberately disabled for Hermes), skip gracefully
+        # instead of triggering a retry storm.  Feishu card is the primary.
+        if not self._gateway_was_injected and not self._credentials_available():
+            return {
+                "status": "SKIPPED", "research_as_of": research_as_of,
+                "error": "Feishu supervisor credentials not configured; Bitable archival skipped",
+            }
+        # Stop retrying after the cap; the Feishu card is the primary channel.
+        existing = self.repository.delivery(
+            research_as_of=research_as_of, channel="feishu_bitable", target_id=self.settings.table_id)
+        if existing and existing.get("status") == "FAILED" and int(existing.get("attempts") or 0) >= self.MAX_PUBLISH_ATTEMPTS:
+            return {"status": "SKIPPED", "research_as_of": research_as_of, "error": "max publish attempts reached"}
         source_rows = self._source_rows(brief)
         try:
             field_items = self.gateway.list_fields()

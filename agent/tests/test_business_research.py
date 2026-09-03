@@ -16,7 +16,6 @@ from src.business_research.service import (
     BusinessResearchService,
 )
 from src.business_research.store import BusinessResearchStore
-from src.disclosure_materials.store import DisclosureMaterialStore
 from src.level3_leaders.business_profiles import CompanyBusinessProfileService
 from src.tdx_data.store import TdxDataStore
 
@@ -201,9 +200,8 @@ def test_business_change_requires_current_and_previous_sources() -> None:
     }
     assert BusinessResearchService.validate_claims(valid, manifest)["claims"][0]["topic"] == "BUSINESS_CHANGE"
     valid["claims"][0]["source_keys"] = ["BUSINESS_CURRENT_MAIN_BUSINESS"]
-    with pytest.raises(BusinessClaimValidationError) as caught:
-        BusinessResearchService.validate_claims(valid, manifest)
-    assert caught.value.code == "CHANGE_WITHOUT_COMPARISON"
+    rejected = BusinessResearchService.validate_claims(valid, manifest)["rejected_claims"]
+    assert rejected and rejected[0]["reason_code"] == "CHANGE_WITHOUT_COMPARISON"
 
 
 @pytest.mark.parametrize(
@@ -219,9 +217,16 @@ def test_business_change_requires_current_and_previous_sources() -> None:
 )
 def test_validator_enforces_sources_plain_language_no_share_and_no_trading(claim: dict, code: str) -> None:
     manifest = {"SOURCE": {"value": "设备,耗材", "profile_role": "CURRENT"}}
-    with pytest.raises(BusinessClaimValidationError) as caught:
-        BusinessResearchService.validate_claims({"summary": "公司销售设备和耗材。", "claims": [claim]}, manifest)
-    assert caught.value.code == code
+    # TRADING_LANGUAGE is a whole-result refusal; claim-level rules reject
+    # only the offending claim (per-claim validation, 2026-09-02).
+    if code == "TRADING_LANGUAGE":
+        with pytest.raises(BusinessClaimValidationError) as caught:
+            BusinessResearchService.validate_claims({"summary": "公司销售设备和耗材。", "claims": [claim]}, manifest)
+        assert caught.value.code == code
+        return
+    result = BusinessResearchService.validate_claims({"summary": "公司销售设备和耗材。", "claims": [claim]}, manifest)
+    assert result["claims"] == []
+    assert result["rejected_claims"] and result["rejected_claims"][0]["reason_code"] == code
 
 
 def test_jargon_is_allowed_only_when_explained() -> None:

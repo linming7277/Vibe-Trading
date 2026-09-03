@@ -38,7 +38,17 @@ TERM_ZH = [
     (re.compile(r"\bL3\b"), "三级行业"),
 ]
 
-_ENGLISH_TOKEN_RE = re.compile(r"\b(GROWTH|STABLE_GROWTH|RECOVERY|CYCLICAL_RECOVERY|DECLINING|UNKNOWN|HIGH|MEDIUM|LOW|FAIR|UNDERVALUED|DEEPLY_UNDERVALUED|OVERVALUED|DEEPLY_OVERVALUED|INSUFFICIENT_DATA|READY|PARTIAL|LIMITED|STRONG|ABOVE_AVERAGE|BELOW_AVERAGE|WEAK|NOT_APPLICABLE|NOT_RUN|NOT_COLLECTED|WATCH|FORMING|AI_PROVISIONAL|HUMAN_CONFIRMED|LEGACY_UNVERIFIED|BEAR|BASE|BULL|MISSING|CIO)\b")
+_ENGLISH_TOKEN_RE = re.compile(r"\b(GROWTH|STABLE_GROWTH|RECOVERY|CYCLICAL_RECOVERY|DECLINING|UNKNOWN|HIGH|MEDIUM|LOW|FAIR|UNDERVALUED|DEEPLY_UNDERVALUED|OVERVALUED|DEEPLY_OVERVALUED|INSUFFICIENT_DATA|READY|PARTIAL|LIMITED|STRONG|ABOVE_AVERAGE|BELOW_AVERAGE|WEAK|NOT_APPLICABLE|NOT_RUN|NOT_COLLECTED|WATCH|FORMING|AI_PROVISIONAL|HUMAN_CONFIRMED|LEGACY_UNVERIFIED|BEAR|BASE|BULL|MISSING|CIO|OCF|Capex|Forecast|PIT|Moat|SUPPORTED|COUNTER_EVIDENCE)\b")
+
+# Domain-term replacements applied before the status mapping (task §14).
+_TERM_REPLACEMENTS = [
+    (re.compile(r"\bOCF\b"), "经营现金流"),
+    (re.compile(r"\bCapex\b"), "资本开支"),
+    (re.compile(r"\bForecast\b"), "财务情景预测"),
+    (re.compile(r"\bPIT\b"), "截至当时可见数据"),
+    (re.compile(r"\bMoat\b"), "竞争优势研究"),
+    (re.compile(r"(\d{4})E\b"), r"\1年预测"),
+]
 
 
 def zh(value: Any, default: str = "当前资料不足，暂无法判断") -> str:
@@ -49,6 +59,8 @@ def zh(value: Any, default: str = "当前资料不足，暂无法判断") -> str
 def boss_text(text: str) -> str:
     """Map leftover backend tokens inside a rendered paragraph to Chinese."""
     result = str(text or "")
+    for pattern, replacement in _TERM_REPLACEMENTS:
+        result = pattern.sub(replacement, result)
     result = _ENGLISH_TOKEN_RE.sub(lambda m: STATUS_ZH.get(m.group(1), m.group(1)), result)
     result = result.replace("BEAR", "谨慎情景").replace("BASE", "基准情景").replace("BULL", "乐观情景")
     for pattern, replacement in TERM_ZH:
@@ -212,8 +224,26 @@ class BossRenderer:
                 lines.append(f"综合归纳：当前处于{'、'.join(phrases)}阶段。")
             else:
                 lines.append(f"综合归纳：{zh(self.stage.get('stage'))}。")
-        else:
-            lines.append(f"综合归纳受限于：{'、'.join(missing)}维度资料不足，暂无法给出完整阶段判断。")
+        # Latest quarter validation (task §5): the quarter must confirm or
+        # challenge the annual-based stage judgment.
+        q_section = self.s.get("latest_quarter") or {}
+        q_payload = dict(q_section.get("structured_payload") or {})
+        if q_payload.get("report_date"):
+            metrics = {m["item"]: m for m in list(q_payload.get("metrics") or []) if isinstance(m, dict)}
+            q_lines = []
+            rev = metrics.get("营收")
+            if rev and "增长" in str(rev.get("yoy")):
+                q_lines.append("收入延续增长")
+            profit = metrics.get("归母净利润")
+            if profit and "增长" in str(profit.get("yoy")):
+                q_lines.append("净利润同比改善")
+            ocf = metrics.get("经营现金流")
+            if ocf and ("下降" in str(ocf.get("yoy")) or "-" in str(ocf.get("yoy"))):
+                q_lines.append("但经营现金流明显走弱")
+            if q_lines:
+                lines.append(
+                    f"最新季度验证（{str(q_payload.get('report_date'))[:10]}）：{'，'.join(q_lines)}。"
+                    + ("盈利修复仍需现金流确认。" if "经营现金流明显走弱" in q_lines else ""))
         return "\n".join(lines)
 
     # -- 5 核心矛盾（§三） --------------------------------------------------
@@ -277,7 +307,49 @@ class BossRenderer:
             if pb and peer else (f"市净率 {_num(pb)} 倍（暂无可比对照）。" if pb else "市净率暂缺。"))
         history_text = "历史估值数据尚未完整物化，因此无法对照公司自身历史估值位置，这一缺口限制了对估值周期位置的判断。"
         premise = "当前估值最大的前提是盈利修复能够兑现；若利润修复不及预期，仅凭现有价格对应的估值支撑会明显减弱。"
-        return "\n".join([pos_text, pe_text, peer_text, history_text, premise])
+        normalized = self._normalized_earnings_text()
+        parts = [pos_text, pe_text, peer_text, history_text, premise]
+        if normalized:
+            parts.append(normalized)
+        return "\n\n".join(parts)
+
+    def _normalized_earnings_text(self) -> str:
+        """Normalized earnings reference sub-section (task §10, CIO valuation only)."""
+        section = self.s.get("normalized_earnings") or {}
+        payload = dict(section.get("structured_payload") or {})
+        if payload.get("status") != "READY":
+            return ""
+        if payload.get("applicability") == "LOW_VALUE_ADDED":
+            return ""
+        years = payload.get("historical_years") or []
+        lines = [
+            "**正常化盈利参考**",
+            "",
+            f"过去{payload.get('sample_count')}个完整年度（{'、'.join(years[:5])}）净利率分布显示：",
+            f"- 谨慎参考：净利率约 {payload.get('conservative_margin')}%，对应利润约 {_num(payload.get('conservative_profit'))} 亿",
+            f"- 基准参考：净利率约 {payload.get('base_margin')}%，对应利润约 {_num(payload.get('base_profit'))} 亿",
+            f"- 较高参考：净利率约 {payload.get('effective_upper_margin')}%，对应利润约 {_num(payload.get('upper_profit'))} 亿",
+            f"（基于{payload.get('reference_revenue_year')}年营收 {_num(payload.get('reference_revenue'))} 亿）",
+        ]
+        pe_parts = []
+        for label, key in [("谨慎", "conservative_reference_pe"), ("基准", "base_reference_pe"), ("较高", "upper_reference_pe")]:
+            pe_val = payload.get(key)
+            pe_parts.append(f"{label}{'约' + str(int(pe_val)) + '倍' if pe_val else '不适用'}")
+        lines.append(f"对应当前市值的基于正常化盈利参考的市盈率约为：{' / '.join(pe_parts)}。")
+        lines.append("")
+        lines.append('这里"较高档"只是历史分布上沿参考，不是盈利预测；正常化盈利也不是合理价值。')
+        cap_applied = payload.get("upper_cap_applied")
+        if cap_applied:
+            lines.append(f"（较高档利润率已从原始历史上沿 {payload.get('raw_p75_margin')}% 封顶至 {payload.get('effective_upper_margin')}%，防止周期高点过度拉高参考。）")
+        position = payload.get("current_margin_position")
+        if position:
+            lines.append(f"当前位置判断：按{payload.get('historical_years', [''])[-1] if years else '最新'}年数据，当前盈利{position}。")
+        anchor = payload.get("latest_quarter_anchor")
+        if anchor and isinstance(anchor, dict):
+            lines.append(f"最新季度（{str(anchor.get('report_date'))[:10]}）净利率 {anchor.get('net_margin'):.2f}%，{anchor.get('position_vs_base')}历史中位正常化净利率。")
+        for caution in list(payload.get("quality_cautions") or [])[:2]:
+            lines.append(caution)
+        return "\n".join(lines)
 
     # -- 6 风险逻辑（§七） ----------------------------------------------------
     def section_risk(self) -> str:
@@ -314,6 +386,10 @@ class BossRenderer:
 
     # -- 11 三情景（§九） -----------------------------------------------------
     def section_scenarios(self) -> str:
+        # Priority: Cycle Profit Scenario (if available) → Revenue-only fallback.
+        cyc = _sec(self.s, "cycle_profit_scenario")
+        if cyc.get("status") == "READY":
+            return self._cycle_scenario_text(cyc)
         fin = _sec(self.s, "scenarios")
         scenarios = dict(fin.get("scenarios") or {})
         if not scenarios:
@@ -332,6 +408,34 @@ class BossRenderer:
         status = str(fin.get("status") or "")
         if status == "LIMITED":
             lines.append("当前情景分析受限：净利润情景未生成，盈利端解释力有限。")
+        return "\n".join(lines)
+
+    def _cycle_scenario_text(self, cyc: dict[str, Any]) -> str:
+        """Three-tier profit scenario with GM guardrail explanation (task §15/§9)."""
+        year = str(cyc.get("terminal_year") or "")
+        lines = []
+        for label, rev_key, margin_key, profit_key, pe_key in (
+            ("谨慎情景", "bear_revenue", "bear_margin", "bear_profit", "bear_implied_pe"),
+            ("基准情景", "base_revenue", "base_margin", "base_profit", "base_implied_pe"),
+            ("乐观情景", "bull_revenue", "bull_margin", "bull_profit", "bull_implied_pe"),
+        ):
+            rev = float(cyc.get(rev_key) or 0)
+            margin = cyc.get(margin_key)
+            profit = float(cyc.get(profit_key) or 0)
+            pe = cyc.get(pe_key)
+            pe_text = f"约 {int(pe)} 倍" if pe else "不适用"
+            lines.append(f"### {label}")
+            lines.append(
+                f"{year}年预测收入 {_num(rev / 1e8)} 亿 × 利润率假设 {_num(margin)}% = "
+                f"净利润 {_num(profit / 1e8)} 亿。按当前市值计算的情景市盈率 {pe_text}。")
+            lines.append("")
+        explanation = str(cyc.get("bull_explanation") or "")
+        if explanation:
+            lines.append(explanation)
+            lines.append("")
+        lines.append("以上为历史利润率与现有收入情景形成的确定性压力测试，不代表概率预测，也不是目标价格。")
+        for caution in list(cyc.get("quality_cautions") or [])[:2]:
+            lines.append(caution)
         return "\n".join(lines)
 
     # -- 13 验证点分级（§十） ---------------------------------------------------
@@ -362,7 +466,12 @@ class BossRenderer:
                 if items:
                     lines.append(f"{label}：" + "；".join(items))
             lines.append("（草稿需经人工确认后才转为正式核心逻辑；确认前不作为任何档位硬条件）")
-        pool = metrics or invalid or fallback
+        pool = [
+            str(item.get("title") or "") for item in list(t.get("top_watchpoints") or [])
+            if isinstance(item, dict) and str(item.get("title") or "").strip()
+        ]
+        if not pool:
+            pool = metrics or invalid or fallback
         if not pool:
             return "\n".join(lines)
         # Priority split: 1 / 1-2 / rest; short pools still show all tiers.
@@ -377,25 +486,6 @@ class BossRenderer:
         if long_term:
             lines.append("**长期观察点**：" + "；".join(long_term))
         return "\n".join(lines)
-
-    # -- 14 最终裁决（§十一） ---------------------------------------------------
-    def section_final_verdict(self) -> str:
-        verdict = self.conclusion.get("verdict") or "资料不足"
-        positives: list[str] = []
-        if self.why.get("reasons"):
-            positives = [str(r) for r in list(self.why["reasons"])[:2]]
-        limits: list[str] = []
-        if self.caution.get("cautions"):
-            limits = [str(c) for c in list(self.caution["cautions"])[:2]]
-        if not self.thesis.get("thesis_title"):
-            limits.append("尚未形成正式核心逻辑")
-        upgrade = "若毛利率与经营现金流持续修复、且核心逻辑与护城河证据补齐，可升级为重点研究"
-        downgrade = "若债务与资本开支继续上升而盈利未恢复，或估值跌破合理区间下沿的基本面原因是基本面恶化，则应下调"
-        body = (
-            f"为什么是「{verdict}」：当前最重要的正面因素是{'；'.join(positives) if positives else '暂无突出正面信号'}；"
-            f"当前最大的限制是{'；'.join(limits[:2]) if limits else '资料覆盖不足'}。"
-            f"{upgrade}；{downgrade}。本判断不构成任何交易指令。")
-        return body
 
     # -- 其余节的简单映射 -----------------------------------------------------
     def section_conclusion_head(self) -> str:
@@ -427,24 +517,41 @@ class BossRenderer:
     def section_moat(self) -> str:
         m = _sec(self.s, "moat")
         if not m:
-            return "护城河资料暂缺。"
+            return "竞争优势研究资料暂缺。"
         dims = [dict(d) for d in list(m.get("dimensions") or []) if isinstance(d, dict)]
-        supported = [d for d in dims if str(d.get("status") or "").startswith("SUPPORTED")]
-        counter = [d for d in dims if str(d.get("status") or "") == "COUNTER_EVIDENCE"]  # noqa: F841
-        if counter:
-            lines_hint = "注意：存在反证维度，需与支持证据一并权衡。"
-        else:
-            lines_hint = ""
+        status_labels = {
+            "SUPPORTED": "有较明确证据支持",
+            "PARTIAL": "存在部分证据，但持续性/同行相对优势仍不足",
+            "UNKNOWN": "当前资料不足，暂无法判断",
+            "COUNTER_EVIDENCE": "存在反证",
+        }
         if not dims:
-            return f"护城河证据 {m.get('evidence_count') or 0} 条、反证 {m.get('counter_evidence_count') or 0} 条：暂无法判断竞争优势是否成立。"
+            return (f"竞争优势研究：证据 {m.get('evidence_count') or 0} 条、"
+                    f"反证 {m.get('counter_evidence_count') or 0} 条：暂无法判断竞争优势是否成立。")
         lines = [f"证据 {m.get('evidence_count') or 0} 条、反证 {m.get('counter_evidence_count') or 0} 条。"]
+        has_supported = False
         for d in dims[:8]:
             status = str(d.get("status") or "")
-            label = "有证据支持" if status.startswith("SUPPORTED") else ("存在反证" if status == "COUNTER_EVIDENCE" else "暂无法判断")
+            zh_label = status_labels.get(status, status)
             name = str(d.get("label") or d.get("moat_dimension") or d.get("dimension") or "")
-            lines.append(f"- {name}：{label}")
-        if not supported:
-            lines.append("结论：当前无任何维度获得充分证据，不据此认定竞争优势；规模、排名或知名度本身不构成护城河。" + lines_hint)
+            lines.append(f"\n**{name}**：{zh_label}。")
+            summary = str(d.get("summary") or "")
+            if summary and summary not in ("None", ""):
+                lines.append(f"  {summary[:200]}")
+            evidence = [dict(e) for e in list(d.get("evidence") or [])[:3] if isinstance(e, dict)]
+            for i, ev in enumerate(evidence, 1):
+                source = str(ev.get("source_type") or "来源")
+                period = str(ev.get("period") or "")[:10]
+                lines.append(f"  {i}. {ev.get('claim')}（{source}{'，' + period if period else ''}）")
+            if status == "SUPPORTED":
+                has_supported = True
+                if not evidence:
+                    lines.append("  （证据详情暂未映射到研究快照）")
+        if not has_supported:
+            lines.append("\n当前无任何维度获得较明确证据支持，不据此认定竞争优势；规模、排名或知名度本身不构成护城河。")
+        counter = int(m.get("counter_evidence_count") or 0)
+        if counter > 0:
+            lines.append(f"\n⚠️ 存在 {counter} 条反证，需与支持证据一并权衡。")
         return "\n".join(lines)
 
     def section_capital(self) -> str:
@@ -476,6 +583,70 @@ class BossRenderer:
     def section_why_research(self) -> str:
         reasons = [boss_text(str(r)) for r in list(self.why.get("reasons") or [])]
         return "\n".join(f"- {r}" for r in reasons) if reasons else "当前各研究层未给出明显的继续研究信号。"
+
+    # -- 最新季度边际变化（§四） ----------------------------------------------
+    def section_latest_quarter(self) -> str:
+        q = self.s.get("latest_quarter") or {}
+        payload = dict(q.get("structured_payload") or {})
+        if not payload.get("report_date"):
+            return "暂无最新季度数据。"
+        metrics = list(payload.get("metrics") or [])
+        if not metrics:
+            return "最新季度数据暂缺。"
+        lines = [
+            f"**最新季度：{str(payload.get('report_date'))[:10]}**"
+            + (f"（与{str(payload.get('prior_quarter_date'))[:10]}对比）" if payload.get("prior_quarter_date") else ""),
+            "",
+        ]
+        for m in metrics[:8]:
+            if isinstance(m, dict):
+                lines.append(f"- {m.get('item')}：{m.get('value')}（同比 {m.get('yoy')}）")
+        lines.append("")
+        lines.append("以上为季度数据，与年报表分开解读，不混入五年路径。")
+        if not payload.get("deducted_net_profit_available", False):
+            lines.append("扣非净利润暂无数据源，无法比较归母与扣非差异。")
+        return "\n".join(lines)
+
+    # -- 最终裁决优化（§十三） ---------------------------------------------------
+    def section_final_verdict(self) -> str:
+        verdict = self.conclusion.get("verdict") or "资料不足"
+        positives: list[str] = [str(r) for r in list(self.why.get("reasons") or [])[:2]]
+        limits: list[str] = [str(c) for c in list(self.caution.get("cautions") or [])[:1]]
+        if not self.thesis.get("thesis_title"):
+            limits.append("尚未形成正式核心逻辑")
+        # earnings recovery driver from moat evidence
+        moat = _sec(self.s, "moat")
+        moat_supported = [d for d in list(moat.get("dimensions") or [])
+                          if isinstance(d, dict) and str(d.get("status")) == "SUPPORTED"]
+        recovery = ""
+        if self._profit_recovery_detected():
+            if moat_supported:
+                dims = "、".join(str(d.get("label") or d.get("dimension") or "") for d in moat_supported[:2])
+                recovery = f"盈利修复可能得到{dims}方面的支持；"
+            else:
+                recovery = "当前系统已确认盈利正在修复，但仍缺少足够经营分部证据解释修复来自哪些业务，因此暂不能确认主要驱动；"
+        valuation_text = ""
+        try:
+            price = float(self.valuation["current_price"])
+            mid = float(self.valuation["fair_value_mid"])
+            valuation_text = f"价格处于合理价值区间中值{'上方' if price > mid else '下方'}约{abs(price / mid - 1) * 100:.0f}%；"
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
+            valuation_text = ""
+        upgrade = "若毛利率与经营现金流持续修复、且核心逻辑与竞争优势证据补齐，可升级为重点研究"
+        downgrade = "若债务继续上升而盈利未恢复，或估值跌破合理区间下沿源于基本面恶化，则应下调"
+        body = (
+            f"**{verdict}**。\n\n"
+            f"正面变化：{'；'.join(positives) if positives else '暂无突出正面信号'}。\n"
+            f"核心矛盾：{self.section_core_conflict().split('。')[-1].rstrip('。') if len(self.rows) >= 3 else '年度资料不足'}。\n"
+            f"{valuation_text}{recovery}"
+            f"最大风险：{'；'.join(limits[:2]) if limits else '资料覆盖不足'}。\n"
+            f"{upgrade}；{downgrade}。\n"
+            f"本判断不构成任何交易指令。")
+        return body
+
+    def _profit_recovery_detected(self) -> bool:
+        profits = [_f(r.get("net_profit")) for r in self.rows if _f(r.get("net_profit")) is not None]
+        return bool(len(profits) >= 3 and min(profits) < 0 < profits[-1])
 
 
 def render_boss_report(sections: list[dict[str, Any]], *, stock_code: str, as_of: str) -> str:

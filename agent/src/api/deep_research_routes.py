@@ -37,12 +37,27 @@ def register_deep_research_routes(app: FastAPI, require_auth: AuthDep) -> None:
 
         as_of = str(payload.get("as_of") or "")[:10] or None
         try:
-            return await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 get_deep_research_preparation_service().prepare, "CN", stock_code,
                 as_of=as_of,
                 include_p1=bool(payload.get("include_p1", True)),
                 max_documents_per_kind=int(payload.get("max_documents_per_kind", 2)),
             )
+            # Only this explicit write path evaluates strategy transitions.
+            # A delivery-side failure must not hide an otherwise completed deep
+            # preparation result or alter the upstream research write.
+            try:
+                from src.value_strategy import get_value_strategy_event_service
+
+                result["strategy_event_evaluation"] = await asyncio.to_thread(
+                    get_value_strategy_event_service().evaluate_company, "CN", stock_code, research_as_of=as_of,
+                )
+            except Exception as exc:  # noqa: BLE001 - preserve completed preparation
+                result["strategy_event_evaluation"] = {
+                    "status": "PARTIAL",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            return result
         except RuntimeError as exc:
             message = str(exc)
             status = 429 if "DAILY_LIMIT" in message or "BUSY" in message else 422

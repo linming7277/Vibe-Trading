@@ -81,7 +81,7 @@ class ResearchWorkspaceStore:
     only contains queryable product state and references to those artifacts.
     """
 
-    SCHEMA_VERSION = 21
+    SCHEMA_VERSION = 23
 
     def __init__(self, db_path: Path | None = None, *, seed: bool = False) -> None:
         self.db_path = Path(db_path or (get_runtime_root() / "research.db"))
@@ -774,6 +774,78 @@ class ResearchWorkspaceStore:
                     confirmed_at TEXT,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS value_strategy_state_cursors (
+                    market TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    current_eligibility TEXT NOT NULL,
+                    current_priority TEXT NOT NULL,
+                    current_primary_action TEXT NOT NULL,
+                    current_risk TEXT NOT NULL,
+                    current_value_trap TEXT NOT NULL,
+                    current_thesis_status TEXT NOT NULL,
+                    current_thesis_authority TEXT NOT NULL,
+                    current_leader_scope TEXT NOT NULL,
+                    current_valuation_reliability TEXT NOT NULL,
+                    current_price_attention TEXT NOT NULL,
+                    current_review_pressure TEXT NOT NULL,
+                    state_fingerprint TEXT NOT NULL,
+                    research_as_of TEXT,
+                    market_price_as_of TEXT,
+                    state_json TEXT NOT NULL,
+                    event_history_start_at TEXT NOT NULL,
+                    last_checked_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(market, stock_code)
+                );
+                CREATE TABLE IF NOT EXISTS value_strategy_state_events (
+                    id TEXT PRIMARY KEY,
+                    event_key TEXT NOT NULL UNIQUE,
+                    market TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    direction TEXT,
+                    before_value TEXT,
+                    after_value TEXT,
+                    before_state_json TEXT NOT NULL,
+                    after_state_json TEXT NOT NULL,
+                    primary_reason TEXT NOT NULL,
+                    reasons_json TEXT NOT NULL,
+                    cautions_json TEXT NOT NULL,
+                    trigger_dimension TEXT NOT NULL,
+                    source_refs_json TEXT NOT NULL,
+                    transition_batch_id TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('OPEN','ACKNOWLEDGED','CLOSED')),
+                    research_as_of TEXT,
+                    occurred_at TEXT NOT NULL,
+                    acknowledged_at TEXT,
+                    closed_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_value_strategy_events_query
+                    ON value_strategy_state_events(market, stock_code, status, occurred_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_value_strategy_events_type
+                    ON value_strategy_state_events(event_type, occurred_at DESC);
+                CREATE TABLE IF NOT EXISTS value_strategy_event_deliveries (
+                    id TEXT PRIMARY KEY,
+                    transition_batch_id TEXT NOT NULL,
+                    channel TEXT NOT NULL,
+                    delivery_mode TEXT NOT NULL CHECK(delivery_mode IN ('IMMEDIATE','DAILY_DIGEST','HISTORY_ONLY')),
+                    delivery_status TEXT NOT NULL CHECK(delivery_status IN ('PENDING','SENT','FAILED','SKIPPED')),
+                    event_ids_json TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL UNIQUE,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    last_error TEXT,
+                    next_retry_at TEXT,
+                    sent_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_value_strategy_deliveries_batch
+                    ON value_strategy_event_deliveries(transition_batch_id, channel, delivery_status);
                 CREATE INDEX IF NOT EXISTS idx_l3_company_valuations_latest
                     ON l3_company_valuation_snapshots(stock_code,data_as_of DESC,created_at DESC);
                 CREATE TABLE IF NOT EXISTS company_financial_analysis_snapshots (

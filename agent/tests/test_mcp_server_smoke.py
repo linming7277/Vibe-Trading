@@ -52,6 +52,8 @@ REQUIRED_TOOL_NAMES = {
     "get_research_goal",
     "add_goal_evidence",
     "update_research_goal_status",
+    "get_value_strategy_state",
+    "get_value_watchpoints",
     "alpha_zoo",
     "alpha_bench",
 }

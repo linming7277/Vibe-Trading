@@ -161,10 +161,15 @@ def test_new_as_of_archives_prior_active_projection_before_advancing(tmp_path):
 
     assert repository.active()[0]["source_as_of"] == "2026-08-24"
     archived = repository._conn.execute(  # immutable audit copy, intentionally not a public API
-        """SELECT source_as_of, source_pool_id FROM company_low_value_leader_pool_snapshots
-           WHERE stock_code='000001.SZ'"""
+        """SELECT source_as_of, source_pool_id, snapshot_origin FROM company_low_value_leader_pool_snapshots
+           WHERE stock_code='000001.SZ' ORDER BY source_as_of"""
     ).fetchall()
-    assert [(row["source_as_of"], row["source_pool_id"]) for row in archived] == [("2026-08-21", "pool-21")]
+    # Since the PIT remediation every completed EOD leaves its own immutable
+    # daily snapshot on the same day, in addition to the day-after archival
+    # of the prior projection.
+    assert [(row["source_as_of"], row["source_pool_id"]) for row in archived] == [
+        ("2026-08-21", "pool-21"), ("2026-08-24", "pool-24"),
+    ]
 
 
 def test_new_as_of_archives_prior_projection_before_removing_member(tmp_path):
@@ -179,6 +184,8 @@ def test_new_as_of_archives_prior_projection_before_removing_member(tmp_path):
     archived = repository._conn.execute(
         "SELECT source_as_of, pool_status FROM company_low_value_leader_pool_snapshots WHERE stock_code='000001.SZ'"
     ).fetchall()
+    # The member left the pool on 08-24, so it never had an ACTIVE projection
+    # that day; only the 08-21 audit copy exists.
     assert [(row["source_as_of"], row["pool_status"]) for row in archived] == [("2026-08-21", "ACTIVE")]
     assert repository.history(stock_code="000001.SZ")[0]["source_as_of"] == "2026-08-24"
 

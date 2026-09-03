@@ -245,7 +245,10 @@ class ValueResearchScheduler:
             stages = {"MARKET_READY": "READY", "L3_READY": "PENDING", "FINANCIAL_READY": "PENDING",
                       "LOW_VALUE_DAILY_BAR_READY": "PENDING",
                       "LOW_VALUE_POOL_READY": "PENDING", "LOW_VALUE_EVENTS_READY": "PENDING",
-                      "RISK_SNAPSHOT_READY": "PENDING", "DAILY_RESEARCH_BRIEF_READY": "PENDING",
+                      "RISK_SNAPSHOT_READY": "PENDING", "STRATEGY_STATE_EVENTS_READY": "PENDING",
+                      "STRATEGY_EVENT_DELIVERY_READY": "PENDING",
+                      "DAILY_RESEARCH_BRIEF_READY": "PENDING",
+                      "FEISHU_BITABLE_READY": "PENDING", "DAILY_BRIEF_CARD_READY": "PENDING",
                       "LOW_VALUE_NOTIFICATION_READY": "PENDING"}
             pool = store.pool_for_as_of(as_of)
             if pool:
@@ -325,8 +328,31 @@ class ValueResearchScheduler:
                 "QUEUED" if schedule_current_low_value_preparation(source_as_of=as_of) else "RUNNING"
             )
 
+            # Phase 2 consumes the already-defined Phase 1 strategy projection.
+            # It is an independent, retryable stage before the Daily Brief;
+            # ordinary strategy-state reads remain strictly write-free.
+            from src.value_strategy import get_value_strategy_event_service
+            event_result = get_value_strategy_event_service(getattr(store, "db_path", None)).evaluate_universe(
+                market="CN", research_as_of=as_of,
+            )
+            if event_result.get("status") != "COMPLETED":
+                stages["STRATEGY_STATE_EVENTS_READY"] = "PARTIAL"
+                return self._record_partial(
+                    store, pool=pool, as_of=as_of, stages=stages,
+                    message=f"strategy state events incomplete: {len(event_result.get('errors') or [])} failed",
+                )
+            stages["STRATEGY_STATE_EVENTS_READY"] = (
+                "REUSED" if int(event_result.get("created_events") or 0) == 0 else "READY"
+            )
+            from src.value_strategy import ValueStrategyEventNotificationService
+            delivery_result = ValueStrategyEventNotificationService(
+                event_repository=get_value_strategy_event_service(getattr(store, "db_path", None)).repository,
+            ).deliver_immediate(research_as_of=as_of)
+            stages["STRATEGY_EVENT_DELIVERY_READY"] = str(delivery_result.get("status") or "PARTIAL")
+
             from src.investment_research_supervisor import (
                 get_daily_brief_bitable_publisher,
+                get_daily_brief_notification_service,
                 get_investment_research_daily_brief_service,
             )
             brief_result = get_investment_research_daily_brief_service().build(research_as_of=as_of)
@@ -338,7 +364,32 @@ class ValueResearchScheduler:
                 )
             stages["DAILY_RESEARCH_BRIEF_READY"] = "REUSED" if brief_result.reused else "READY"
 
-            get_daily_brief_bitable_publisher().publish(research_as_of=as_of)
+            bitable_result = get_daily_brief_bitable_publisher().publish(research_as_of=as_of)
+            bitable_status = str(bitable_result.get("status") or "")
+            # Bitable is an auxiliary current-snapshot view.  Its failure or
+            # deliberate skip must not suppress the primary Hermes daily
+            # brief.  The notifier sends a same-date XLSX attachment whenever
+            # Bitable is unavailable, and omits the stale table link.
+            stages["FEISHU_BITABLE_READY"] = (
+                "READY" if bitable_status == "READY"
+                else "SKIPPED" if bitable_status == "SKIPPED"
+                else "FAILED"
+            )
+
+            # The boss-facing card goes out only after the brief is READY and
+            # the managed Bitable carries the same research date, so the group
+            # never receives a card whose table link is stale.  READY/REUSED/
+            # DISABLED are all fine; a real delivery failure marks the stage
+            # PARTIAL and the tick loop resumes it on the next pass.
+            card_result = get_daily_brief_notification_service().notify(research_as_of=as_of)
+            card_status = str(card_result.get("status") or "")
+            if card_status == "FAILED":
+                stages["DAILY_BRIEF_CARD_READY"] = "FAILED"
+                return self._record_partial(
+                    store, pool=pool, as_of=as_of, stages=stages,
+                    message="daily brief card notification failed",
+                )
+            stages["DAILY_BRIEF_CARD_READY"] = card_status or "READY"
 
             # The scheduled job refreshes research data and publishes the
             # current Bitable snapshot, but never pushes a daily-report chat

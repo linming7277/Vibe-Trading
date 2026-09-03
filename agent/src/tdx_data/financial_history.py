@@ -348,3 +348,84 @@ class FinancialHistoryService:
             "symbol": symbol.upper(), "as_of": cutoff, "period_type": period_type,
             "items": items, "total": len(items), "package": self.package_status(),
         }
+
+    def check_finance_source_freshness(
+        self, *, as_of: str | None = None, reference_latest_announcement_date: str | None = None,
+    ) -> dict[str, Any]:
+        """Preflight the professional-finance source itself (no pipeline change).
+
+        ``reference_latest_announcement_date`` is the locally known ground truth
+        for the newest periodic filing (e.g. the disclosure store's max
+        announcement date).  The comparison is filing-coverage based, never a
+        natural-day expectation such as "H1 must exist by 08-31": the TDX
+        package has its own bundling lag, so only observed local filings can
+        prove the source is behind.  Returns READY / STALE / UNKNOWN with the
+        package file facts and a reason; a package-fingerprint mismatch with
+        the last collection is reported as ``collector_lag`` advice only.
+        """
+        try:
+            package = self.package_status()
+            files = [item for item in package.get("files") or [] if str(item.get("name", "")).endswith(".dat")]
+            latest_file = max(
+                files, key=lambda item: int(str(item.get("mtime_ns") or 0)), default=None,
+            ) or {}
+            from datetime import datetime, timezone
+
+            mtime_text = ""
+            mtime_ns = int(str(latest_file.get("mtime_ns") or 0))
+            if mtime_ns:
+                mtime_text = datetime.fromtimestamp(mtime_ns / 1e9, tz=timezone.utc).isoformat()
+            ingested = self.store._conn.execute(
+                f"SELECT MAX(substr(record_key,-10)) FROM records WHERE dataset='{FINANCIAL_HISTORY_DATASET}'",
+            ).fetchone()[0] or ""
+            last_payload = self.store._conn.execute(
+                f"SELECT payload_json FROM records WHERE dataset='{FINANCIAL_HISTORY_DATASET}' "
+                "ORDER BY updated_at DESC LIMIT 1",
+            ).fetchone()
+            collected_raw = ""
+            if last_payload:
+                try:
+                    import json as _json
+
+                    collected_raw = str((_json.loads(last_payload[0]) or {}).get("raw_version") or "")
+                except (TypeError, ValueError):
+                    collected_raw = ""
+            package_raw = str(package.get("raw_version") or "")
+            collector_lag = bool(package_raw and collected_raw and package_raw != collected_raw)
+            reference = str(reference_latest_announcement_date or "")[:10]
+            result: dict[str, Any] = {
+                "status": "UNKNOWN",
+                "latest_package": latest_file.get("name"),
+                "package_mtime": mtime_text,
+                "package_report_period": (str(latest_file.get("name") or "gpcw________")[4:12] or None),
+                "package_raw_version": package_raw or None,
+                "latest_data_announcement_date": ingested or None,
+                "reference_latest_announcement_date": reference or None,
+                "collector_lag": collector_lag,
+                "lag_days": None,
+                "reason": "",
+            }
+            if package.get("status") != "ready":
+                result["reason"] = "needs_professional_finance:本地专业财务包缺失或为空"
+                return result
+            if not reference:
+                result["reason"] = "no_local_filing_reference:未提供本地最新公告参照，无法判定财务源是否落后"
+                return result
+            if ingested and reference > ingested:
+                lag_days: int | None = None
+                try:
+                    lag_days = (date.fromisoformat(reference) - date.fromisoformat(ingested)).days
+                except ValueError:
+                    lag_days = None
+                result["status"] = "STALE"
+                result["lag_days"] = lag_days
+                result["reason"] = (
+                    "tdx_finance_source_stale:本地已存在更新的正式披露公告，"
+                    "但专业财务源尚未覆盖（TDX 包打包/下载滞后）"
+                )
+                return result
+            result["status"] = "READY"
+            result["reason"] = "财务源已覆盖本地已知最新公告"
+            return result
+        except Exception as exc:  # noqa: BLE001 - preflight must degrade, not fail
+            return {"status": "UNKNOWN", "reason": f"preflight_error:{type(exc).__name__}:{exc}"}

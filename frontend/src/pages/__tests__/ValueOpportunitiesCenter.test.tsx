@@ -5,6 +5,7 @@ const apiMock = vi.hoisted(() => ({
   getFocusSelection: vi.fn(),
   getValueSignals: vi.fn(),
   getValueAutomation: vi.fn(),
+  getValueStrategyEventBatches: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({ api: apiMock }));
@@ -24,15 +25,15 @@ const item = (stockCode: string, companyName: string, tier: "A" | "B" | "C") => 
 });
 
 describe("ValueFocusSelectionPage", () => {
-  it("uses the read-only focus selection projection and keeps system alerts separate", async () => {
+  it("uses focus selection without requesting legacy strategy signals", async () => {
     apiMock.getFocusSelection.mockResolvedValue({
       research_as_of: "2026-08-27", total_low_value: 3, hard_c_count: 1, soft_demote_count: 1,
       A_count: 1, B_count: 1, C_count: 1, A: [item("605108.SH", "同庆楼", "A")],
       B: [item("600210.SH", "河钢资源", "B")], C: [item("000544.SZ", "中原环保", "C")],
       selection_boundary: "仅用于研究优先级。", read_only: true,
     });
-    apiMock.getValueSignals.mockResolvedValue([]);
     apiMock.getValueAutomation.mockResolvedValue({ enabled: true, last_status: "completed", run_time: "16:45", timezone: "Asia/Shanghai" });
+    apiMock.getValueStrategyEventBatches.mockResolvedValue({ items: [], count: 0 });
 
     render(<MemoryRouter><ValueFocusSelectionPage /></MemoryRouter>);
 
@@ -42,7 +43,9 @@ describe("ValueFocusSelectionPage", () => {
     expect(screen.getByText("同庆楼")).toBeInTheDocument();
     expect(screen.queryByText("河钢资源")).not.toBeInTheDocument();
     expect(screen.queryByText("中原环保")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "系统提醒" })).toBeInTheDocument();
+    expect(apiMock.getValueSignals).not.toHaveBeenCalled();
+    expect(apiMock.getValueStrategyEventBatches).toHaveBeenCalledWith(undefined, 10);
+    expect(screen.getByRole("heading", { name: "价值线日终任务状态" })).toBeInTheDocument();
     expect(screen.getByText("低估陷阱：中等")).toBeInTheDocument();
     expect(screen.getByText(/AI 初步逻辑，待人工复核/)).toBeInTheDocument();
 

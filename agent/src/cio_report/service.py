@@ -18,10 +18,10 @@ from src.cio_report.store import CioReportStore
 
 logger = logging.getLogger(__name__)
 
-CIO_SYNTHESIS_PROMPT_VERSION = "cio-synthesis-v2"  # V2: boss-facing Chinese narrative structure
+CIO_SYNTHESIS_PROMPT_VERSION = "cio-synthesis-v3"  # round1: latest quarter, evidence detail, verdict depth
 # Narrative-layer version rides the report fingerprint so a template upgrade
 # re-renders persisted reports instead of being swallowed by idempotent reuse.
-NARRATIVE_TEMPLATE_VERSION = "boss-narrative-v2"
+NARRATIVE_TEMPLATE_VERSION = "boss-narrative-v3"  # round1: latest quarter, moat evidence, verdict depth
 _TRADING_LANGUAGE = re.compile(r"买入|卖出|推荐|止盈|止损|仓位|加仓|减仓|建仓")
 
 # Delivery-layer status semantics (polish §4): research freshness and

@@ -27,6 +27,8 @@ vi.mock("@/lib/api", () => ({ api: {
   })),
   getCompanyThesisEvidence: vi.fn(async () => null),
   getCompanyRiskResearch: vi.fn(async () => null),
+  getValueWatchpoints: vi.fn(async () => ({ stock_code: "002371.SZ", stock_name: "北方华创", research_as_of: "2026-08-17", watchpoints: [], top_watchpoints: [], data_gaps: [], formula_version: "value-watchpoint-projection-v1.0.0" })),
+  getValueStrategyState: vi.fn(async () => { throw new Error("unavailable"); }),
   getCompanyPriceZones: vi.fn(async () => ({
     stock_code: "002371.SZ", as_of: "2026-08-17", current_price: 388.5, formula_version: "test",
     valuation: { status: "INSUFFICIENT_DATA", fair_value_low: null, fair_value_mid: null, fair_value_high: null, methods: [], message: "资料不足", limitations: [] },

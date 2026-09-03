@@ -255,13 +255,12 @@ def test_agent_failure_uses_summary_only_and_keeps_python_results(tmp_path: Path
     monkeypatch.setattr(financial_service, "ChatLLM", FailedChat)
     svc.structured_runtime = StructuredOutputRuntime(client_factory=FailedChat)
     result = svc.analyze("000001.SZ", as_of="2026-08-14", refresh=False)
-    assert result["analysis_status"] == "COMPLETED"
+    # 2026-09-03 semantics: structured and text fallback both failed on the
+    # transport layer — a technical failure is FAILED, not a placeholder
+    # summary masquerading as a completed deep analysis.
+    assert result["analysis_status"] == "FAILED"
     assert result["feature_status"] == "READY" and result["forecast_status"] == "READY"
-    assert result["analysis"]["analysis_metadata"]["analysis_quality_status"] == "SUMMARY_ONLY"
-    assert result["analysis"]["analysis_metadata"]["evidence_ready"] is False
-    assert result["analysis"]["analysis_metadata"]["fallback_failure_types"][0] == {
-        "mode": "PROMPT_JSON", "type": "RuntimeError",
-    }
+    assert "TRANSPORT_FAILED" in str(result.get("agent_error") or "")
 
 
 def test_snapshot_idempotency_and_new_report(tmp_path: Path) -> None:
@@ -363,19 +362,20 @@ def test_financial_agent_summary_only_when_all_capability_modes_fail(tmp_path: P
             pass
 
         def chat(self, messages):
-            assert "summary" in messages[0]["content"]
-            payload = json.loads(messages[-1]["content"])
-            key = next(item for item in payload["evidence_manifest"] if item.startswith("FIN_REVENUE_"))
-            return SimpleNamespace(content=json.dumps({
-                "summary": "经营趋势需要结合现金流持续核验。",
-                "claims": [{"type": "FACT", "text": "历史营收已记录", "source_keys": [key], "confidence": "HIGH"}],
-            }))
+            # TEXT_ONLY fallback: the system message is the plain-text
+            # summary instruction (the old "summary" assert never matched it
+            # and the placeholder masked the failure).
+            assert "纯文本" in messages[0]["content"]
+            return SimpleNamespace(content="经营趋势需要结合现金流持续核验。")
 
     import src.financial_analysis.service as financial_service
     monkeypatch.setattr(financial_service, "ChatLLM", FallbackChat)
     svc.structured_runtime = StructuredOutputRuntime(client_factory=FallbackChat)
     result = svc.analyze("000001.SZ", as_of="2026-08-14", refresh=False)
-    assert result["analysis_status"] == "COMPLETED"
+    # 2026-09-03 semantics: a text fallback without valid claims is PARTIAL
+    # with an explicit claims_status — never a deep-complete COMPLETED.
+    assert result["analysis_status"] == "PARTIAL"
+    assert result["analysis"]["claims_status"] == "SUMMARY_ONLY"
     assert result["analysis"]["analysis_metadata"]["fallback_path"] == "summary_only"
     assert result["analysis"]["analysis_metadata"]["structured_output_mode_used"] == "TEXT_ONLY"
     assert result["analysis"]["analysis_metadata"]["error_types"][0]["validation_error_code"] == "TOP_LEVEL_SCHEMA_INVALID"

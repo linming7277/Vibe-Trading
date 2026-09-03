@@ -98,9 +98,16 @@ class ResearchFreshnessService:
         if persisted is None:
             return self._entry("business", title, "NOT_PERSISTED", reason="尚无经营研究快照",
                                fingerprint=(current or {}).get("source_hash"))
-        current_hash = str((current or {}).get("source_hash") or "")
+        if current is None:
+            # A missing fingerprint must never read as fresh: the stale signal
+            # would silently disappear exactly when inputs cannot be read.
+            return self._entry("business", title, "UNKNOWN",
+                               reason="输入指纹暂不可计算（画像缺失或读取失败）",
+                               fingerprint=None,
+                               persisted_as_of=str(persisted.get("data_as_of") or "")[:10])
+        current_hash = str(current.get("source_hash") or "")
         persisted_hash = str(persisted.get("source_hash") or "")
-        if current_hash and current_hash != persisted_hash:
+        if current_hash != persisted_hash:
             return self._entry("business", title, "STALE", reason="画像/披露输入已变化",
                                fingerprint=current_hash,
                                persisted_as_of=str(persisted.get("data_as_of") or "")[:10])

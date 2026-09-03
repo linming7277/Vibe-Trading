@@ -90,7 +90,11 @@ def test_only_explicit_confirmation_creates_initial_thesis(tmp_path: Path) -> No
         assert confirmed["status"] == "APPROVED"
         assert confirmed["draft"]["draft_status"] == "CONFIRMED"
         assert confirmed["thesis"]["created_by"] == "HUMAN"
-        assert service.thesis_service.get_current_thesis("CN", "000544.SZ")["title"] == "人工确认后的逻辑"
+        thesis = service.thesis_service.get_current_thesis("CN", "000544.SZ")
+        assert thesis["title"] == "人工确认后的逻辑"
+        assert thesis["supporting_conditions"]
+        assert thesis["key_metrics_to_monitor"]
+        assert thesis["invalid_conditions"] or confirmed["draft"]["invalid_conditions"] is not None
         assert service.generate("CN", "000544.SZ")["status"] == "THESIS_EXISTS"
     finally:
         service.close()

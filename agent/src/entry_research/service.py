@@ -40,8 +40,8 @@ THESIS_SCORES = {
 }
 LEVELS = ((85, "HIGH_ATTENTION"), (70, "ATTENTION"), (50, "WATCH"), (0, "WAIT"))
 LEVEL_LABELS = {
-    "HIGH_ATTENTION": "高关注", "ATTENTION": "值得关注", "WATCH": "继续观察",
-    "WAIT": "暂不具备明显优势", "BLOCKED": "核心逻辑失效，暂停入场研究",
+    "HIGH_ATTENTION": "价格条件高度值得关注", "ATTENTION": "价格条件值得关注", "WATCH": "价格条件继续观察",
+    "WAIT": "当前价格条件等待", "BLOCKED": "当前研究条件存在阻断",
 }
 THESIS_LABELS = {
     "STRENGTHENING": "逻辑正在增强", "UNCHANGED": "基本稳定", "FORMING": "正在形成",
@@ -226,7 +226,7 @@ class EntryResearchService:
             "high_margin_zone": self._range("较高安全边际区", high_margin, kind="UNDERVALUED"),
         }
         if level == "BLOCKED":
-            explanation = "公司的核心逻辑已被标记为失效，即使价格或估值看起来较低，也暂停入场研究。"
+            explanation = "公司的核心逻辑已被标记为失效，即使价格或估值看起来较低，当前价格研究条件仍存在阻断。"
         elif thesis_status == "WEAKENING":
             explanation = "价格和估值信号可以继续跟踪，但公司的核心经营逻辑正在减弱，因此目前只保留继续观察。"
         elif missing:
