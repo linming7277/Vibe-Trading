@@ -20,8 +20,80 @@ from .daily_brief_bitable_service import LOW_VALUE_LEADER_BITABLE_URL
 from .daily_brief_store import InvestmentResearchDailyBriefRepository
 
 
-FORMULA_VERSION = "daily-brief-v25"
-_TRADING_TERMS = ("买入", "卖出", "推荐", "止盈", "止损", "仓位", "加仓", "减仓")
+FORMULA_VERSION = "daily-brief-v27"
+# v26: 新增「今日价格条件」摘要节（price_condition_digest）——把有效价格条件、
+# 落点句与主动作投成老板一行可读的例外清单；纯投影，不改变任何研究计算。
+# v27: 落点句枚举 5→6 种（新增「现价未落入关注/观察/复核带」，不再把带上方
+# 误写成「带不完整」）——纯文案枚举变更，无纳入/排序/截断规则变化。
+_TRADING_TERMS = ("买入", "卖出", "推荐", "止盈", "止损", "仓位", "加仓", "减仓", "建议买入", "下单")
+_PRICE_DIGEST_DISCLAIMER = "研究结论，不是交易指令。只列出今天值得盯或需要复核的公司。"
+_PRICE_DIGEST_MAX_LINES = 8
+_PRICE_DIGEST_MAX_UNIVERSE = 30
+_PRICE_DIGEST_EVENT_TYPES = {
+    "PRICE_ATTENTION_CHANGED", "VALUE_SCOPE_ENTERED", "VALUE_SCOPE_EXITED",
+    "VALUATION_RELIABILITY_CHANGED", "PRIMARY_ACTION_CHANGED",
+}
+_PRICE_DIGEST_INCLUDED_STATUS = {"HIGH_ATTENTION", "ATTENTION", "VALUATION_REVIEW_REQUIRED", "DATA_REVIEW_REQUIRED", "BLOCKED"}
+_PRICE_DIGEST_DEMOTED_TO = {"WATCH", "WAIT"}
+
+
+def _price_position_sentence(
+    current_price: Any,
+    *,
+    confluence_zones: list[dict[str, Any]] | None = None,
+    support_zones: list[dict[str, Any]] | None = None,
+    review_zones: list[dict[str, Any]] | None = None,
+    fair_value_low: Any = None,
+    fair_value_high: Any = None,
+) -> str:
+    """Exactly six fixed position sentences (same list/priority as the
+    company page card).  "未落入" is honest when bands exist but the price
+    sits outside them — only a missing price or no evaluable band at all
+    may say "带不完整".
+    """
+    try:
+        price = float(current_price)
+    except (TypeError, ValueError):
+        return "带不完整，无法判断落点"
+
+    def in_zone(zone: dict[str, Any]) -> bool:
+        low, high = zone.get("low"), zone.get("high")
+        if low is None and high is None:
+            return False
+        if low is None:
+            return price <= float(high)
+        if high is None:
+            return price >= float(low)
+        return float(low) <= price <= float(high)
+
+    def at_or_above(zone: dict[str, Any]) -> bool:
+        low = zone.get("low")
+        return low is not None and price >= float(low)
+
+    def has_bound(zones: list[dict[str, Any]] | None) -> bool:
+        return any(zone.get("low") is not None or zone.get("high") is not None for zone in (zones or [])[:2])
+
+    if any(in_zone(zone) for zone in (confluence_zones or [])[:2]):
+        return "现价落在关注带内"
+    if any(in_zone(zone) for zone in (support_zones or [])[:2]):
+        return "现价落在观察带内"
+    if any(at_or_above(zone) for zone in (review_zones or [])[:2]):
+        return "现价落在复核带内"
+    if fair_value_low is not None:
+        try:
+            if price < float(fair_value_low):
+                return "现价低于合理价值带下限"
+        except (TypeError, ValueError):
+            pass
+    if has_bound(confluence_zones) or has_bound(support_zones) or has_bound(review_zones):
+        return "现价未落入关注/观察/复核带"
+    return "带不完整，无法判断落点"
+
+
+def _format_price(value: Any) -> str:
+    if isinstance(value, (int, float)):
+        return f"{float(value):.2f}"
+    return "资料不足"
 _FINANCIAL_METRIC_LABELS = {
     "revenue": "营业收入",
     "net_profit": "净利润",
@@ -112,6 +184,8 @@ class InvestmentResearchDailyBriefService:
         entry_research_service: Any | None = None,
         focus_selection_service: Any | None = None,
         watchpoint_projection_service: Any | None = None,
+        strategy_state_service: Any | None = None,
+        price_zone_service: Any | None = None,
         web_base_url: str = "",
     ) -> None:
         self.repository = repository or InvestmentResearchDailyBriefRepository()
@@ -132,7 +206,24 @@ class InvestmentResearchDailyBriefService:
             thesis_repository=self.thesis_repository,
         )
         self.watchpoint_projection_service = watchpoint_projection_service
+        # 「今日价格条件」只读投影：默认惰性挂到正式策略状态服务；测试可注入 fake。
+        self._strategy_state_service = strategy_state_service
+        self._price_zone_service = price_zone_service
         self.web_base_url = web_base_url
+
+    def _strategy_state(self) -> Any:
+        if self._strategy_state_service is None:
+            from src.value_strategy import get_value_strategy_state_service
+
+            self._strategy_state_service = get_value_strategy_state_service()
+        return self._strategy_state_service
+
+    def _price_zones(self) -> Any:
+        if self._price_zone_service is None:
+            from src.value_price_zones import get_value_price_zone_service
+
+            self._price_zone_service = get_value_price_zone_service()
+        return self._price_zone_service
 
     def build(self, *, research_as_of: str) -> DailyBriefBuildResult:
         existing = self.repository.get_completed(research_as_of)
@@ -225,6 +316,12 @@ class InvestmentResearchDailyBriefService:
             research_as_of=research_as_of,
         )
         strategy_changes = self._strategy_changes(research_as_of)
+        macro_environment = self._macro_environment_text(research_as_of)
+        price_condition_digest = self._price_condition_digest(
+            research_as_of=research_as_of,
+            watchlist=executive_watchlist,
+            exited_codes=[str(item.get("stock_code") or "").upper() for item in exited],
+        )
         watchlist_basis = "FOCUS_A" if focus_available else "DEEP_FALLBACK"
         focus_watchpoints = self._focus_watchpoints(focus_a if focus_available else [], research_as_of)
         rendered = self._render_executive(
@@ -237,6 +334,9 @@ class InvestmentResearchDailyBriefService:
         )
         if any(term in rendered for term in _TRADING_TERMS):
             raise ValueError("daily brief contains prohibited trading language")
+        for line in price_condition_digest["lines"]:
+            if any(term in line["sentence"] for term in _TRADING_TERMS):
+                raise ValueError("price condition digest contains prohibited trading language")
         return {
             "research_as_of": research_as_of,
             "low_value_active_count": len(pool),
@@ -247,7 +347,9 @@ class InvestmentResearchDailyBriefService:
             "thesis_changes": thesis_changes,
             "financial_changes": [*financial_changes, *business_changes],
             "strategy_changes": strategy_changes,
-            "data_gaps": data_gaps,
+            "macro_environment": macro_environment,
+            "price_condition_digest": price_condition_digest,
+            "data_gaps": _dedupe([*data_gaps, *price_condition_digest.pop("_gaps", [])]),
             "brief_payload": {
                 "text": rendered,
                 "research_as_of": research_as_of,
@@ -255,6 +357,8 @@ class InvestmentResearchDailyBriefService:
                 "executive_watchlist": executive_watchlist,
                 "executive_watchlist_basis": watchlist_basis,
                 "strategy_changes": strategy_changes,
+                "macro_environment": macro_environment,
+                "price_condition_digest": price_condition_digest,
                 "low_value_leader_table": low_value_leader_table,
                 "low_value_leader_bitable_url": LOW_VALUE_LEADER_BITABLE_URL,
                 "deeply_undervalued_count": len(deeply_undervalued),
@@ -881,6 +985,169 @@ class InvestmentResearchDailyBriefService:
                     "新增风险改变了原有安全边际，需要重新审视盈利预测的可靠性与合理价值折价。",
                 )
         return situations
+
+    def _price_condition_digest(
+        self,
+        *,
+        research_as_of: str,
+        watchlist: list[dict[str, Any]],
+        exited_codes: list[str],
+    ) -> dict[str, Any]:
+        """老板一行摘要：今天盯谁 / 谁要复核 / 谁掉出名单。
+
+        只对 watchlist + 当日指定事件股票求策略状态（≤30 只），绝不扫描
+        全量低估池；单只失败跳过并记 data gap，不影响整份日报。
+        """
+        gaps: list[str] = []
+        watch_codes = [str(item.get("stock_code") or "").upper() for item in watchlist]
+        price_by_code = {
+            str(item.get("stock_code") or "").upper(): item.get("current_price")
+            for item in watchlist
+        }
+        event_rows: list[dict[str, Any]] = []
+        try:
+            from src.value_strategy import get_value_strategy_event_service
+
+            event_rows = get_value_strategy_event_service(
+                self.repository.db_path,
+            ).repository.list_events(market="CN", research_as_of=research_as_of, limit=500)
+        except Exception:  # noqa: BLE001 - digest is an add-on, never blocks the brief
+            event_rows = []
+        exited_today = {code for code in exited_codes if code}
+        demoted_today: set[str] = set()
+        for row in event_rows:
+            code = str(row.get("stock_code") or "").upper()
+            event_type = str(row.get("event_type") or "")
+            if event_type == "VALUE_SCOPE_EXITED":
+                exited_today.add(code)
+            if event_type == "PRICE_ATTENTION_CHANGED":
+                before = str(row.get("before_value") or "").upper()
+                after = str(row.get("after_value") or "").upper()
+                if before in {"HIGH_ATTENTION", "ATTENTION"} and after in _PRICE_DIGEST_DEMOTED_TO:
+                    demoted_today.add(code)
+        event_codes = [
+            str(row.get("stock_code") or "").upper()
+            for row in event_rows
+            if str(row.get("event_type") or "") in _PRICE_DIGEST_EVENT_TYPES
+        ]
+        universe = sorted({code for code in [*watch_codes, *event_codes] if code})[:_PRICE_DIGEST_MAX_UNIVERSE]
+
+        candidates: list[dict[str, Any]] = []
+        for code in universe:
+            try:
+                state = self._strategy_state().get_strategy_state(
+                    "CN", code, research_as_of=research_as_of,
+                )
+            except Exception as exc:  # noqa: BLE001 - skip one name, keep the brief
+                gaps.append(f"{code}：今日价格条件读取失败（{type(exc).__name__}）")
+                continue
+            attention = dict(state.get("price_attention") or {})
+            effective = str(attention.get("effective_status") or "")
+            outside = str((state.get("eligibility") or {}).get("status") or "") == "OUTSIDE_VALUE_SCOPE"
+            include_reasons: list[str] = []
+            if effective in _PRICE_DIGEST_INCLUDED_STATUS:
+                include_reasons.append(effective)
+            if code in exited_today:
+                include_reasons.append("VALUE_SCOPE_EXITED")
+            if code in demoted_today:
+                include_reasons.append("DEMOTED_FROM_ATTENTION")
+            if not include_reasons:
+                continue
+            cautions = [str(item) for item in (attention.get("cautions") or []) if str(item)]
+            freshness_notice = str((state.get("freshness") or {}).get("notice") or "")
+            suspension = dict(((state.get("freshness") or {}).get("suspension")) or {})
+            suspension_suffix = "；停牌中（推断）" if suspension.get("status") == "SUSPENDED_INFERRED" else ""
+            candidates.append({
+                "stock_code": code,
+                "company_name": str(state.get("stock_name") or code),
+                "eligibility_status": "OUTSIDE_VALUE_SCOPE" if (outside or code in exited_today) else "IN_VALUE_SCOPE",
+                "effective_status": effective,
+                "effective_label": str(attention.get("effective_label") or effective or "资料不足"),
+                "current_price": price_by_code.get(code),
+                "primary_action_label": str((state.get("primary_action") or {}).get("label") or "资料不足"),
+                "suspension_status": str(suspension.get("status") or "UNKNOWN"),
+                "reason_short": (cautions[0] if cautions else (freshness_notice or "")) + suspension_suffix,
+                "_sort": (
+                    0 if (code in exited_today or effective in {"BLOCKED", "VALUATION_REVIEW_REQUIRED", "DATA_REVIEW_REQUIRED"})
+                    else 1 if effective == "HIGH_ATTENTION"
+                    else 2 if effective == "ATTENTION"
+                    else 3
+                ),
+            })
+        candidates.sort(key=lambda item: (item["_sort"], item["stock_code"]))
+        kept, omitted = candidates[:_PRICE_DIGEST_MAX_LINES], candidates[_PRICE_DIGEST_MAX_LINES:]
+
+        lines: list[dict[str, Any]] = []
+        for item in kept:
+            zones: dict[str, Any] = {}
+            try:
+                zones = self._price_zones().get_price_zones("CN", item["stock_code"], as_of=research_as_of) or {}
+            except Exception:  # noqa: BLE001 - position falls back to the neutral sentence
+                zones = {}
+            # 事件驱动入选的行不在日报 watchlist 里，现价从同一次价格带读取补齐。
+            if item.get("current_price") is None:
+                item["current_price"] = zones.get("current_price")
+            valuation = dict(zones.get("valuation") or {})
+            position = _price_position_sentence(
+                item.get("current_price"),
+                confluence_zones=list(zones.get("confluence_zones") or []),
+                support_zones=list(zones.get("support_zones") or []),
+                review_zones=list(zones.get("upper_review_zones") or []),
+                fair_value_low=valuation.get("fair_value_low"),
+                fair_value_high=valuation.get("fair_value_high"),
+            )
+            scope_text = "不在范围内" if item["eligibility_status"] == "OUTSIDE_VALUE_SCOPE" else "在范围内"
+            price_text = _format_price(item.get("current_price"))
+            sentence = (
+                f"{item['company_name']}({item['stock_code']})｜{scope_text}｜{item['effective_label']}"
+                f"｜现价{price_text}，{position}｜{item['primary_action_label']}"
+            )
+            lines.append({
+                "stock_code": item["stock_code"],
+                "company_name": item["company_name"],
+                "eligibility_status": item["eligibility_status"],
+                "effective_status": item["effective_status"],
+                "effective_label": item["effective_label"],
+                "current_price": item.get("current_price"),
+                "position_sentence": position,
+                "primary_action_label": item["primary_action_label"],
+                "suspension_status": item.get("suspension_status", "UNKNOWN"),
+                "reason_short": item["reason_short"],
+                "sentence": sentence + ("（停牌中，推断）" if item.get("suspension_status") == "SUSPENDED_INFERRED" else ""),
+            })
+        return {
+            "as_of": research_as_of,
+            "empty": not lines,
+            "lines": lines,
+            "omitted_count": len(omitted),
+            "disclaimer": _PRICE_DIGEST_DISCLAIMER,
+            "_gaps": gaps,
+        }
+
+    @staticmethod
+    def _macro_environment_text(research_as_of: str | None = None) -> dict[str, Any]:
+        """一行宏观环境摘要（fail-soft），含变化检测（SPEC §4.3 changed/changes）。"""
+        try:
+            from src.macro_line import get_macro_line_summary
+
+            summary = get_macro_line_summary(research_as_of)
+        except Exception:  # noqa: BLE001 — add-on section, never blocks
+            return {"available": False, "text": "宏观环境资料暂不可用。", "changed": False, "changes": []}
+        if not summary.get("available"):
+            return {"available": False, "text": "宏观环境资料暂不可用。", "changed": False, "changes": []}
+        regime = str(summary.get("regime") or "资料不足")
+        text = str(summary.get("text") or "")
+        if regime in {"收缩", "滞胀"}:
+            text += "环境偏紧，重点观察更要看风险。"
+        return {
+            "available": True,
+            "text": text,
+            "regime": regime,
+            "regime_label": str(summary.get("regime_label") or regime),
+            "changed": bool(summary.get("changed")),
+            "changes": list(summary.get("changes") or []),
+            "as_of": str(summary.get("as_of") or ""),
+        }
 
     def _strategy_changes(self, research_as_of: str) -> dict[str, Any]:
         """Event-first strategy changes; legacy comparisons remain untouched as fallback."""

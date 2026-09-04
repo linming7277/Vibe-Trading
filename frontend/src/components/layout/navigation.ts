@@ -56,9 +56,10 @@ export const PRIMARY_NAVIGATION: PrimaryNavigationItem[] = [
   },
   {
     id: "global", to: "/global", label: "全球策略", icon: Globe,
-    matches: ["/global"],
+    matches: ["/global", "/macro"],
     secondary: [
       { to: "/global", label: "全球全景" },
+      { to: "/macro", label: "宏观环境", matches: ["/macro", "/market/macro", "/value/macro"] },
     ],
   },
   {

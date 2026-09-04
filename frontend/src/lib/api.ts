@@ -907,7 +907,7 @@ export interface ValueStrategyState {
   risk: { overall: string; trap: string | null; summary: string | null };
   thesis: { status: string; authority: string; strategy_role: "AUTHORITATIVE" | "EXPLANATORY_ONLY" | "REJECTED"; caution: string | null };
   leader: { rank: number | null; state: string; industry_name: string | null; as_of: string | null };
-  freshness: { market_price_as_of: string | null; low_value_as_of: string | null; focus_as_of: string | null; historical_valuation_as_of: string | null; price_structure_as_of: string | null; risk_as_of: string | null; thesis_as_of: string | null; notice: string | null; price_structure: { status: string; label: string; last_bar_date: string | null; current_quote_date: string | null; gap_calendar_days: number | null } };
+  freshness: { market_price_as_of: string | null; low_value_as_of: string | null; focus_as_of: string | null; historical_valuation_as_of: string | null; price_structure_as_of: string | null; risk_as_of: string | null; thesis_as_of: string | null; notice: string | null; suspension?: { status: "TRADING" | "SUSPENDED_INFERRED" | "UNKNOWN"; reason: string; last_session: string | null; last_bar_date: string | null }; price_structure: { status: string; label: string; last_bar_date: string | null; current_quote_date: string | null; gap_calendar_days: number | null; gap_trading_days: number | null; gap_semantics: string } };
   summary: string; primary_action: { status: string; label: string }; reasons: string[]; cautions: string[]; formula_version: string; read_only: boolean;
 }
 export interface ValueStrategyEventBatch { transition_batch_id: string; stock_code: string; stock_name: string; severity: "INFO" | "MEDIUM" | "HIGH" | "CRITICAL"; delivery_mode: "IMMEDIATE" | "DAILY_DIGEST" | "HISTORY_ONLY"; title: string; summary: string; primary_reason: string; simultaneous_changes: string[]; research_as_of: string | null; status: "OPEN" | "ACKNOWLEDGED" | "CLOSED"; event_ids: string[]; events: Array<{ id: string; event_type: string; before_value: string; after_value: string; primary_reason: string }>; delivery?: { delivery_status: string }; }
@@ -1440,6 +1440,8 @@ export const api = {
   refreshDashboard: (body: { module?: string; market?: MarketCode }) =>
     request<ResearchRun>("/dashboard/refresh", { method: "POST", body: JSON.stringify(body) }),
   getResearchRun: (id: string) => request<ResearchRun>(`/research-runs/${encodeURIComponent(id)}`),
+  // LEGACY (macro-line V1 plan §2.3): institutional-style macro brief; do not
+  // build new features on this. The current macro product is /macro (getMacroSectorProjection).
   getMacroBrief: (market: MarketCode) => request<MacroBrief>(`/macro/briefs/latest?market=${market}`),
   getSectorRankings: (market: MarketCode) => request<{ market: MarketCode; items: SectorScore[] }>(`/sectors/rankings?market=${market}`),
   screenSecurities: (market: MarketCode, query = "") => request<{ market: MarketCode; items: SecurityCandidate[] }>(`/securities/screener?market=${market}&query=${encodeURIComponent(query)}`),
@@ -1508,7 +1510,41 @@ export const api = {
   getPaperNav: (id: string) => request<PaperNav>(`/paper/accounts/${encodeURIComponent(id)}/nav`),
   submitPaperOrder: (id: string, body: PaperOrderRequest) =>
     request<PaperOrder>(`/paper/accounts/${encodeURIComponent(id)}/orders`, { method: "POST", body: JSON.stringify(body) }),
+  getMacroSectorProjection: (asOf?: string) =>
+    request<MacroSectorProjection>(`/api/value/macro-sector-projection${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
 };
+
+export interface MacroSectorProjection {
+  as_of: string;
+  available: boolean;
+  reason?: string;
+  macro?: {
+    regime: string;
+    regime_label: string;
+    score: number | null;
+    coverage: number;
+    status?: string;
+    missing_series?: string[];
+    axes: Array<{ key: string; label: string; score: number | null; state: string; direction: string }>;
+  };
+  data_quality?: {
+    status: "READY" | "PARTIAL" | "STALE" | "UNKNOWN";
+    reason?: string;
+    series_count?: number;
+    series_total?: number;
+    missing_series_labels?: string[];
+  };
+  policy_sectors: Array<{
+    industry_code: string; industry_name: string; direction: string;
+    strength: string; horizon_days: number | null; confidence: number;
+    evidence: string;
+  }>;
+  l3_research_sectors: Array<{
+    industry_code: string; industry_name: string;
+    pool_member_count: number; top_codes: string[];
+  }>;
+  formula_version: string;
+}
 
 export type MarketCode = "CN" | "HK" | "US";
 export type SourceStatus = "live" | "agent" | "sample" | "stale" | string;

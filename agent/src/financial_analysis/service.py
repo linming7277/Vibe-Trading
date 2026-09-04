@@ -1042,13 +1042,15 @@ class FinancialAnalysisService:
         snapshot = self.prepare(stock_code, as_of=as_of)
         if refresh_error and refresh_error not in snapshot["data_gaps"]:
             snapshot["data_gaps"].append(refresh_error)
-        if snapshot["analysis_status"] in {"COMPLETED", "PARTIAL"} and not force:
-            # COMPLETED and PARTIAL (SUMMARY_ONLY / all claims rejected) are
-            # both terminal for one source fingerprint: re-analysis requires
-            # explicit force (manual repair) or a changed fingerprint/formula
-            # (which prepares a different snapshot).  Background callers can
-            # never auto-upgrade a claim-less result (2026-09-03 fix).
-            if snapshot["analysis_status"] == "PARTIAL":
+        if snapshot["analysis_status"] in {"COMPLETED", "PARTIAL", "FAILED"} and not force:
+            # COMPLETED, PARTIAL (SUMMARY_ONLY / all claims rejected) and
+            # FAILED (transport) are all terminal for one source fingerprint:
+            # re-analysis requires explicit force (manual repair) or a changed
+            # fingerprint/formula (which prepares a different snapshot).  A
+            # casual read/reuse call must never silently re-spend the model —
+            # observed in Batch 1B-3R when a reuse probe on a FAILED row
+            # triggered a second, unauthorised analysis (2026-09-03 fix).
+            if snapshot["analysis_status"] in {"PARTIAL", "FAILED"}:
                 return {**snapshot, "idempotent_reuse": True}
             # research-cache plan §20.2: a completed narrative is reusable only
             # under the prompt/model contract that produced it.

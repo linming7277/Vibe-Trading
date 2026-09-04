@@ -127,10 +127,13 @@ def test_two_peer_methods_can_improve_one_level_but_extreme_cap_applies():
 
 
 def test_support_freshness_and_stale_support_gate():
+    # V1 补丁后语义：last_bar 远早于 last_session → 停牌推断 → ACCEPTABLE 封顶
+    # → 支撑降级门不再因"旧 K 线"触发（停牌时旧 K 线不是数据旧的证据）。
+    # 该门仍对"非停牌 + STALE"场景生效（见 calendar-fallback 测试）。
     state = service(last_bar="2026-08-25").get_strategy_state("CN", "605108")
-    assert state["freshness"]["price_structure"]["status"] == "EXPIRED"
-    assert state["price_attention"]["effective_status"] == "WATCH"
-    assert any("支撑数据已偏旧" in item for item in state["price_attention"]["cautions"])
+    assert state["freshness"]["suspension"]["status"] == "SUSPENDED_INFERRED"
+    assert state["freshness"]["price_structure"]["status"] == "ACCEPTABLE"
+    assert state["price_attention"]["effective_status"] == "HIGH_ATTENTION"
 
 
 def test_pool_and_quote_dates_remain_separate():
@@ -158,3 +161,106 @@ def test_strategy_state_api_returns_json(monkeypatch):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/json")
     assert response.json()["eligibility"]["status"] == "IN_VALUE_SCOPE"
+
+
+# ---------------------------------------------------------------------------
+# 交易日新鲜度（reliability V1 Part C）：周末/节假日不再误判 EXPIRED
+# ---------------------------------------------------------------------------
+
+_TDAYS = [
+    "2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27", "2026-08-28",  # 周一~周五
+    "2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04",
+    "2026-09-07", "2026-09-08",
+]
+
+
+def _freshness(last_bar: str, quote: str, days=None):
+    zones_payload = {"as_of": quote, "price_as_of": quote, "data_quality": {"daily_history": {"last_date": last_bar}}}
+    return ValueStrategyStateService.price_structure_freshness(zones_payload, trading_days=days)
+
+
+def test_friday_close_vs_sunday_quote_is_not_expired_with_trading_days():
+    # last_bar=周五 08-28，quote=周日 08-30（非交易日→落到周五）→ index 差 0 → FRESH
+    result = _freshness("2026-08-28", "2026-08-30", _TDAYS)
+    assert result["gap_trading_days"] == 0
+    assert result["status"] == "FRESH"
+    assert result["gap_semantics"] == "TRADING_DAYS"
+    assert result["gap_calendar_days"] == 2  # 自然日仍作对照保留
+
+
+def test_two_trading_days_gap_is_acceptable():
+    result = _freshness("2026-08-28", "2026-09-01", _TDAYS)  # 周五 → 下周二 = 2 个交易日
+    assert result["gap_trading_days"] == 2
+    assert result["status"] == "ACCEPTABLE"
+
+
+def test_six_trading_days_gap_is_expired():
+    result = _freshness("2026-08-26", "2026-09-03", _TDAYS)  # index(09-03)-index(08-26)=6
+    assert result["gap_trading_days"] == 6
+    assert result["status"] == "EXPIRED"
+
+
+def test_holiday_quote_snaps_to_previous_close():
+    # 08-29（周六）不是交易日 → 落到 08-28（周五）；last_bar=08-27 → 差 1
+    result = _freshness("2026-08-27", "2026-08-29", _TDAYS)
+    assert result["gap_trading_days"] == 1
+    assert result["status"] == "ACCEPTABLE"
+
+
+def test_empty_calendar_falls_back_to_calendar_days():
+    result = _freshness("2026-08-28", "2026-08-30", [])
+    assert result["gap_trading_days"] is None
+    assert result["gap_semantics"] == "CALENDAR_DAYS_FALLBACK"
+    assert result["gap_calendar_days"] == 2
+    assert result["status"] == "ACCEPTABLE"  # 与旧自然日行为一致
+
+
+def test_last_bar_outside_calendar_falls_back():
+    result = _freshness("2020-01-01", "2026-09-01", _TDAYS)
+    assert result["gap_trading_days"] is None
+    assert result["gap_semantics"] == "CALENDAR_DAYS_FALLBACK"
+
+
+def test_stale_support_gate_fires_when_suspension_unknown_no_calendar():
+    # 交易日历为空 → suspension UNKNOWN → 不封顶 → STALE 降级门正常触发。
+    from unittest.mock import patch as _patch
+    with _patch("src.value_strategy.service.cached_trading_dates", return_value=[]):
+        state = service(last_bar="2026-08-25").get_strategy_state("CN", "605108")
+    assert state["freshness"]["suspension"]["status"] == "UNKNOWN"
+    assert state["freshness"]["price_structure"]["status"] in {"STALE", "EXPIRED"}
+    assert state["price_attention"]["effective_status"] == "WATCH"
+    assert any("支撑数据已偏旧" in item for item in state["price_attention"]["cautions"])
+
+
+# ---------------------------------------------------------------------------
+# 停牌推断（V1）：strategy state 挂 freshness.suspension + EXPIRED 封顶 STALE
+# ---------------------------------------------------------------------------
+
+def test_suspension_field_present_and_trading_for_fresh_bars():
+    state = service().get_strategy_state("CN", "605108")
+    suspension = state["freshness"]["suspension"]
+    assert suspension["status"] in {"TRADING", "SUSPENDED_INFERRED", "UNKNOWN"}
+    assert isinstance(suspension["reason"], str)
+
+
+def test_suspended_inferred_caps_expired_to_acceptable_and_adds_caution():
+    # last_bar 远早于 quote（缓存缺最近多根）：交易日口径 EXPIRED + 缺 K 线 → 停牌推断。
+    # V1 补丁：停牌封顶 ACCEPTABLE（不再是 STALE）——停牌时 K 线停在停牌前是正常现象，
+    # 不应触发"支撑旧 → 高关注降 WATCH"的旧 K 线降级逻辑。
+    state = service(last_bar="2026-08-20").get_strategy_state("CN", "605108")
+    suspension = state["freshness"]["suspension"]
+    assert suspension["status"] == "SUSPENDED_INFERRED"
+    assert "停牌" in suspension["reason"]
+    assert any("停牌中（推断）" in item for item in state["price_attention"]["cautions"])
+    structure = state["freshness"]["price_structure"]
+    assert structure["status"] == "ACCEPTABLE"
+    assert structure.get("suspension_capped") is True
+
+
+def test_suspended_high_attention_not_demoted_by_stale_support_gate():
+    # 停牌 + gap 很大 + raw HIGH_ATTENTION + 支撑类 reason → freshness=ACCEPTABLE，
+    # effective 不得因 STALE 降级成 WATCH（停牌时旧 K 线不是"数据旧"的证据）。
+    state = service(last_bar="2026-08-20").get_strategy_state("CN", "605108")
+    assert state["freshness"]["price_structure"]["status"] == "ACCEPTABLE"
+    assert state["price_attention"]["effective_status"] == "HIGH_ATTENTION"
+    assert state["price_attention"]["raw_level"] == "HIGH_ATTENTION"

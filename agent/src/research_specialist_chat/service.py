@@ -37,6 +37,11 @@ ROLE_SPECS: dict[str, dict[str, str]] = {
 _SELF_INTRO = re.compile(r"你是谁|什么模型|哪个模型|有什么功能|能做什么|如何使用|使用说明|介绍(?:一下)?你自己", re.I)
 _DATE_PATTERN = re.compile(r"(?<!\d)(20\d{2}-\d{2}-\d{2})(?!\d)")
 _TRADING_LANGUAGE = re.compile(r"买入|卖出|推荐|仓位|止盈|止损|加仓|减仓")
+_MACRO_OVERVIEW = re.compile(
+    r"宏观|环境|流动性|通胀|信用|金融条件|增长|资金面|松紧|政策",
+    re.I,
+)
+_MACRO_DEEP = re.compile(r"为什么|依据|来源|详细|解释|传导|数据缺口|缺什么", re.I)
 
 # Bumped when the specialist instruction/answer contract changes so cached
 # answers from an older prompt are invalidated (research-cache plan §6).
@@ -607,6 +612,20 @@ class ResearchSpecialistChatService:
         stock_code: str | None = None
         stock_name: str | None = None
         if agent == "macro_policy_researcher":
+            if _MACRO_OVERVIEW.search(question) and not _MACRO_DEEP.search(question):
+                from src.macro_line import get_macro_line_summary
+
+                as_of_match = _DATE_PATTERN.search(question)
+                summary_as_of = as_of_match.group(1) if as_of_match else None
+                summary = get_macro_line_summary(summary_as_of)
+                if summary.get("available"):
+                    gaps = () if not summary.get("changed") else ("MACRO_EVENTS_PENDING_REVIEW",)
+                    return SpecialistBrief(
+                        agent, spec["title"], str(summary.get("text") or ""),
+                        str(summary.get("as_of") or summary_as_of or "")[:10] or None,
+                        model_name, status="READY" if not gaps else "PARTIAL",
+                        source_keys=("macro_line_summary",), data_gaps=gaps,
+                    )
             snapshot = dict(self.macro_service.get() or {})
             as_of = str(snapshot.get("as_of") or "")[:10] or None
             context = {"macro_snapshot": _compact_macro(snapshot)} if snapshot else {}

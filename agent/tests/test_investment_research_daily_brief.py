@@ -22,7 +22,10 @@ from src.investment_research_supervisor.daily_brief_notification_service import 
     build_daily_brief_card,
 )
 from src.investment_research_supervisor.hermes_feishu import HermesSupervisorFeishuCredentials
-from src.investment_research_supervisor.daily_brief_service import InvestmentResearchDailyBriefService
+from src.investment_research_supervisor.daily_brief_service import (
+    FORMULA_VERSION as DAILY_BRIEF_FORMULA_VERSION,
+    InvestmentResearchDailyBriefService,
+)
 from src.investment_research_supervisor.daily_brief_store import InvestmentResearchDailyBriefRepository
 from src.low_value_leader_pool.store import LowValueLeaderPoolRepository
 from src.low_value_risk_snapshot.store import LowValueRiskSnapshotRepository
@@ -215,7 +218,7 @@ def test_daily_brief_uses_same_day_inputs_persists_once_and_preserves_priority_o
         "thesis_status": "WEAKENING", "source_data_as_of": AS_OF,
     }]
     assert brief["financial_changes"][0]["source_as_of"] == AS_OF
-    assert brief["formula_version"] == "daily-brief-v25"
+    assert brief["formula_version"] == DAILY_BRIEF_FORMULA_VERSION
     deep_list = brief["brief_payload"]["deeply_undervalued_companies"]
     assert brief["brief_payload"]["deeply_undervalued_count"] == 1
     assert deep_list[0]["stock_code"] == "000002.SZ"
@@ -271,12 +274,14 @@ def test_daily_brief_card_renders_value_observations_as_readable_summaries(tmp_p
     card = build_daily_brief_card(brief)
     content = "\n".join(str(item.get("content") or "") for item in card["elements"])
 
-    assert card["header"]["title"]["content"] == "投研主管｜每日简报"
-    assert "**研究日期** 2026-08-25" in content
-    assert "**重点研究 · 1 家**" in content
-    assert "**1. 公司SZ / 000002.SZ**" in content
-    assert "合理价值中枢 **12.0**" in content
-    assert "合理价值范围 11.0–13.0　｜　历史支撑 9.0–10.0" in content
+    assert card["header"]["title"]["content"] == f"投研日报 · {AS_OF}"
+    assert card["header"]["template"] == "indigo"
+    assert "重点研究 1 家" in content
+    assert "**1. 公司SZ**　000002.SZ" in content
+    assert "现价 **10.00**" in content
+    assert "合理 11–13" in content
+    assert "支撑 9–10" in content
+    assert "差距 **+20%**" in content
     assert not any(item["tag"] in {"column_set", "img"} for item in card["elements"])
     assert any(item["tag"] == "action" for item in card["elements"])
 
@@ -290,7 +295,7 @@ def test_daily_brief_card_keeps_responsive_rows_when_image_key_is_supplied(tmp_p
     assert output.stat().st_size > 1_000
     card = build_daily_brief_card(brief, value_table_image_key="img_value_table")
     assert not any(item["tag"] == "img" for item in card["elements"])
-    assert any("公司SZ / 000002.SZ" in str(item.get("content") or "") for item in card["elements"])
+    assert any("公司SZ**　000002.SZ" in str(item.get("content") or "") for item in card["elements"])
 
 
 def test_daily_brief_dry_run_is_idempotent_and_does_not_call_sender(tmp_path: Path) -> None:
@@ -312,8 +317,8 @@ def test_daily_brief_dry_run_is_idempotent_and_does_not_call_sender(tmp_path: Pa
 
     assert first["status"] == "READY"
     assert first["covers_low_value"] is True
-    assert "投研主管｜每日简报" == first["card"]["header"]["title"]["content"]
-    assert "研究日期" in first["card"]["elements"][0]["content"]
+    assert f"投研日报 · {AS_OF}" == first["card"]["header"]["title"]["content"]
+    assert "重点研究" in first["card"]["elements"][0]["content"]
     assert not any(element["tag"] == "column_set" for element in first["card"]["elements"])
     # Dry-run has no published Bitable delivery, so it intentionally omits
     # the final navigation button.
@@ -502,7 +507,7 @@ def test_daily_brief_rebuilds_ready_record_when_template_version_changes(tmp_pat
 
     assert rebuilt.status == "READY"
     assert not rebuilt.reused
-    assert rebuilt.brief["formula_version"] == "daily-brief-v25"
+    assert rebuilt.brief["formula_version"] == DAILY_BRIEF_FORMULA_VERSION
     assert "deeply_undervalued_companies" in rebuilt.brief["brief_payload"]
     assert reused.reused
 
@@ -548,7 +553,7 @@ def test_daily_brief_exports_low_value_leader_excel(tmp_path: Path) -> None:
 
     workbook = load_workbook(output, data_only=True)
 
-    assert workbook.sheetnames == ["低估龙头池", "深度低估"]
+    assert workbook.sheetnames == ["今日价格条件", "低估龙头池", "深度低估"]
     assert [cell.value for cell in workbook["低估龙头池"][1]] == [
         "股票代码", "公司", "行业", "估值状态", "现价", "合理价值低", "合理价值中", "合理价值高",
         "相对中位值差距", "历史支撑低", "历史支撑高",
@@ -724,3 +729,279 @@ def test_daily_brief_uses_bitable_link_without_excel_after_publication(tmp_path:
     assert sender.calls == ["card"]
     assert not any(item["tag"] == "img" for item in sender.card["elements"])
     assert result["delivery"]["attachment_message_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# 今日价格条件 digest（v26）：只投影例外，不产生交易语义
+# ---------------------------------------------------------------------------
+
+_BANNED_TERMS = ("买入", "卖出", "买点", "卖点", "建仓", "加仓", "减仓", "止盈", "止损", "下单", "目标价", "开仓", "平仓", "建议买入")
+
+
+class FakeStrategyStateService:
+    def __init__(self, states: dict[str, dict], raise_codes: tuple[str, ...] = ()) -> None:
+        self.states = states
+        self.raise_codes = set(raise_codes)
+        self.calls: list[str] = []
+
+    def get_strategy_state(self, market: str, stock_code: str, *, research_as_of: str | None = None) -> dict:
+        self.calls.append(stock_code)
+        if stock_code in self.raise_codes:
+            raise RuntimeError("strategy state boom")
+        state = self.states.get(stock_code)
+        if state is None:
+            raise ValueError(f"unknown {stock_code}")
+        return state
+
+
+class FakePriceZoneService:
+    def __init__(self, zones: dict[str, dict] | None = None) -> None:
+        self.zones = zones or {}
+        self.calls: list[str] = []
+
+    def get_price_zones(self, market: str, stock_code: str, *, as_of: str | None = None) -> dict:
+        self.calls.append(stock_code)
+        return self.zones.get(stock_code, {})
+
+
+def _strategy_state(
+    code: str,
+    name: str,
+    *,
+    effective: str = "HIGH_ATTENTION",
+    effective_label: str = "价格条件高度值得关注",
+    eligibility: str = "IN_VALUE_SCOPE",
+    action_label: str = "优先开展研究",
+    cautions: tuple[str, ...] = (),
+    notice: str | None = None,
+) -> dict:
+    return {
+        "stock_code": code, "stock_name": name, "market": "CN", "research_as_of": AS_OF,
+        "eligibility": {"status": eligibility, "label": "x", "reason": ""},
+        "price_attention": {
+            "primary": True, "raw_level": "HIGH_ATTENTION", "raw_label": "raw",
+            "effective_status": effective, "effective_label": effective_label, "score": 80,
+            "valuation_reliability": {"status": "RELIABLE", "label": "可靠", "peer_sample_count": 9, "peer_sample_counts": [], "flags": [], "reasons": []},
+            "reasons": [], "cautions": list(cautions),
+        },
+        "review_pressure": {"primary": True, "raw_level": "NORMAL", "effective_status": "NORMAL", "effective_label": "x", "score": 0, "reasons": [], "cautions": []},
+        "risk": {"overall": "MEDIUM", "trap": None, "summary": None},
+        "thesis": {"status": "FORMING", "authority": "AI_PROVISIONAL", "strategy_role": "EXPLANATORY_ONLY", "caution": None},
+        "leader": {"rank": 1, "state": "READY", "industry_name": None, "as_of": None},
+        "freshness": {
+            "market_price_as_of": AS_OF, "low_value_as_of": AS_OF, "focus_as_of": AS_OF,
+            "historical_valuation_as_of": None, "price_structure_as_of": None, "risk_as_of": None,
+            "thesis_as_of": None, "notice": notice,
+            "price_structure": {"status": "FRESH", "label": "最新", "last_bar_date": AS_OF, "current_quote_date": AS_OF, "gap_calendar_days": 0, "gap_trading_days": None, "gap_semantics": "CALENDAR_DAYS_FALLBACK"},
+        },
+        "summary": "x", "primary_action": {"status": "PRIORITY_RESEARCH", "label": action_label},
+        "reasons": [], "cautions": list(cautions), "formula_version": "v", "read_only": True,
+    }
+
+
+def _seed_with_strategy(
+    tmp_path: Path,
+    states: dict[str, dict],
+    *,
+    zones: dict[str, dict] | None = None,
+    raise_codes: tuple[str, ...] = (),
+    exited_codes: list[str] | None = None,
+    digest_only: bool = False,
+    focus_selection_service=None,
+):
+    service, briefs = _seed(tmp_path, focus_selection_service=focus_selection_service) if focus_selection_service else _seed(tmp_path)
+    fake = FakeStrategyStateService(states, raise_codes)
+    service._strategy_state_service = fake
+    service._price_zone_service = FakePriceZoneService(zones)
+    if digest_only:
+        watchlist = [
+            {"stock_code": code, "current_price": 10.0}
+            for code in states
+        ]
+        return service, fake, service._price_condition_digest(
+            research_as_of=AS_OF, watchlist=watchlist, exited_codes=exited_codes or [],
+        )
+    return service, fake, briefs
+
+
+def _inject_strategy_event(db_path: Path, code: str, event_type: str, *, before: str = "", after: str = "") -> None:
+    from src.value_strategy.event_store import ValueStrategyEventRepository
+
+    repository = ValueStrategyEventRepository(db_path)
+    event = {
+        "id": f"evt-{code}-{event_type}", "event_key": f"key-{code}-{event_type}", "market": "CN",
+        "stock_code": code, "event_type": event_type, "category": "PRICE", "severity": "INFO",
+        "before_value": before, "after_value": after, "before_state": {}, "after_state": {},
+        "primary_reason": "test", "reasons": [], "cautions": [], "trigger_dimension": "test",
+        "source_refs": [], "transition_batch_id": f"batch-{code}", "research_as_of": AS_OF,
+        "occurred_at": f"{AS_OF}T16:00:00+00:00",
+    }
+    cursor = {key: "" for key in (
+        "market", "stock_code", "current_eligibility", "current_priority", "current_primary_action",
+        "current_risk", "current_value_trap", "current_thesis_status", "current_thesis_authority",
+        "current_leader_scope", "current_valuation_reliability", "current_price_attention",
+        "current_review_pressure", "state_fingerprint", "research_as_of", "market_price_as_of",
+        "state", "event_history_start_at", "last_checked_at",
+    )}
+    cursor["market"], cursor["stock_code"], cursor["research_as_of"] = "CN", code, AS_OF
+    repository.persist_evaluation(cursor, [event])
+
+
+def test_price_digest_empty_pool_keeps_section_with_fixed_line(tmp_path: Path) -> None:
+    service, _, _ = _seed_with_strategy(tmp_path, {})
+    result = service.build(research_as_of=AS_OF)
+    digest = result.brief["brief_payload"]["price_condition_digest"]
+    assert digest["empty"] is True and digest["lines"] == []
+    card = build_daily_brief_card(result.brief)
+    joined = str(card)
+    assert "今日无价格条件变化。" in joined
+    assert "今日价格条件" in joined
+
+
+def test_price_digest_high_attention_reliable_renders_one_line(tmp_path: Path) -> None:
+    states = {"000002.SZ": _strategy_state("000002.SZ", "示例公司")}
+    zones = {"000002.SZ": {
+        "current_price": 10.0,
+        "valuation": {"fair_value_low": 12.0, "fair_value_mid": 14.0, "fair_value_high": 16.0},
+        "confluence_zones": [{"low": 9.5, "high": 10.5}], "support_zones": [], "upper_review_zones": [],
+    }}
+    service, _, briefs = _seed_with_strategy(tmp_path, states, zones=zones)
+    digest = service._price_condition_digest(
+        research_as_of=AS_OF,
+        watchlist=[{"stock_code": "000002.SZ", "current_price": 10.0}],
+        exited_codes=[],
+    )
+    line = digest["lines"][0]
+    assert line["company_name"] == "示例公司"
+    assert "在范围内" in line["sentence"] and "价格条件高度值得关注" in line["sentence"]
+    assert "现价10.00" in line["sentence"] and line["position_sentence"] == "现价落在关注带内"
+    assert "优先开展研究" in line["sentence"]
+    assert "raw" not in line["sentence"] and "HIGH_ATTENTION" not in line["sentence"]
+
+
+def test_price_digest_weak_reliability_shows_review_not_raw_attention(tmp_path: Path) -> None:
+    states = {"000002.SZ": _strategy_state(
+        "000002.SZ", "示例公司",
+        effective="VALUATION_REVIEW_REQUIRED",
+        effective_label="估值显示较大折价，但依据偏弱，先核验估值",
+    )}
+    service, _, _ = _seed_with_strategy(tmp_path, states)
+    digest = service._price_condition_digest(
+        research_as_of=AS_OF, watchlist=[{"stock_code": "000002.SZ", "current_price": 10.0}], exited_codes=[],
+    )
+    sentence = digest["lines"][0]["sentence"]
+    assert "先核验估值" in sentence
+    assert "价格条件高度值得关注" not in sentence
+
+
+def test_price_digest_scope_exit_shows_outside_scope(tmp_path: Path) -> None:
+    states = {"000002.SZ": _strategy_state("000002.SZ", "示例公司", eligibility="OUTSIDE_VALUE_SCOPE", effective_label="x")}
+    service, fake, _ = _seed_with_strategy(tmp_path, states, exited_codes=["000002.SZ"])
+    _inject_strategy_event(service.repository.db_path, "000002.SZ", "VALUE_SCOPE_EXITED")
+    digest = service._price_condition_digest(
+        research_as_of=AS_OF, watchlist=[{"stock_code": "000002.SZ", "current_price": 10.0}], exited_codes=["000002.SZ"],
+    )
+    assert digest["lines"][0]["eligibility_status"] == "OUTSIDE_VALUE_SCOPE"
+    assert "不在范围内" in digest["lines"][0]["sentence"]
+
+
+def test_price_digest_static_wait_and_outside_are_excluded(tmp_path: Path) -> None:
+    states = {
+        "000001.SZ": _strategy_state("000001.SZ", "等待公司", effective="WAIT", effective_label="当前价格条件等待"),
+        "000002.SZ": _strategy_state("000002.SZ", "范围外公司", effective="WAIT", eligibility="OUTSIDE_VALUE_SCOPE"),
+    }
+    service, _, digest = _seed_with_strategy(tmp_path, states, digest_only=True)
+    assert digest["empty"] is True
+
+
+def test_price_digest_caps_at_eight_lines_with_omitted_count(tmp_path: Path) -> None:
+    states = {f"60000{i}.SH": _strategy_state(f"60000{i}.SH", f"公司{i}") for i in range(1, 10)}
+    service, _, digest = _seed_with_strategy(tmp_path, states, digest_only=True)
+    assert len(digest["lines"]) == 8
+    assert digest["omitted_count"] == 1
+
+
+def test_price_digest_skips_failing_strategy_state_and_records_gap(tmp_path: Path) -> None:
+    states = {
+        "000001.SZ": _strategy_state("000001.SZ", "正常公司"),
+        "000002.SZ": _strategy_state("000002.SZ", "失败公司"),
+    }
+    two_a = FakeFocusSelection([
+        {"stock_code": "000001.SZ", "focus_reasons": [], "focus_cautions": []},
+        {"stock_code": "000002.SZ", "focus_reasons": [], "focus_cautions": []},
+    ])
+    service, _, _ = _seed_with_strategy(
+        tmp_path, states, raise_codes=("000002.SZ",), focus_selection_service=two_a,
+    )
+    result = service.build(research_as_of=AS_OF)
+    assert result.status == "READY"
+    digest = result.brief["brief_payload"]["price_condition_digest"]
+    assert [line["company_name"] for line in digest["lines"]] == ["正常公司"]
+    assert any("000002.SZ" in gap and "读取失败" in gap for gap in result.brief["data_gaps"])
+
+
+def test_price_digest_card_block_precedes_focus_observation(tmp_path: Path) -> None:
+    states = {"000002.SZ": _strategy_state("000002.SZ", "示例公司")}
+    service, _, _ = _seed_with_strategy(tmp_path, states)
+    brief = service.build(research_as_of=AS_OF).brief
+    card = build_daily_brief_card(brief)
+    contents = [element.get("content") or "" for element in card["elements"] if element.get("tag") == "markdown"]
+    digest_index = next(i for i, text in enumerate(contents) if "今日价格条件" in text)
+    focus_index = next(i for i, text in enumerate(contents) if text.startswith("**重点研究 ·"))
+    assert digest_index < focus_index
+    visible = "".join(contents)
+    for term in _BANNED_TERMS:
+        assert term not in visible, f"禁词出现在卡片：{term}"
+    for line in (brief["brief_payload"].get("price_condition_digest") or {}).get("lines", []):
+        for term in _BANNED_TERMS:
+            assert term not in line["sentence"]
+
+
+def test_price_digest_excel_sheet_lists_structured_rows(tmp_path: Path) -> None:
+    states = {"000002.SZ": _strategy_state("000002.SZ", "示例公司", cautions=("估值依据偏弱",))}
+    service, _, _ = _seed_with_strategy(tmp_path, states)
+    brief = service.build(research_as_of=AS_OF).brief
+    output = export_daily_brief_workbook(brief, tmp_path / "日报.xlsx")
+    workbook = load_workbook(output, data_only=True)
+    assert "今日价格条件" in workbook.sheetnames
+    sheet = workbook["今日价格条件"]
+    rows = list(sheet.iter_rows(values_only=True))
+    assert rows[0] == ("代码", "公司", "范围", "价格条件", "现价", "落点", "主动作", "原因")
+    assert rows[1][0] == "000002.SZ" and rows[1][1] == "示例公司"
+    assert rows[1][3] == "价格条件高度值得关注" and rows[1][7] == "估值依据偏弱"
+
+
+def test_price_digest_price_position_sentence_five_fixed_variants() -> None:
+    from src.investment_research_supervisor.daily_brief_service import _price_position_sentence
+
+    zones_kw = dict(
+        confluence_zones=[{"low": 9.0, "high": 10.0}],
+        support_zones=[{"low": 8.0, "high": 9.0}],
+        review_zones=[{"low": 20.0, "high": 21.0}],
+        fair_value_low=12.0, fair_value_high=16.0,
+    )
+    assert _price_position_sentence(9.5, **zones_kw) == "现价落在关注带内"
+    assert _price_position_sentence(8.5, **zones_kw) == "现价落在观察带内"
+    assert _price_position_sentence(20.5, **zones_kw) == "现价落在复核带内"
+    assert _price_position_sentence(11.0, **zones_kw) == "现价低于合理价值带下限"
+    # 带存在但现价不在任何带内（含全部在上方）→ 「未落入」，不得伪装「带不完整」
+    assert _price_position_sentence(14.0, **zones_kw) == "现价未落入关注/观察/复核带"
+    # 仅现价缺失或无可判带 → 「带不完整」
+    assert _price_position_sentence(None, **zones_kw) == "带不完整，无法判断落点"
+    assert _price_position_sentence("资料不足", **zones_kw) == "带不完整，无法判断落点"
+    assert _price_position_sentence(14.0) == "带不完整，无法判断落点"
+
+
+def test_price_digest_appends_suspension_suffix() -> None:
+    suspended = _strategy_state("000002.SZ", "停牌公司")
+    suspended["freshness"]["suspension"] = {
+        "status": "SUSPENDED_INFERRED",
+        "reason": "缺最近交易日K线，按停牌推断（沿用停牌前收盘，不是程序坏了）",
+        "last_session": "20260902", "last_bar_date": "20260901",
+    }
+    service, _, digest = _seed_with_strategy(tmp_path := __import__("pathlib").Path(__import__("tempfile").mkdtemp()), {"000002.SZ": suspended}, digest_only=True)
+    assert digest["lines"], "停牌推断股票必须进入价格条件行"
+    line = digest["lines"][0]
+    assert "（停牌中，推断）" in line["sentence"]
+    assert line["suspension_status"] == "SUSPENDED_INFERRED"
+    assert "停牌中（推断）" in line["reason_short"]

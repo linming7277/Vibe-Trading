@@ -8,6 +8,7 @@ const ValueStrategy = lazy(() => import("@/pages/ValueStrategy").then((m) => ({ 
 const ValueResearchQueue = lazy(() => import("@/pages/ValueResearchWorkspace").then((m) => ({ default: m.ValueResearchQueue })));
 const ValueOpportunitiesCenter = lazy(() => import("@/pages/ValueFocusSelection").then((m) => ({ default: m.ValueFocusSelectionPage })));
 const ValueFocusPage = lazy(() => import("@/pages/ValueFocusPage").then((m) => ({ default: m.ValueFocusPage })));
+const Macro = lazy(() => import("@/pages/Macro").then((m) => ({ default: m.Macro })));
 const EmotionStrategy = lazy(() => import("@/pages/EmotionStrategy").then((m) => ({ default: m.EmotionStrategy })));
 const SimulationHub = lazy(() => import("@/pages/SimulationHub").then((m) => ({ default: m.SimulationHub })));
 const ModelsHub = lazy(() => import("@/pages/ModelsHub").then((m) => ({ default: m.ModelsHub })));
@@ -98,7 +99,8 @@ export const router = createBrowserRouter([{
       { path: "fine-tracks", element: redirect("/value/leaders") },
       { path: "company/:stockCode/financial", element: wrap(FinancialAnalysis) },
     ] },
-    { path: "/value/macro", element: redirect("/value") },
+    { path: "/macro", element: wrap(Macro) },
+    { path: "/value/macro", element: redirect("/macro") },
     { path: "/value/sectors", element: redirect("/value") },
     { path: "/value/company", element: redirect("/value/research") },
     { path: "/value/timing", element: redirect("/value/opportunities") },
@@ -149,7 +151,7 @@ export const router = createBrowserRouter([{
     { path: "/market/overview", element: wrap(MarketOverview) },
     { path: "/market/ranks", element: wrap(MarketRanks) },
     { path: "/market/sectors/:code", element: wrap(SectorDetail) },
-    { path: "/market/macro", element: redirect("/value") },
+    { path: "/market/macro", element: redirect("/macro") },
     { path: "/market/sectors", element: wrap(SectorRanking) },
     { path: "/screener", element: wrap(Screener) },
     { path: "/funds", element: redirect("/models/funds") },

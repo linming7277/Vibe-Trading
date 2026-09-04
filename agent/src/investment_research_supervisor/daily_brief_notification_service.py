@@ -248,6 +248,40 @@ def _card_value(value: Any) -> str:
     return str(value)
 
 
+def _finite_number(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number == number and number not in {float("inf"), float("-inf")} else None
+
+
+def _fmt_number(value: Any) -> str:
+    """Compact money-like number: 12.74 / 163.2 / 312（去尾零，克制小数位）."""
+    number = _finite_number(value)
+    if number is None:
+        return "—"
+    return f"{number:.2f}".rstrip("0").rstrip(".")
+
+
+def _fmt_price(value: Any) -> str:
+    number = _finite_number(value)
+    return "—" if number is None else f"{number:.2f}"
+
+
+def _fmt_gap(value: Any) -> str:
+    number = _finite_number(value)
+    return "—" if number is None else f"{number:+.0f}%"
+
+
+def _range_text(low: Any, high: Any) -> str:
+    if _finite_number(low) is None and _finite_number(high) is None:
+        return "—"
+    return f"{_fmt_number(low)}–{_fmt_number(high)}"
+
+
 def _short_text(value: Any, *, limit: int = 76) -> str:
     text = " ".join(str(value or "").split())
     return text if len(text) <= limit else f"{text[:limit - 1]}…"
@@ -261,7 +295,7 @@ def _summary_metrics(payload: dict[str, Any]) -> str:
     watchlist_count = len(list(payload.get("executive_watchlist") or []))
     as_of = _card_value(payload.get("research_as_of"))
     change_text = str(visible_changes + overflow) if visible_changes + overflow else "无"
-    return f"**研究日期** {as_of}　｜　**重点研究** {watchlist_count} 家　｜　**状态变化** {change_text} 项"
+    return f"**{as_of}**　·　重点研究 {watchlist_count} 家　·　今日变化 {change_text} 项"
 
 
 def _compact_strategy_changes(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -277,7 +311,6 @@ def _compact_strategy_changes(payload: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         if not rows:
             rows.append({"tag": "markdown", "content": "**今日变化**"})
-        rows.append({"tag": "markdown", "content": f"_{heading} · {len(items)} 项_"})
         for item in items:
             if shown >= 5:
                 break
@@ -303,12 +336,12 @@ def _compact_investment_changes(payload: dict[str, Any]) -> list[dict[str, Any]]
     for item in situations:
         company, code = _card_value(item.get("company_name")), _card_value(item.get("stock_code"))
         basis = _short_text(item.get("basis") or "研究判断已更新")
-        rows.append({"tag": "markdown", "content": f"• **{company} / {code}**　{basis}"})
+        rows.append({"tag": "markdown", "content": f"• **{company} {code}**　{basis}"})
     return rows
 
 
 def _value_observation_table(brief: dict[str, Any]) -> list[dict[str, Any]]:
-    """Render readable vertical summaries instead of a cramped wide table."""
+    """每家两行的紧凑摘要：一行身份与现价，一行估值与支撑。"""
     payload = dict(brief.get("brief_payload") or {})
     watchlist = list(payload.get("executive_watchlist") or [])
     if not watchlist:
@@ -317,28 +350,75 @@ def _value_observation_table(brief: dict[str, Any]) -> list[dict[str, Any]]:
     elements: list[dict[str, Any]] = []
     for index, item in enumerate(watchlist, start=1):
         support = dict(item.get("historical_support") or {})
-        support_text = (
-            f"{_card_value(support.get('low'))}–{_card_value(support.get('high'))}"
-            if support.get("low") is not None and support.get("high") is not None
-            else "资料不足"
+        support_text = _range_text(support.get("low"), support.get("high"))
+        industry = _card_value(item.get("industry_name"))
+        code = _card_value(item.get("stock_code"))
+        head = (
+            f"**{index}. {_card_value(item.get('company_name'))}**　{code}"
+            + (f"　·　{industry}" if industry and industry != "—" else "")
+            + f"　·　现价 **{_fmt_price(item.get('current_price'))}**"
         )
-        gap = item.get("valuation_gap_percent")
-        gap_text = f"{gap:.2f}%" if isinstance(gap, (int, float)) else "资料不足"
-        fair_value_range = f"{_card_value(item.get('fair_value_low'))}–{_card_value(item.get('fair_value_high'))}"
-        priority = _short_text(item.get("research_priority_reason") or item.get("research_change"), limit=58)
-        cautions = list(item.get("research_cautions") or [])
-        caution = _short_text(cautions[0] if cautions else item.get("valuation_caveat"), limit=58)
-        content = (
-            f"**{index}. {_card_value(item.get('company_name'))} / {_card_value(item.get('stock_code'))}**　{_card_value(item.get('industry_name'))}\n"
-            f"现价 **{_card_value(item.get('current_price'))}**　｜　合理价值中枢 **{_card_value(item.get('fair_value_mid'))}**　｜　差距 **{gap_text}**\n"
-            f"合理价值范围 {fair_value_range}　｜　历史支撑 {support_text}"
+        detail = (
+            f"　合理 {_range_text(item.get('fair_value_low'), item.get('fair_value_high'))}"
+            f"　·　支撑 {support_text}"
+            f"　·　差距 **{_fmt_gap(item.get('valuation_gap_percent'))}**"
         )
-        if priority:
-            content += f"\n研究重点：{priority}"
-        if caution:
-            content += f"\n注意：{caution}"
-        elements.append({"tag": "markdown", "content": content})
+        elements.append({"tag": "markdown", "content": head + "\n" + detail})
     return elements
+
+
+def _macro_environment_block(brief: dict[str, Any]) -> list[dict[str, Any]]:
+    """当前研究环境一行摘要（fail-soft，宏观不可用时整块省略）。"""
+    env = dict(brief.get("macro_environment") or (brief.get("brief_payload") or {}).get("macro_environment") or {})
+    if not env.get("available"):
+        return []
+    text = _short_text(env.get("text") or "", limit=140)
+    return [
+        {"tag": "markdown", "content": f"**当前研究环境**\n{text}"},
+    ]
+
+
+def _price_condition_digest_of(brief: dict[str, Any]) -> dict[str, Any]:
+    """Read the digest from the persisted brief (payload copy is durable)."""
+    digest = dict(brief.get("price_condition_digest") or {})
+    if not digest:
+        digest = dict((brief.get("brief_payload") or {}).get("price_condition_digest") or {})
+    return digest
+
+
+def _price_condition_digest_block(brief: dict[str, Any]) -> list[dict[str, Any]]:
+    """老板第一眼：今天盯谁 / 谁要复核 / 谁掉出名单（研究结论，不是交易指令）。"""
+    digest = _price_condition_digest_of(brief)
+    rows: list[dict[str, Any]] = [
+        {"tag": "markdown", "content": "**今日价格条件**"},
+    ]
+    lines = list(digest.get("lines") or [])
+    if not lines:
+        rows.append({"tag": "markdown", "content": "今日无价格条件变化。"})
+        return rows
+    for item in lines:
+        company = _card_value(item.get("company_name"))
+        code = _card_value(item.get("stock_code"))
+        scope = "在范围内" if item.get("eligibility_status") == "IN_VALUE_SCOPE" else "不在范围内"
+        action = _short_text(item.get("primary_action_label") or "资料不足", limit=26)
+        price = _fmt_price(item.get("current_price"))
+        position = str(item.get("position_sentence") or "资料不足，无法判断落点")
+        if position.startswith("现价"):
+            position = position[len("现价"):].lstrip("，, ")
+            detail = f"现价 {price}，{position}"
+        else:
+            detail = f"现价 {price}；{position}"
+        rows.append({"tag": "markdown", "content": (
+            f"• **{company}** {code} · {scope} · **{action}**\n"
+            f"　{detail}"
+        )})
+    omitted = int(digest.get("omitted_count") or 0)
+    if omitted > 0:
+        rows.append({"tag": "note", "elements": [{
+            "tag": "plain_text",
+            "content": f"另有 {omitted} 家见公司研究页，未列入日报。",
+        }]})
+    return rows
 
 
 def build_daily_brief_card(
@@ -347,31 +427,38 @@ def build_daily_brief_card(
 ) -> dict[str, Any]:
     payload = dict(brief.get("brief_payload") or {})
     bitable_url = str(payload.get("low_value_leader_bitable_url") or "").strip()
+    as_of = _card_value(payload.get("research_as_of"))
     elements: list[dict[str, Any]] = [
         {"tag": "markdown", "content": _summary_metrics(payload)},
-        {"tag": "hr"},
+        *_macro_environment_block(brief),
+        *_price_condition_digest_block(brief),
+    ]
+    changes = [
         *_compact_strategy_changes(payload),
         *_compact_investment_changes(payload),
-        {"tag": "hr"},
-        {"tag": "markdown", "content": f"**重点研究 · {len(list(payload.get('executive_watchlist') or []))} 家**"},
-        {"tag": "note", "elements": [{
-            "tag": "plain_text",
-            "content": "按低估程度、龙头质量、价值空间及风险资料条件筛选；不构成买卖建议。",
-        }]},
-        *_value_observation_table(brief),
     ]
+    if changes:
+        elements.extend(changes)
+    elements.extend([
+        {"tag": "hr"},
+        {"tag": "markdown", "content": f"**重点研究 · {len(list(payload.get('executive_watchlist') or []))} 家**　*研究结论，不构成买卖建议*"},
+        *_value_observation_table(brief),
+    ])
     if bitable_url and include_bitable_link:
         elements.extend([
             {"tag": "hr"},
             {"tag": "action", "actions": [{
-                "tag": "button", "type": "default",
-                "text": {"tag": "plain_text", "content": "查看完整低估龙头池"},
+                "tag": "button", "type": "primary",
+                "text": {"tag": "plain_text", "content": "打开低估龙头池"},
                 "url": bitable_url,
             }]},
         ])
     return {
         "config": {"wide_screen_mode": True},
-        "header": {"title": {"tag": "plain_text", "content": "投研主管｜每日简报"}},
+        "header": {
+            "template": "indigo",
+            "title": {"tag": "plain_text", "content": f"投研日报 · {as_of}"},
+        },
         "elements": elements,
     }
 

@@ -955,6 +955,27 @@ def get_value_watchpoints(stock_code: str, as_of: str = "", limit: int = 0) -> s
 
 
 @mcp.tool
+def get_macro_environment(as_of: str = "") -> str:
+    """Read the current macro environment snapshot and undigested changes.
+
+    Returns the five-axis regime, coverage, missing axes, and any pending
+    change events (e.g. "流动性由偏暖变为中性").  Zero LLM, zero network —
+    reads the persisted macro snapshot and event store only.  Does not
+    produce trading instructions or sector recommendations.
+
+    Args:
+        as_of: Optional point-in-time date in YYYY-MM-DD.  Leave blank for today.
+    """
+    try:
+        from src.macro_line import get_macro_line_summary
+
+        summary = get_macro_line_summary(_blank_to_none(as_of))
+        return _json_ok(**summary)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        return _json_error(str(exc), error_type="macro_line_unavailable")
+
+
+@mcp.tool
 def get_cio_quick_brief(stock_code: str, as_of: str = "") -> str:
     """Read the CIO Quick Brief: a six-block fast summary of the persisted CIO report.
 

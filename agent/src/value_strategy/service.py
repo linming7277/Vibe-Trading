@@ -16,6 +16,8 @@ from src.risk_research import get_risk_research_service
 from src.value_price_zones import get_value_price_zone_service
 
 from .reliability import valuation_reliability
+from .suspension import infer_suspension
+from .trading_calendar import cached_trading_dates
 from .semantics import (
     ELIGIBILITY_LABELS,
     PRICE_ATTENTION_LABELS,
@@ -42,6 +44,27 @@ def _number(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return result if result == result and result not in {float("inf"), float("-inf")} else None
+
+
+def quote_as_of_probe(zones: dict[str, Any]) -> str | None:
+    """Latest quote date visible to the read-only zone projection."""
+    return _day(zones.get("price_as_of") or zones.get("as_of"))
+
+
+def last_bar_volume(zones: dict[str, Any]) -> float | None:
+    bars = _zone_bars(zones)
+    return _number((bars[-1] or {}).get("volume")) if bars else None
+
+
+def last_bar_amount(zones: dict[str, Any]) -> float | None:
+    bars = _zone_bars(zones)
+    return _number((bars[-1] or {}).get("amount")) if bars else None
+
+
+def _zone_bars(zones: dict[str, Any]) -> list[dict[str, Any]]:
+    bars = (zones.get("data_quality") or {}).get("daily_history") or {}
+    raw = bars.get("last_bar") if isinstance(bars, dict) else None
+    return [dict(raw)] if isinstance(raw, dict) else []
 
 
 class ValueStrategyStateService:
@@ -76,25 +99,43 @@ class ValueStrategyStateService:
         return valuation_reliability(zones)
 
     @staticmethod
-    def price_structure_freshness(zones: dict[str, Any]) -> dict[str, Any]:
+    def price_structure_freshness(
+        zones: dict[str, Any],
+        trading_days: list[str] | None = None,
+    ) -> dict[str, Any]:
         quality = dict((zones.get("data_quality") or {}).get("daily_history") or {})
         last_bar = _day(quality.get("last_date"))
         quote_date = _day(zones.get("price_as_of") or zones.get("as_of"))
         if not last_bar or not quote_date:
-            status, gap = "UNKNOWN", None
+            status, gap, gap_trading = "UNKNOWN", None, None
         else:
-            # Calendar-day fallback is intentional until a durable exchange
-            # calendar is available to this read-only projection.
-            gap = max(0, (date.fromisoformat(quote_date) - date.fromisoformat(last_bar)).days)
-            status = "FRESH" if gap == 0 else "ACCEPTABLE" if gap <= 3 else "STALE" if gap <= 5 else "EXPIRED"
+            calendar_gap = max(0, (date.fromisoformat(quote_date) - date.fromisoformat(last_bar)).days)
+            gap = calendar_gap
+            gap_trading = None
+            semantics = "CALENDAR_DAYS_FALLBACK"
+            if trading_days:
+                from .trading_calendar import TRADING_DAYS, trading_days_between
+
+                computed, computed_semantics = trading_days_between(last_bar, quote_date, list(trading_days))
+                if computed is not None:
+                    gap_trading, semantics = computed, TRADING_DAYS
+            else:
+                semantics = "CALENDAR_DAYS_FALLBACK"
+            effective = gap_trading if gap_trading is not None else calendar_gap
+            status = (
+                "FRESH" if effective == 0
+                else "ACCEPTABLE" if effective <= 3
+                else "STALE" if effective <= 5
+                else "EXPIRED"
+            )
         return {
             "status": status,
             "label": PRICE_STRUCTURE_FRESHNESS_LABELS[status],
             "last_bar_date": last_bar,
             "current_quote_date": quote_date,
             "gap_calendar_days": gap,
-            "gap_trading_days": None,
-            "gap_semantics": "CALENDAR_DAYS_FALLBACK",
+            "gap_trading_days": gap_trading,
+            "gap_semantics": semantics if last_bar and quote_date else "CALENDAR_DAYS_FALLBACK",
         }
 
     @staticmethod
@@ -190,11 +231,36 @@ class ValueStrategyStateService:
         leader = self.leader_service.get_profile(normalized_market, symbol, as_of=research_as_of)
 
         reliability = self.valuation_reliability(zones)
-        structure_freshness = self.price_structure_freshness(zones)
+        trading_days = cached_trading_dates()
+        structure_freshness = self.price_structure_freshness(
+            zones, trading_days=trading_days,
+        )
+        suspension = infer_suspension(
+            as_of=quote_as_of_probe(zones),
+            last_bar_date=structure_freshness.get("last_bar_date"),
+            last_bar_volume=last_bar_volume(zones),
+            last_bar_amount=last_bar_amount(zones),
+            trading_days=trading_days,
+        )
         raw_level = str(entry.get("entry_level") or "WAIT")
+        # 停牌推断（V1，非官方字段）：让"停牌没更新"不再被读成"数据坏了"。
+        # 封顶必须在 _effective_price_attention 之前——停牌时 K 线停在停牌前
+        # 是正常现象，不应被"支撑旧 → WATCH"降级逻辑误伤。
+        if suspension["status"] == "SUSPENDED_INFERRED":
+            price_cautions_seed = [f"停牌中（推断）：{suspension['reason']}"]
+            if structure_freshness["status"] in {"STALE", "EXPIRED"}:
+                structure_freshness = {
+                    **structure_freshness,
+                    "status": "ACCEPTABLE",
+                    "label": PRICE_STRUCTURE_FRESHNESS_LABELS["ACCEPTABLE"],
+                    "suspension_capped": True,
+                }
+        else:
+            price_cautions_seed = []
         effective, price_cautions = self._effective_price_attention(
             raw_level, reliability["status"], structure_freshness["status"], list(entry.get("reason_codes") or []),
         )
+        price_cautions = [*price_cautions_seed, *price_cautions]
         authority = str((thesis or {}).get("authority_status") or "MISSING")
         thesis_status = str((thesis or {}).get("status") or "MISSING")
         authority_caution = self._authority_caution(thesis)
@@ -273,6 +339,7 @@ class ValueStrategyStateService:
                 "risk_as_of": _day(risk.get("as_of")),
                 "thesis_as_of": _day((thesis or {}).get("source_data_as_of") or (thesis or {}).get("created_at")),
                 "price_structure": structure_freshness,
+                "suspension": suspension,
                 "notice": freshness_note,
             },
             "summary": summary,

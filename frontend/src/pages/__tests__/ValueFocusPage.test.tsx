@@ -5,6 +5,8 @@ const apiMock = vi.hoisted(() => ({
   getLowValueLeaders: vi.fn(),
   getLowValueLeaderEvents: vi.fn(),
   getCompanyFinancialAnalysis: vi.fn(),
+  getInvestmentResearchDailyBrief: vi.fn(),
+  getMacroSectorProjection: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({ api: apiMock }));
@@ -26,6 +28,10 @@ const item = {
 };
 
 describe("ValueFocusPage", () => {
+  beforeEach(() => {
+    apiMock.getInvestmentResearchDailyBrief.mockRejectedValue(new Error("no brief"));
+    apiMock.getMacroSectorProjection.mockRejectedValue(new Error("no macro"));
+  });
   it("reads the automatic low-value leader pool and opens Quick View", async () => {
     apiMock.getLowValueLeaders.mockResolvedValue({ items: [item], total: 1, last_evaluated_at: item.updated_at });
     apiMock.getLowValueLeaderEvents.mockResolvedValue({

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import sys
 import threading
 import time as time_module
 import uuid
@@ -15,6 +17,8 @@ from src.financial_analysis.service import get_financial_analysis_service
 from src.level3_leaders.service import Level3IndustryLeaderService
 from src.level3_leaders.store import Level3LeaderStore
 from src.tdx_data.service import get_tdx_service
+
+logger = logging.getLogger(__name__)
 
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -62,7 +66,22 @@ class ValueResearchScheduler:
             try:
                 self.tick()
             except Exception:
-                pass
+                # A dead tick must leave a trace — the loop keeps running, but
+                # the failure is logged and surfaced through the automation row
+                # instead of being silently swallowed.
+                logger.exception("value-l3-scheduler tick failed")
+                try:
+                    failure_store = Level3LeaderStore()
+                    try:
+                        failure_store.update_automation(
+                            last_status="failed",
+                            last_error=f"{type(sys.exc_info()[1]).__name__}: {sys.exc_info()[1]}"[:160],
+                            next_run_at=next_value_run().isoformat(),
+                        )
+                    finally:
+                        failure_store.close()
+                except Exception:
+                    logger.exception("value-l3-scheduler failed to persist tick failure")
             self._wake.wait(30)
             self._wake.clear()
 
@@ -160,7 +179,9 @@ class ValueResearchScheduler:
             repository = getattr(focus_service, "repository", None)
             members = list(repository.active("CN")) if repository is not None else []
         except Exception:
+            logger.warning("low-value daily bar step could not read active members; skipping fail-soft", exc_info=True)
             members = []
+            summary["failed"].append({"stock_code": "*", "error": "active member read failed"})
         summary["active_members"] = len(members)
         if not members:
             return summary
@@ -216,8 +237,11 @@ class ValueResearchScheduler:
             if allow_refresh_request and retries < int(automation.get("max_retries") or 3):
                 try:
                     tdx.start_update("market_close")
-                except RuntimeError:
-                    pass
+                except RuntimeError as exc:
+                    # A rejected refresh request is operational noise, not a
+                    # crash: keep WAITING_DATA semantics but keep the reason.
+                    logger.warning("market_close refresh rejected: %s", exc)
+                    reason = f"{reason}; market_close refresh rejected: {exc}"[:400]
             if retries < int(automation.get("max_retries") or 3):
                 self._retry_counts[natural_date] = retries + 1
                 store.update_automation(
@@ -350,6 +374,20 @@ class ValueResearchScheduler:
             ).deliver_immediate(research_as_of=as_of)
             stages["STRATEGY_EVENT_DELIVERY_READY"] = str(delivery_result.get("status") or "PARTIAL")
 
+            # Macro line V1 (SPEC §3.1): refresh BEFORE Daily Brief build so
+            # the brief's macro_environment reflects today's snapshot+events.
+            # Fail-soft: macro failure never affects EOD status.
+            try:
+                from src.macro_line import refresh_macro_line
+
+                macro_result = refresh_macro_line(as_of)
+                stages["MACRO_LINE_READY"] = str(macro_result.get("status") or "UNKNOWN")
+                freshness = (macro_result.get("freshness") or {}) if isinstance(macro_result, dict) else {}
+                stages["MACRO_FRESHNESS"] = str(freshness.get("status") or "UNKNOWN")
+            except Exception:
+                logger.warning("macro line refresh failed (fail-soft)", exc_info=True)
+                stages["MACRO_LINE_READY"] = "FAILED"
+
             from src.investment_research_supervisor import (
                 get_daily_brief_bitable_publisher,
                 get_daily_brief_notification_service,
@@ -363,6 +401,17 @@ class ValueResearchScheduler:
                     message="daily research brief generation failed",
                 )
             stages["DAILY_RESEARCH_BRIEF_READY"] = "REUSED" if brief_result.reused else "READY"
+
+            try:
+                from src.macro_line.events import MacroEventStore
+
+                event_store = MacroEventStore()
+                try:
+                    event_store.close_events(as_of)
+                finally:
+                    event_store.close()
+            except Exception:
+                logger.warning("macro event close failed (fail-soft)", exc_info=True)
 
             bitable_result = get_daily_brief_bitable_publisher().publish(research_as_of=as_of)
             bitable_status = str(bitable_result.get("status") or "")
@@ -436,8 +485,8 @@ class ValueResearchScheduler:
             return item, snapshot
 
         with ThreadPoolExecutor(max_workers=3, thread_name_prefix="value-l3-research") as executor:
-            futures = [executor.submit(prepare, item) for item in states]
-            for future in as_completed(futures):
+            future_by_code = {executor.submit(prepare, item): str(item.get("stock_code") or "?") for item in states}
+            for future in as_completed(future_by_code):
                 try:
                     item, snapshot = future.result()
                     status = "READY" if snapshot.get("feature_status") in {"READY", "PARTIAL"} else "PARTIAL"
@@ -451,6 +500,11 @@ class ValueResearchScheduler:
                         update_store.close()
                     completed += 1
                 except Exception:
+                    logger.warning(
+                        "incremental financial prepare failed for %s (stage=prepare_incremental)",
+                        future_by_code[future],
+                        exc_info=True,
+                    )
                     failed += 1
         return {"total": len(states), "completed": completed, "failed": failed}
 

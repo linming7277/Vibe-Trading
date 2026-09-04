@@ -14,6 +14,12 @@ AuthDep = Callable[..., Awaitable[Any] | Any]
 
 
 def register_value_strategy_routes(app: FastAPI, require_auth: AuthDep) -> None:
+    @app.get("/api/value/macro-sector-projection", dependencies=[Depends(require_auth)])
+    async def get_macro_sector_projection(as_of: str | None = Query(default=None)):
+        from src.value_strategy.macro_sector_projection import get_macro_sector_projection
+
+        return await asyncio.to_thread(get_macro_sector_projection, as_of)
+
     @app.get("/api/value/companies/{stock_code}/strategy-state", dependencies=[Depends(require_auth)])
     async def get_value_strategy_state(
         stock_code: str,

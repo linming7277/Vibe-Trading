@@ -202,41 +202,6 @@ class MacroDataService:
 
     @staticmethod
     def _cached_market_features(as_of: str) -> list[dict[str, Any]]:
-        """Build risk-appetite inputs from the existing close-of-day cache."""
-        from .value_market_history import BENCHMARK, ValueMarketHistoryService
-
-        frame = ValueMarketHistoryService().read(as_of)
-        if frame.empty:
-            return []
-        returns: dict[str, float] = {}
-        for symbol, group in frame.groupby("symbol"):
-            closes = [float(value) for value in group.sort_values("trade_date")["close"].tolist() if _finite(value) is not None]
-            if len(closes) >= 21 and closes[-21] > 0:
-                returns[str(symbol)] = (closes[-1] / closes[-21] - 1) * 100
-        if not returns:
-            return []
-        market_returns = [value for symbol, value in returns.items() if symbol != BENCHMARK]
-        values = {
-            "csi_all_share_risk_appetite": returns.get(BENCHMARK),
-            "a_share_breadth_20d": sum(value > 0 for value in market_returns) / len(market_returns) * 100 if market_returns else None,
-        }
-        fetched_at = now()
-        records = []
-        for series_id, value in values.items():
-            if value is None:
-                continue
-            records.append({
-                "series_id": series_id, "axis": "financial_conditions", "higher_good": True,
-                "observation_date": as_of, "release_date": as_of,
-                "vintage_id": hashlib.sha256(f"{series_id}:{as_of}:{value}".encode()).hexdigest()[:16],
-                "value": value, "unit": "%", "source": "通达信/AKShare行情缓存",
-                "source_url": "", "release_status": "cached_market_close", "fetched_at": fetched_at,
-                "metadata": {"window": "20D", "point_in_time": True},
-            })
-        return records
-
-    @staticmethod
-    def _cached_market_features(as_of: str) -> list[dict[str, Any]]:
         """Build a PIT 20-day risk-appetite history from the TDX close cache."""
         from .value_market_history import BENCHMARK, ValueMarketHistoryService
 

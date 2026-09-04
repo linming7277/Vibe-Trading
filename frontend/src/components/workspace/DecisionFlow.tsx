@@ -3,6 +3,9 @@ import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 import { useDecisionFlow } from "@/hooks/useDecisionFlow";
 
+// LEGACY workflow (macro-line V1 plan §2.3): "宏观→行业→龙头→深度研究→买卖点"
+// is the old decision-chain pattern. New features should NOT extend this flow;
+// the current macro product is /macro (environment-only, no industry selection).
 const labels = ["宏观", "行业", "龙头", "深度研究", "买卖点"] as const;
 
 export function DecisionFlow({ current }: { current: 1 | 2 | 3 | 4 | 5 }) {

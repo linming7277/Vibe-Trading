@@ -4,6 +4,7 @@ import { safeGet, safeRemove, safeSet } from "@/lib/storage";
 const STORAGE_KEY = "hz-decision-flow-v1";
 const CHANGE_EVENT = "hengzhi:decision-flow";
 
+/** LEGACY (macro-line V1 SPEC §2.3): old decision-flow state for SectorRanking / TradePlans. */
 export interface DecisionFlowState {
   macro_headline?: string;
   macro_stance?: string;

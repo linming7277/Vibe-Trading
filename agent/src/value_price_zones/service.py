@@ -370,30 +370,38 @@ class ValuePriceZoneService:
     def _structure(self, bars: list[dict[str, Any]], current_price: float | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         if len(bars) < self.config.min_history_bars or current_price is None:
             return [], []
+        # 0 量且 0 额的 bar（停牌日）不参与高低点候选 / 成交量强度 / 密集区分桶
+        # ——它们不是真实交易触碰；last_date/现价仍可用最后一根（含 0 量日）。
+        tradable = [
+            bar for bar in bars
+            if not (float(bar.get("volume") or 0) == 0 and float(bar.get("amount") or 0) == 0)
+        ]
         candidates: list[dict[str, Any]] = []
         window = self.config.pivot_window
-        avg_volume = sum(float(bar.get("volume") or 0) for bar in bars) / len(bars)
-        for index in range(window, len(bars) - window):
-            bar, around = bars[index], bars[index - window:index + window + 1]
+        avg_volume = sum(float(bar.get("volume") or 0) for bar in tradable) / max(1, len(tradable))
+        for index in range(window, len(tradable) - window):
+            bar, around = tradable[index], tradable[index - window:index + window + 1]
             low, high = float(bar["low"]), float(bar["high"])
             if low <= min(float(item["low"]) for item in around):
-                rebound = max(float(item["high"]) for item in bars[index:min(len(bars), index + window + 1)]) / low - 1
+                rebound = max(float(item["high"]) for item in tradable[index:min(len(tradable), index + window + 1)]) / low - 1
                 candidates.append({"price": low, "date": bar["date"], "index": index, "volume": float(bar.get("volume") or 0), "reaction": rebound, "reason": "历史重要低点"})
             if high >= max(float(item["high"]) for item in around):
-                retreat = 1 - min(float(item["low"]) for item in bars[index:min(len(bars), index + window + 1)]) / high
+                retreat = 1 - min(float(item["low"]) for item in tradable[index:min(len(tradable), index + window + 1)]) / high
                 candidates.append({"price": high, "date": bar["date"], "index": index, "volume": float(bar.get("volume") or 0), "reaction": retreat, "reason": "历史重要高点"})
         # Long-cycle moving averages offer a second independent price anchor.
         for length in (60, 120):
-            if len(bars) >= length:
-                price = sum(float(item["close"]) for item in bars[-length:]) / length
-                candidates.append({"price": price, "date": bars[-1]["date"], "index": len(bars) - 1, "volume": avg_volume, "reaction": 0.0, "reason": f"{length} 日均线附近"})
+            if len(tradable) >= length:
+                price = sum(float(item["close"]) for item in tradable[-length:]) / length
+                candidates.append({"price": price, "date": tradable[-1]["date"], "index": len(tradable) - 1, "volume": avg_volume, "reaction": 0.0, "reason": f"{length} 日均线附近"})
         # A compact volume-at-price proxy supplies a third, independent anchor.
         # It bins only the bars available on or before ``as_of``.
-        price_low, price_high = min(float(item["low"]) for item in bars), max(float(item["high"]) for item in bars)
+        if not tradable:
+            return [], []
+        price_low, price_high = min(float(item["low"]) for item in tradable), max(float(item["high"]) for item in tradable)
         if price_high > price_low:
             buckets: dict[int, float] = {}
             bucket_count = 16
-            for index, bar in enumerate(bars):
+            for index, bar in enumerate(tradable):
                 typical = (float(bar["high"]) + float(bar["low"]) + float(bar["close"])) / 3
                 bucket = min(bucket_count - 1, int((typical - price_low) / (price_high - price_low) * bucket_count))
                 buckets[bucket] = buckets.get(bucket, 0.0) + float(bar.get("volume") or 0.0)

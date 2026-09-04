@@ -112,8 +112,14 @@ def register_research_routes(app: FastAPI, require_auth: AuthDep | None = None, 
             raise HTTPException(404, "research run not found")
         return value
 
-    @app.get("/macro/briefs/latest", dependencies=[Depends(require_auth)])
+    @app.get("/macro/briefs/latest", dependencies=[Depends(require_auth)], deprecated=True)
     async def macro_latest(market: str = Query("CN")):
+        """LEGACY (macro-line V1 SPEC §2.3): institutional-style macro brief.
+
+        Do not build new features on this endpoint. The current macro product
+        is /macro (GET /api/value/macro-sector-projection) which is
+        environment-only with no trading semantics.
+        """
         store = get_research_store()
         value = store.latest_macro(market)
         if not value:

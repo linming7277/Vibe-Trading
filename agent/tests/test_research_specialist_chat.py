@@ -274,6 +274,32 @@ def test_risk_instruction_states_data_and_industry_boundaries() -> None:
     assert '"answer"' in instruction
 
 
+def test_macro_overview_uses_cache_first_without_llm() -> None:
+    runtime = FakeRuntime()
+    brief = _service(runtime).handle_question(
+        agent="macro_policy_researcher",
+        question="当前宏观环境怎么样",
+    )
+
+    assert brief.stock_code is None
+    assert runtime.calls == []
+    assert "宏观环境" in brief.answer or "资料" in brief.answer
+    assert "macro_line_summary" in brief.source_keys
+
+
+def test_macro_deep_question_still_uses_llm() -> None:
+    runtime = FakeRuntime()
+    brief = _service(runtime).handle_question(
+        agent="macro_policy_researcher",
+        question="请详细解释信用轴为什么恶化，依据是什么",
+    )
+
+    assert brief.stock_code is None
+    assert runtime.calls
+    assert runtime.calls[0]["role"] == "macro_policy"
+    assert "macro_snapshot" in runtime.calls[0]["payload"]["context"]
+
+
 def test_macro_does_not_require_a_company() -> None:
     runtime = FakeRuntime()
     brief = _service(runtime).handle_question(
@@ -282,9 +308,8 @@ def test_macro_does_not_require_a_company() -> None:
     )
 
     assert brief.stock_code is None
-    assert brief.research_as_of == AS_OF
-    assert runtime.calls[0]["role"] == "macro_policy"
-    assert set(runtime.calls[0]["payload"]["context"]) == {"macro_snapshot"}
+    assert runtime.calls == []
+    assert "macro_line_summary" in brief.source_keys
 
 
 def test_trading_language_from_model_is_rejected_and_falls_back_to_local_result() -> None:
