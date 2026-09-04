@@ -467,6 +467,81 @@ def test_daily_brief_watchlist_falls_back_to_deep_list_when_focus_selection_unav
     assert "沿用深度低估名单" in payload["text"]
 
 
+def test_daily_brief_does_not_reuse_empty_focus_fallback_snapshot(tmp_path: Path) -> None:
+    service, repository = _seed(tmp_path)
+    repository.save_ready({
+        "research_as_of": AS_OF,
+        "low_value_active_count": 0,
+        "enter_count": 0,
+        "exit_count": 0,
+        "priority_companies": [],
+        "risk_summary": {},
+        "thesis_changes": [],
+        "financial_changes": [],
+        "data_gaps": ["机会与风险筛选不可用，重点观察回退为深度低估名单（ValueError）"],
+        "brief_payload": {
+            "text": "empty",
+            "research_as_of": AS_OF,
+            "executive_watchlist": [],
+            "executive_watchlist_basis": "DEEP_FALLBACK",
+        },
+        "formula_version": DAILY_BRIEF_FORMULA_VERSION,
+    })
+
+    rebuilt = service.build(research_as_of=AS_OF)
+
+    assert not rebuilt.reused
+    assert rebuilt.brief["brief_payload"]["executive_watchlist_basis"] == "FOCUS_A"
+    assert rebuilt.brief["brief_payload"]["executive_watchlist"]
+
+
+def test_notify_resends_card_when_brief_is_rebuilt_after_send(tmp_path: Path) -> None:
+    service, repository = _seed(tmp_path)
+    service.build(research_as_of=AS_OF)
+
+    class Sender:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def send_file(self, **_kwargs) -> str:
+            self.calls.append("file")
+            return "file-message"
+
+        def send_interactive_card(self, **kwargs) -> str:
+            self.calls.append("card")
+            card = kwargs.get("card") or {}
+            title = ((card.get("header") or {}).get("title") or {}).get("content") or ""
+            return f"card-{len([item for item in self.calls if item == 'card'])}:{title}"
+
+    sender = Sender()
+    notifier = DailyBriefNotificationService(
+        repository=repository,
+        settings=DailyBriefNotificationSettings(enabled=True, target_id="oc_test", dry_run=False),
+        sender=sender,
+    )
+    first = notifier.notify(research_as_of=AS_OF)
+    current = repository.get_completed(AS_OF) or {}
+    repository.save_ready({
+        "research_as_of": AS_OF,
+        "low_value_active_count": current.get("low_value_active_count") or 0,
+        "enter_count": current.get("enter_count") or 0,
+        "exit_count": current.get("exit_count") or 0,
+        "priority_companies": current.get("priority_companies") or [],
+        "risk_summary": current.get("risk_summary") or {},
+        "thesis_changes": current.get("thesis_changes") or [],
+        "financial_changes": current.get("financial_changes") or [],
+        "data_gaps": current.get("data_gaps") or [],
+        "brief_payload": current.get("brief_payload") or {},
+        "formula_version": DAILY_BRIEF_FORMULA_VERSION,
+    })
+    second = notifier.notify(research_as_of=AS_OF)
+
+    assert first["status"] == "READY"
+    assert second["status"] == "READY"
+    assert sender.calls == ["file", "card", "card"]
+    assert second["delivery"]["message_id"] != first["delivery"]["message_id"]
+
+
 def test_daily_brief_investment_judgment_changes_require_a_real_delta(tmp_path: Path) -> None:
     service, _ = _seed(tmp_path)
     current = [{

@@ -24,7 +24,7 @@
 
 ## 本地运行
 
-Windows 推荐双击仓库根目录的 `Hengzhi-Launcher.cmd`，或使用无界面命令：
+Windows 推荐双击仓库根目录的 `Hengzhi-Launcher.cmd`（黑色控制台监视器，自动启动服务并打开工作台）。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File launcher/windows/HengzhiLauncher.ps1 -Action start

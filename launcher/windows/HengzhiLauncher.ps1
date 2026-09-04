@@ -274,6 +274,10 @@ function Invoke-All([string]$Operation) {
 }
 
 function Install-DesktopShortcut {
+    $iconScript = Join-Path $PSScriptRoot "New-HzIcon.ps1"
+    if (Test-Path -LiteralPath $iconScript) {
+        & $iconScript | Out-Null
+    }
     $desktop = [Environment]::GetFolderPath("Desktop")
     $shortcutPath = Join-Path $desktop $script:Strings.shortcutName
     $target = Join-Path $script:RepoRoot "Hengzhi-Launcher.cmd"
@@ -291,212 +295,6 @@ function Install-DesktopShortcut {
     }
     $shortcut.Save()
     Write-Host ($script:Strings.shortcutCreated + " " + $shortcutPath)
-}
-
-function Show-LauncherWindow {
-    Add-Type -AssemblyName System.Windows.Forms
-    Add-Type -AssemblyName System.Drawing
-    Initialize-LauncherState
-
-    $form = New-Object System.Windows.Forms.Form
-    $form.Text = $script:Strings.title
-    $form.Size = New-Object System.Drawing.Size(760, 610)
-    $form.MinimumSize = New-Object System.Drawing.Size(760, 610)
-    $form.StartPosition = "CenterScreen"
-    $form.Font = New-Object System.Drawing.Font("Microsoft YaHei UI", 9)
-    $form.BackColor = [System.Drawing.Color]::FromArgb(246, 248, 252)
-
-    $title = New-Object System.Windows.Forms.Label
-    $title.Text = $script:Strings.title
-    $title.Font = New-Object System.Drawing.Font("Microsoft YaHei UI", 18, [System.Drawing.FontStyle]::Bold)
-    $title.AutoSize = $true
-    $title.Location = New-Object System.Drawing.Point(28, 22)
-    $form.Controls.Add($title)
-
-    $subtitle = New-Object System.Windows.Forms.Label
-    $subtitle.Text = $script:Strings.subtitle
-    $subtitle.ForeColor = [System.Drawing.Color]::FromArgb(91, 103, 122)
-    $subtitle.AutoSize = $true
-    $subtitle.Location = New-Object System.Drawing.Point(31, 62)
-    $form.Controls.Add($subtitle)
-
-    $statusLabels = @{}
-    function Add-ServiceRow([string]$serviceName, [int]$top, [string]$displayName, [string]$hint) {
-        $panel = New-Object System.Windows.Forms.Panel
-        $panel.Location = New-Object System.Drawing.Point(28, $top)
-        $panel.Size = New-Object System.Drawing.Size(690, 82)
-        $panel.BackColor = [System.Drawing.Color]::White
-        $panel.BorderStyle = "FixedSingle"
-        $form.Controls.Add($panel)
-
-        $nameLabel = New-Object System.Windows.Forms.Label
-        $nameLabel.Text = $displayName
-        $nameLabel.Font = New-Object System.Drawing.Font("Microsoft YaHei UI", 11, [System.Drawing.FontStyle]::Bold)
-        $nameLabel.Location = New-Object System.Drawing.Point(16, 13)
-        $nameLabel.AutoSize = $true
-        $panel.Controls.Add($nameLabel)
-
-        $hintLabel = New-Object System.Windows.Forms.Label
-        $hintLabel.Text = $hint
-        $hintLabel.ForeColor = [System.Drawing.Color]::FromArgb(105, 115, 132)
-        $hintLabel.Location = New-Object System.Drawing.Point(17, 44)
-        $hintLabel.AutoSize = $true
-        $panel.Controls.Add($hintLabel)
-
-        $stateLabel = New-Object System.Windows.Forms.Label
-        $stateLabel.Location = New-Object System.Drawing.Point(270, 29)
-        $stateLabel.Size = New-Object System.Drawing.Size(105, 24)
-        $stateLabel.TextAlign = "MiddleCenter"
-        $panel.Controls.Add($stateLabel)
-        $statusLabels[$serviceName] = $stateLabel
-
-        $left = 390
-        foreach ($definition in @(@($script:Strings.start, "start"), @($script:Strings.restart, "restart"), @($script:Strings.stop, "stop"))) {
-            $button = New-Object System.Windows.Forms.Button
-            $button.Text = $definition[0]
-            $button.Tag = "$serviceName|$($definition[1])"
-            $button.Location = New-Object System.Drawing.Point($left, 24)
-            $button.Size = New-Object System.Drawing.Size(64, 32)
-            $button.FlatStyle = "Flat"
-            $button.Add_Click({
-                $parts = [string]$this.Tag -split "\|"
-                try {
-                    if ($parts[1] -eq "start") { Start-LauncherService $parts[0] | Out-Null }
-                    elseif ($parts[1] -eq "restart") { Restart-LauncherService $parts[0] | Out-Null }
-                    else { Stop-LauncherService $parts[0] }
-                    Update-StatusLabels
-                }
-                catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:Strings.errorTitle, "OK", "Error") | Out-Null }
-            })
-            $panel.Controls.Add($button)
-            $left += 68
-        }
-    }
-
-    Add-ServiceRow "backend" 92 $script:Strings.backend "前端代理后端（本机端口 8899）"
-    Add-ServiceRow "frontend" 184 $script:Strings.frontend $script:FrontendUrl
-
-    function Update-StatusLabels {
-        foreach ($serviceName in @("backend", "frontend")) {
-            $state = Get-ServiceState $serviceName
-            $label = $statusLabels[$serviceName]
-            if ($state.Status -eq "running") { $label.Text = $script:Strings.running; $label.ForeColor = [System.Drawing.Color]::FromArgb(20, 135, 84) }
-            elseif ($state.Status -eq "workspace") { $label.Text = $script:Strings.managedElsewhere; $label.ForeColor = [System.Drawing.Color]::FromArgb(20, 105, 170) }
-            elseif ($state.Status -eq "starting") { $label.Text = $script:Strings.starting; $label.ForeColor = [System.Drawing.Color]::FromArgb(183, 112, 0) }
-            elseif ($state.Status -eq "conflict") { $label.Text = $script:Strings.conflict; $label.ForeColor = [System.Drawing.Color]::FromArgb(190, 45, 45) }
-            else { $label.Text = $script:Strings.stopped; $label.ForeColor = [System.Drawing.Color]::FromArgb(105, 115, 132) }
-        }
-    }
-
-    $allButtons = @(
-        @($script:Strings.startAll, "start", 28),
-        @($script:Strings.restartAll, "restart", 130),
-        @($script:Strings.stopAll, "stop", 232)
-    )
-    foreach ($definition in $allButtons) {
-        $button = New-Object System.Windows.Forms.Button
-        $button.Text = $definition[0]
-        $button.Tag = $definition[1]
-        $button.Location = New-Object System.Drawing.Point([int]$definition[2], 286)
-        $button.Size = New-Object System.Drawing.Size(94, 36)
-        $button.FlatStyle = "Flat"
-        $button.Add_Click({
-            try { Invoke-All ([string]$this.Tag); Update-StatusLabels }
-            catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:Strings.errorTitle, "OK", "Error") | Out-Null }
-        })
-        $form.Controls.Add($button)
-    }
-
-    $openButton = New-Object System.Windows.Forms.Button
-    $openButton.Text = $script:Strings.openWorkbench
-    $openButton.Location = New-Object System.Drawing.Point(486, 286)
-    $openButton.Size = New-Object System.Drawing.Size(112, 36)
-    $openButton.FlatStyle = "Flat"
-    $openButton.Add_Click({ Start-Process $script:FrontendUrl })
-    $form.Controls.Add($openButton)
-
-    $logsButton = New-Object System.Windows.Forms.Button
-    $logsButton.Text = $script:Strings.openLogs
-    $logsButton.Location = New-Object System.Drawing.Point(606, 286)
-    $logsButton.Size = New-Object System.Drawing.Size(112, 36)
-    $logsButton.FlatStyle = "Flat"
-    $logsButton.Add_Click({ Initialize-LauncherState; Start-Process explorer.exe -ArgumentList ('"' + $script:LogRoot + '"') })
-    $form.Controls.Add($logsButton)
-
-    $accessTitle = New-Object System.Windows.Forms.Label
-    $accessTitle.Text = "最近访问设备（本机与局域网）"
-    $accessTitle.Font = New-Object System.Drawing.Font("Microsoft YaHei UI", 10, [System.Drawing.FontStyle]::Bold)
-    $accessTitle.Location = New-Object System.Drawing.Point(31, 340)
-    $accessTitle.AutoSize = $true
-    $form.Controls.Add($accessTitle)
-
-    $clientList = New-Object System.Windows.Forms.ListView
-    $clientList.Location = New-Object System.Drawing.Point(28, 365)
-    $clientList.Size = New-Object System.Drawing.Size(690, 145)
-    $clientList.View = [System.Windows.Forms.View]::Details
-    $clientList.FullRowSelect = $true
-    $clientList.GridLines = $true
-    $clientList.MultiSelect = $false
-    [void]$clientList.Columns.Add("设备 IP", 220)
-    [void]$clientList.Columns.Add("首次访问", 160)
-    [void]$clientList.Columns.Add("最后访问", 160)
-    [void]$clientList.Columns.Add("请求次数", 100)
-    $form.Controls.Add($clientList)
-
-    $accessHint = New-Object System.Windows.Forms.Label
-    $accessHint.ForeColor = [System.Drawing.Color]::FromArgb(105, 115, 132)
-    $accessHint.Location = New-Object System.Drawing.Point(31, 515)
-    $accessHint.Size = New-Object System.Drawing.Size(680, 20)
-    $form.Controls.Add($accessHint)
-
-    $footer = New-Object System.Windows.Forms.Label
-    $footer.Text = "本机：$($script:FrontendUrl)；同一局域网设备请使用：$($script:LanFrontendUrl)"
-    $footer.ForeColor = [System.Drawing.Color]::FromArgb(105, 115, 132)
-    $footer.Location = New-Object System.Drawing.Point(31, 540)
-    $footer.Size = New-Object System.Drawing.Size(680, 30)
-    $form.Controls.Add($footer)
-
-    $lastClientSignature = ""
-    function Update-ClientList {
-        $clients = @(Get-RecentClientAccess)
-        $signature = ($clients | ForEach-Object { "$($_.ip)|$($_.first_seen)|$($_.last_seen)|$($_.request_count)" }) -join "`n"
-        if ($signature -eq $lastClientSignature) { return }
-        $lastClientSignature = $signature
-        $clientList.BeginUpdate()
-        try {
-            $clientList.Items.Clear()
-            foreach ($client in $clients) {
-                $ip = [string]$client.ip
-                $displayIp = if ($ip -eq "127.0.0.1" -or $ip -eq "::1") { "$ip（本机）" } else { $ip }
-                $item = New-Object System.Windows.Forms.ListViewItem($displayIp)
-                [void]$item.SubItems.Add((Format-ClientAccessTime $client.first_seen))
-                [void]$item.SubItems.Add((Format-ClientAccessTime $client.last_seen))
-                [void]$item.SubItems.Add([string]$client.request_count)
-                [void]$clientList.Items.Add($item)
-            }
-        }
-        finally { $clientList.EndUpdate() }
-        $accessHint.Text = if ($clients.Count) { "仅保留最近 24 小时连接；每个 IP 最多每 5 秒更新一次。" } else { "暂无访问记录；同事打开局域网地址后会自动显示在这里。" }
-    }
-
-    $timer = New-Object System.Windows.Forms.Timer
-    $timer.Interval = 1500
-    $timer.Add_Tick({ Update-StatusLabels; Update-ClientList })
-    $timer.Start()
-    Update-StatusLabels
-    Update-ClientList
-    if ($AutoStart) {
-        $form.Add_Shown({
-            try {
-                Invoke-All "restart"
-                Update-StatusLabels
-                Start-Process $script:FrontendUrl
-            }
-            catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:Strings.errorTitle, "OK", "Error") | Out-Null }
-        })
-    }
-    [void]$form.ShowDialog()
-    $timer.Stop()
 }
 
 function Get-HermesGatewayStates {
@@ -745,4 +543,9 @@ if ($Action -in @("start", "stop", "restart")) {
     exit 0
 }
 if ($Action -eq "console") { Show-ConsoleWindow; exit 0 }
-Show-LauncherWindow
+if ($Action -eq "gui") {
+    . (Join-Path $PSScriptRoot "LauncherGui.ps1")
+    Show-LauncherWindow
+    exit 0
+}
+Show-ConsoleWindow

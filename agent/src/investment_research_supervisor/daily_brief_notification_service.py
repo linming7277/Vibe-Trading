@@ -372,7 +372,7 @@ def _macro_environment_block(brief: dict[str, Any]) -> list[dict[str, Any]]:
     env = dict(brief.get("macro_environment") or (brief.get("brief_payload") or {}).get("macro_environment") or {})
     if not env.get("available"):
         return []
-    text = _short_text(env.get("text") or "", limit=140)
+    text = _short_text(env.get("text") or "", limit=280)
     return [
         {"tag": "markdown", "content": f"**当前研究环境**\n{text}"},
     ]
@@ -463,6 +463,15 @@ def build_daily_brief_card(
     }
 
 
+def _brief_updated_after_delivery(brief: dict[str, Any], delivery: dict[str, Any] | None) -> bool:
+    """Resend the card when the persisted brief is newer than the last SENT card."""
+    if not delivery:
+        return False
+    brief_ts = str(brief.get("updated_at") or "")
+    sent_ts = str(delivery.get("sent_at") or delivery.get("updated_at") or "")
+    return bool(brief_ts and sent_ts and brief_ts > sent_ts)
+
+
 class DailyBriefNotificationService:
     """Owns only daily-brief delivery state and retries."""
 
@@ -497,9 +506,10 @@ class DailyBriefNotificationService:
             target_id="tblJb3Pc7w9fKsjI",
         )
         bitable_published = bool(bitable_delivery and bitable_delivery.get("status") == "SENT")
+        brief_stale_vs_card = _brief_updated_after_delivery(brief, delivery)
         if delivery and delivery.get("status") == "SENT" and (
             bitable_published or delivery.get("attachment_message_id")
-        ):
+        ) and not brief_stale_vs_card:
             return {
                 "status": "REUSED", "research_as_of": research_as_of, "delivery": delivery,
                 "covers_low_value": True,
@@ -526,7 +536,7 @@ class DailyBriefNotificationService:
             )
             return {"status": "FAILED", "research_as_of": research_as_of, "delivery": delivery, "covers_low_value": False}
         attachment_message_id = str((delivery or {}).get("attachment_message_id") or "") or None
-        message_id = str((delivery or {}).get("message_id") or "") or None
+        message_id = None if brief_stale_vs_card else (str((delivery or {}).get("message_id") or "") or None)
         try:
             if not bitable_published and not attachment_message_id:
                 filename = f"低估龙头表格_{research_as_of}.xlsx"

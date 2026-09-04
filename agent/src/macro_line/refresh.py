@@ -91,6 +91,59 @@ def refresh_macro_line(as_of: str) -> dict[str, Any]:
         store.close()
 
 
+_AXIS_CN = {
+    "growth": "经济增长",
+    "inflation": "通胀",
+    "liquidity": "流动性",
+    "credit": "信用",
+    "financial_conditions": "金融条件",
+}
+_AXIS_ORDER = ("growth", "inflation", "liquidity", "credit", "financial_conditions")
+
+
+def compose_macro_owner_text(
+    *,
+    regime: str,
+    axes: dict[str, Any] | None,
+    change_texts: list[str],
+    missing_labels: list[str] | None = None,
+) -> str:
+    """Boss-facing sentence: meaning + outliers + honesty + change.
+
+    Uses the same 偏暖/偏冷/中性 tiers as /macro.  Formula direction words
+    (恶化/改善) stay internal — they read like a market call in the brief.
+    """
+    from .events import _axis_tier
+
+    label = _regime_label(regime)
+    parts = [f"{label}（{regime}）。"]
+    outliers: list[str] = []
+    missing_axes: list[str] = []
+    for key in _AXIS_ORDER:
+        tier = _axis_tier((axes or {}).get(key))
+        name = _AXIS_CN[key]
+        if tier == "资料不足":
+            missing_axes.append(name)
+        elif tier != "中性":
+            outliers.append(f"{name}{tier}")
+    if outliers:
+        parts.append("当前松紧差在" + "、".join(outliers) + "。")
+    elif missing_axes:
+        parts.append("有轴资料不足：" + "、".join(missing_axes) + "。")
+    else:
+        parts.append("五个轴都在中性档。")
+
+    labels = [str(item) for item in (missing_labels or []) if str(item).strip()]
+    if labels:
+        parts.append(f"资料还缺{'、'.join(labels[:3])}，判断宜保守。")
+
+    if change_texts:
+        parts.append("今日变化：" + "；".join(change_texts) + "。")
+    else:
+        parts.append("环境无变化，不据此调整研究名单。")
+    return "".join(parts)
+
+
 def get_macro_line_summary(as_of: str | None = None) -> dict[str, Any]:
     """Read the latest snapshot + undigested events for Daily Brief / Hermes.
 
@@ -113,17 +166,20 @@ def get_macro_line_summary(as_of: str | None = None) -> dict[str, Any]:
         events = store.events_for_summary(as_of)
         change_texts = [event_to_chinese(e) for e in events]
         regime = str(snapshot.get("regime") or "资料不足")
-        _AXIS_CN = {"growth": "经济增长", "inflation": "通胀", "liquidity": "流动性", "credit": "信用", "financial_conditions": "金融条件"}
-        states = dict(snapshot.get("states") or {})
-        axes_summary = "；".join(
-            f"{_AXIS_CN.get(key, key)} {value}" for key, value in states.items() if str(value) != "数据不足"
-        ) or "各轴资料不足"
+        missing_labels: list[str] = []
+        try:
+            from .freshness import check_macro_source_freshness
 
-        if change_texts:
-            text = f"当前宏观环境：{regime}。{axes_summary}。{'; '.join(change_texts)}。"
-        else:
-            text = f"当前宏观环境：{regime}。{axes_summary}。环境无变化。"
-
+            freshness = check_macro_source_freshness(as_of=as_of)
+            missing_labels = list(freshness.get("missing_series_labels") or [])
+        except Exception:
+            missing_labels = []
+        text = compose_macro_owner_text(
+            regime=regime,
+            axes=dict(snapshot.get("axes") or {}),
+            change_texts=change_texts,
+            missing_labels=missing_labels,
+        )
         return {
             "available": True,
             "text": text,

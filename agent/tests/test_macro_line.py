@@ -167,7 +167,11 @@ def test_get_macro_line_summary_uses_same_day_events(monkeypatch) -> None:
             pass
 
         def build_snapshot(self, as_of: str) -> dict:
-            return {"as_of": as_of, "regime": "中性", "states": {"credit": "恶化"}}
+            return {
+                "as_of": as_of, "regime": "中性",
+                "states": {"credit": "恶化"},
+                "axes": {"growth": 50, "inflation": 50, "liquidity": 50, "credit": 30, "financial_conditions": 65},
+            }
 
     monkeypatch.setattr(refresh_mod, "MacroEventStore", lambda: FakeStore())
     monkeypatch.setattr(
@@ -178,9 +182,57 @@ def test_get_macro_line_summary_uses_same_day_events(monkeypatch) -> None:
         "src.strategy_engines.value_data_store.ValueDataStore",
         lambda: type("VS", (), {"close": staticmethod(lambda: None)})(),
     )
+    monkeypatch.setattr(
+        "src.macro_line.freshness.check_macro_source_freshness",
+        lambda **kwargs: {"missing_series_labels": ["社融增量"]},
+    )
     summary = refresh_mod.get_macro_line_summary("2026-09-04")
     assert summary["changed"] is True
+    assert "经济和资金面没有明显方向" in summary["text"]
+    assert "信用偏冷" in summary["text"]
+    assert "金融条件偏暖" in summary["text"]
+    assert "恶化" not in summary["text"]
+    assert "今日变化" in summary["text"]
     assert any("信用" in item for item in summary["changes"])
+    assert any("由「" in item and "」变为「" in item for item in summary["changes"])
+
+
+def test_compose_macro_owner_text_no_change_is_still_specific() -> None:
+    from src.macro_line.refresh import compose_macro_owner_text
+
+    text = compose_macro_owner_text(
+        regime="中性",
+        axes={"growth": 50, "inflation": 50, "liquidity": 50, "credit": 30, "financial_conditions": 65},
+        change_texts=[],
+        missing_labels=["社融增量"],
+    )
+    assert text.startswith("经济和资金面没有明显方向（中性）")
+    assert "信用偏冷" in text and "金融条件偏暖" in text
+    assert "恶化" not in text and "改善" not in text
+    assert "资料还缺社融增量" in text
+    assert "环境无变化" in text
+    assert "不据此调整研究名单" in text
+
+
+def test_brief_macro_environment_includes_from_to_when_changed(monkeypatch) -> None:
+    from src.investment_research_supervisor.daily_brief_service import InvestmentResearchDailyBriefService
+
+    monkeypatch.setattr(
+        "src.macro_line.get_macro_line_summary",
+        lambda _as_of: {
+            "available": True,
+            "text": "当前宏观环境：中性。流动性由「偏暖」变为「中性」。",
+            "regime": "中性",
+            "regime_label": "经济和资金面没有明显方向",
+            "changed": True,
+            "changes": ["流动性由「偏暖」变为「中性」"],
+            "as_of": "2026-09-04",
+        },
+    )
+    env = InvestmentResearchDailyBriefService._macro_environment_text("2026-09-04")
+    assert env["changed"] is True
+    assert env["changes"]
+    assert "由「偏暖」变为「中性」" in env["changes"][0]
 
 
 def test_daily_brief_macro_text_fail_soft() -> None:
@@ -220,7 +272,7 @@ def test_brief_payload_persists_macro_environment(tmp_path: Path) -> None:
             "formula_version": "daily-brief-v27",
         })
         assert saved["brief_payload"]["macro_environment"]["available"] is True
-        assert saved["brief_payload"]["macro_environment"]["text"].startswith("当前宏观环境")
+        assert "环境无变化" in saved["brief_payload"]["macro_environment"]["text"]
     finally:
         repo.close()
 
@@ -314,3 +366,113 @@ def test_check_macro_source_freshness_partial_when_optional_missing(monkeypatch)
     assert result["status"] == "PARTIAL"
     assert "social_financing_increment" in result["missing_series"]
     assert "usd_cny" in result["missing_series"]
+
+
+def test_macro_refresh_failure_is_fail_soft_for_eod(monkeypatch) -> None:
+    """A7 / E4: macro refresh failure must not block EOD COMPLETED."""
+    from datetime import datetime
+    from unittest.mock import MagicMock
+
+    from src.value_workspace.automation import SHANGHAI, ValueResearchScheduler
+
+    scheduler = ValueResearchScheduler()
+    pool = {
+        "id": "pool-test",
+        "as_of": "2026-09-03",
+        "research_states": [{"lifecycle_status": "ACTIVE", "research_status": "READY"}],
+    }
+    fake_store = MagicMock()
+    fake_store.acquire_automation_lock.return_value = True
+    fake_store.pool_for_as_of.return_value = pool
+    fake_store.update_automation.return_value = {}
+
+    tdx = MagicMock()
+    tdx.latest_qualified_close_snapshot.return_value = (True, "", {"market_date": "2026-09-03"})
+    monkeypatch.setattr("src.value_workspace.automation.get_tdx_service", lambda: tdx)
+    monkeypatch.setattr(scheduler, "_financial_ready", lambda _pool: True)
+    monkeypatch.setattr(
+        scheduler,
+        "_ensure_low_value_daily_bars",
+        lambda *_args, **_kwargs: {"missing": 0, "failed": [], "remaining": 0, "active_members": 1},
+    )
+    monkeypatch.setattr(scheduler, "_pool_stage_ready", lambda *_args, **_kwargs: True)
+
+    notify_service = MagicMock()
+    notify_service.prepare_activation.return_value = None
+    notify_service.notify.return_value = {"status": "READY"}
+    monkeypatch.setattr(
+        "src.low_value_leader_notifications.get_low_value_leader_notification_service",
+        lambda: notify_service,
+    )
+    monkeypatch.setattr(
+        "src.low_value_leader_pool.get_low_value_leader_pool_service",
+        lambda: MagicMock(),
+    )
+
+    risk_service = MagicMock()
+    risk_service.coverage_for_active_pool.return_value = {"complete": True}
+    monkeypatch.setattr(
+        "src.low_value_risk_snapshot.get_low_value_pool_risk_snapshot_service",
+        lambda: risk_service,
+    )
+    monkeypatch.setattr(
+        "src.risk_research_preparation.schedule_current_low_value_preparation",
+        lambda **_kwargs: False,
+    )
+
+    event_service = MagicMock()
+    event_service.evaluate_universe.return_value = {"status": "COMPLETED", "created_events": 0}
+    event_service.repository = MagicMock()
+    monkeypatch.setattr(
+        "src.value_strategy.get_value_strategy_event_service",
+        lambda *_args, **_kwargs: event_service,
+    )
+    monkeypatch.setattr(
+        "src.value_strategy.ValueStrategyEventNotificationService",
+        lambda *_args, **_kwargs: MagicMock(deliver_immediate=MagicMock(return_value={"status": "DISABLED"})),
+    )
+
+    def _macro_boom(_as_of: str) -> dict:
+        raise RuntimeError("macro ingest down")
+
+    monkeypatch.setattr("src.macro_line.refresh_macro_line", _macro_boom)
+
+    brief_service = MagicMock()
+    brief_service.build.return_value = MagicMock(status="READY", reused=True)
+    monkeypatch.setattr(
+        "src.investment_research_supervisor.get_investment_research_daily_brief_service",
+        lambda: brief_service,
+    )
+    monkeypatch.setattr(
+        "src.investment_research_supervisor.get_daily_brief_bitable_publisher",
+        lambda: MagicMock(publish=MagicMock(return_value={"status": "SKIPPED"})),
+    )
+    monkeypatch.setattr(
+        "src.investment_research_supervisor.get_daily_brief_notification_service",
+        lambda: MagicMock(notify=MagicMock(return_value={"status": "READY"})),
+    )
+
+    class _EventStore:
+        def close_events(self, _as_of: str) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("src.macro_line.events.MacroEventStore", _EventStore)
+
+    result = scheduler._run_latest_completed(
+        fake_store,
+        automation={"enabled": True, "max_retries": 3, "retry_minutes": 20},
+        local=datetime(2026, 9, 3, 17, 0, tzinfo=SHANGHAI),
+        allow_refresh_request=False,
+    )
+
+    assert result["status"] == "COMPLETED"
+    assert result["stages"]["MACRO_LINE_READY"] == "FAILED"
+    assert result["stages"]["DAILY_RESEARCH_BRIEF_READY"] in {"READY", "REUSED"}
+    brief_service.build.assert_called_once_with(research_as_of="2026-09-03")
+    completed_updates = [call.kwargs for call in fake_store.update_automation.call_args_list if call.kwargs.get("last_status") == "completed"]
+    assert completed_updates
+    assert "MACRO_LINE_READY=FAILED" in completed_updates[-1]["last_error"]
+

@@ -227,7 +227,7 @@ class InvestmentResearchDailyBriefService:
 
     def build(self, *, research_as_of: str) -> DailyBriefBuildResult:
         existing = self.repository.get_completed(research_as_of)
-        if existing and existing.get("formula_version") == FORMULA_VERSION:
+        if existing and existing.get("formula_version") == FORMULA_VERSION and self._brief_is_reusable(existing):
             return DailyBriefBuildResult("READY", existing, reused=True)
         try:
             payload = self._build_payload(research_as_of)
@@ -269,6 +269,22 @@ class InvestmentResearchDailyBriefService:
 
     def get_completed(self, research_as_of: str | None = None) -> dict[str, Any] | None:
         return self.repository.get_completed(research_as_of)
+
+    @staticmethod
+    def _brief_is_reusable(existing: dict[str, Any]) -> bool:
+        """Do not lock in a premature empty brief after Focus/pool catch up.
+
+        A same-version READY row is reused only when it is a real product
+        snapshot.  Focus-unavailable fallback with an empty watchlist must
+        rebuild once the day's pool exists.
+        """
+        payload = existing.get("brief_payload") or {}
+        if str(payload.get("executive_watchlist_basis") or "") != "DEEP_FALLBACK":
+            return True
+        watchlist = list(payload.get("executive_watchlist") or [])
+        gaps = [str(item) for item in (existing.get("data_gaps") or [])]
+        focus_failed = any("机会与风险筛选不可用" in item for item in gaps)
+        return bool(watchlist) and not focus_failed
 
     def _build_payload(self, research_as_of: str) -> dict[str, Any]:
         pool, price_gaps = self._price_ready_pool(

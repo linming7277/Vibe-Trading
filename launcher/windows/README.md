@@ -1,6 +1,6 @@
 # Hengzhi Windows launcher
 
-This is a lightweight Windows service controller, not an Electron desktop app.
+This is a lightweight Windows service controller with a console monitor, not an Electron app.
 
 - Backend: 由前端代理使用本机 `8899` 端口，不需要同事直接访问。
 - Frontend Vite（局域网）: `http://hzstock:5899/value`（电脑换 IP 后地址不变）
@@ -8,8 +8,9 @@ This is a lightweight Windows service controller, not an Electron desktop app.
 前端监听 `0.0.0.0:5899`，同一局域网的同事可使用 `hzstock` 访问。需要将 Windows 计算机名或局域网 DNS 别名设置为 `hzstock`；如果名称无法解析，请在 Windows 网络发现中启用名称解析，并放行 TCP 5899。后端 API 仍由前端代理，不需要直接暴露 8899。
 - Runtime state and logs: `.launcher/`
 
-Double-click `Hengzhi-Launcher.cmd` in the repository root. Run
-`Install-Hengzhi-Launcher.cmd` once to create a desktop shortcut.
+Double-click `Hengzhi-Launcher.cmd` in the repository root to open the black console
+monitor, auto-start services, and open the workbench. Run `Install-Hengzhi-Launcher.cmd`
+once to create a desktop shortcut. Closing the console window does not stop services.
 
 Headless operations are also available:
 
