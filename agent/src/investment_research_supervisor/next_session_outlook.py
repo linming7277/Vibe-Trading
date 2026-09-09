@@ -432,11 +432,12 @@ def build_next_session_outlook(as_of: str, *, index_bars: list[dict[str, Any]] |
         flow_line = "【资金】资料不足。"
     else:
         flow_line = f"【资金】{flow['status']}——{flow['basis']}。"
+    # 与【资金】段去重（2026-09-09）：成交分档与方向措辞只在资金行出现，
+    # 宽度行只保留 新高/涨停/量比 三个不重复的数字。
     breadth_parts = [
         f"20日新高 {new_highs} 家" if new_highs is not None else "20日新高 数据不足",
         f"涨停 {limit_up_count} 家" if limit_up_count is not None else "涨停 数据不足",
         f"成交 {flow['volume_ratio']:.2f}x" if flow.get("volume_ratio") is not None else "成交 数据不足",
-        flow["status"] if flow["status"] != "资料不足" else "数据不足",
     ]
     shadow_prefix = "SHADOW｜" if tape["shadow"] else ""
     breadth_line = f"{shadow_prefix}{'，'.join(breadth_parts)}"

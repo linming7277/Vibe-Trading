@@ -73,6 +73,9 @@ def test_outlook_breadth_line_with_shadow(tmp_path: Path) -> None:
     assert "20日新高 2 家" in breadth
     assert "涨停 5 家" in breadth
     assert "20日新高 数据不足" not in breadth
+    # 与【资金】段去重：宽度行不得出现成交分档/方向措辞（资金行才有）
+    assert "方向不明" not in breadth and "成交平淡" not in breadth
+    assert "方向不明" in result["text"].splitlines()[1]  # 【资金】行仍保留
     assert result["breadth_new_highs"] == 2 and result["breadth_limit_ups"] == 5
     assert len(result["text"].splitlines()) <= 12  # 总前瞻 ≤12 行
 
