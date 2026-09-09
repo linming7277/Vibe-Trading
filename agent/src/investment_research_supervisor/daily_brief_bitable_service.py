@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import math
 from typing import Any, Protocol
 
@@ -16,6 +17,8 @@ LOW_VALUE_LEADER_BITABLE_URL = (
     "?table=tblJb3Pc7w9fKsjI&view=vewDbrHG2e"
 )
 MANAGED_SOURCE = "投资研究日报低估龙头池"
+
+logger = logging.getLogger(__name__)
 
 _FIELD_NAMES = (
     "研究日期", "股票代码", "公司", "行业", "估值状态", "现价", "合理价值范围",
@@ -339,6 +342,19 @@ class DailyBriefBitablePublisher:
         if existing and existing.get("status") == "FAILED" and int(existing.get("attempts") or 0) >= self.MAX_PUBLISH_ATTEMPTS:
             return {"status": "SKIPPED", "research_as_of": research_as_of, "error": "max publish attempts reached"}
         source_rows = self._source_rows(brief)
+        if not self._source_has_substance(source_rows):
+            # fail-closed（2026-09-09）：源为空（None/[]/生成失败/关键列全空）时
+            # 禁止按空集删除/覆盖飞书表——一次空简报不得清空老板的表。
+            # 表保持原样；本结果不是成功发送，也不写 SENT delivery。
+            logger.error(
+                "bitable publish skipped: empty source rows for %s; "
+                "refusing to delete/overwrite existing table rows",
+                research_as_of,
+            )
+            return {
+                "status": "SKIPPED_EMPTY_SOURCE", "research_as_of": research_as_of,
+                "error": "低估龙头池源行为空；已拒绝删除/覆盖飞书表，表保持原样",
+            }
         try:
             field_items = self.gateway.list_fields()
             existing_fields = {str(item.get("field_name") or "") for item in field_items}
@@ -446,6 +462,20 @@ class DailyBriefBitablePublisher:
                 or primary_key == f"{research_date}|{code}"
             )
         )
+
+    @staticmethod
+    def _source_has_substance(rows: dict[str, dict[str, Any]] | None) -> bool:
+        """空源判定（fail-closed）：None / {} / 每行关键业务列全空 都算空。"""
+        if not rows:
+            return False
+        for fields in rows.values():
+            # 关键业务列：公司/现价/合理价值区间/中位值差距。
+            # 研究日期、同步来源、日报版本是元数据列（恒非空），不参与判定。
+            for key in ("公司", "现价", "合理价值范围", "相对中位值差距"):
+                value = fields.get(key)
+                if value not in (None, ""):
+                    return True
+        return False
 
     @staticmethod
     def _source_rows(brief: dict[str, Any]) -> dict[str, dict[str, Any]]:
