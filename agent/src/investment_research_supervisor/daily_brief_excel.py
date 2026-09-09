@@ -79,6 +79,23 @@ def _price_condition_sheet(workbook: Workbook, digest: dict[str, Any]) -> None:
             cell.number_format = "0.00"
 
 
+def _outlook_sheet(workbook: Workbook, payload: dict[str, Any]) -> None:
+    """下一交易日前瞻（与日报正文/飞书卡片共用同一投影文本）。"""
+    outlook = dict(payload.get("next_outlook") or {})
+    worksheet = workbook.create_sheet("下一交易日前瞻")
+    worksheet.append(["下一交易日前瞻"])
+    worksheet.append(["生成基准日", outlook.get("as_of") or payload.get("research_as_of")])
+    worksheet.append([])
+    text = str(outlook.get("text") or "")
+    if not text:
+        worksheet.append(["前瞻暂未生成", str(outlook.get("reason") or "资料不足")])
+    else:
+        for line in text.splitlines():
+            worksheet.append([line])
+    worksheet.column_dimensions["A"].width = 110
+    worksheet["A1"].font = Font(bold=True)
+
+
 def export_daily_brief_workbook(brief: dict[str, Any], output_path: str | Path) -> Path:
     """Export persisted Daily Brief rows; the price-condition sheet comes first."""
     payload = dict(brief.get("brief_payload") or {})
@@ -90,6 +107,7 @@ def export_daily_brief_workbook(brief: dict[str, Any], output_path: str | Path) 
     _price_condition_sheet(workbook, digest)
     _sheet(workbook, "低估龙头池", list(payload.get("low_value_leader_table") or []))
     _sheet(workbook, "深度低估", list(payload.get("deeply_undervalued_companies") or []))
+    _outlook_sheet(workbook, payload)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     workbook.save(path)

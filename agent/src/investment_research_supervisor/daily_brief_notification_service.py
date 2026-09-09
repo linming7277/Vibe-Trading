@@ -445,48 +445,25 @@ def _forecast_review_block(brief: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _next_outlook_block(brief: dict[str, Any]) -> list[dict[str, Any]]:
-    """§四-三：宏观环境（复用现环境块）+ 下一交易日前瞻。"""
+    """§四-三：宏观环境（复用现环境块）+ 下一交易日前瞻。
+
+    卡片只渲染共享投影产出的四段式 text（无因子码、无交易表述）；
+    模型原始摘要只存在于持久化 payload 的 debug 字段，不进卡片。
+    """
     rows: list[dict[str, Any]] = [*_macro_environment_block(brief)]
     payload = dict(brief.get("brief_payload") or brief)
     outlook = dict(payload.get("next_outlook") or {})
-    if not outlook.get("available"):
+    text = str(outlook.get("text") or "").strip()
+    if not text or not outlook.get("available"):
         reason = str(outlook.get("reason") or "")
         rows.append({"tag": "markdown", "content":
-            f"**下一交易日前瞻**\n下一交易日前瞻暂未生成：{'模型运行失败' if 'MODEL' in reason.upper() or not reason else reason or '未生成'}。"})
+            f"**下一交易日前瞻**\n下一交易日前瞻暂未生成：{reason or '资料不足'}。"})
         return rows
-    if outlook.get("calendar_unverified"):
-        rows.append({"tag": "markdown", "content":
-            "**下一交易日前瞻**\n下一交易日尚未完成日历确认，前瞻暂按候选交易日留档，不作为正式预测。"})
-        return rows
-    rows.append({"tag": "markdown", "content": "**下一交易日前瞻**"})
-    if outlook.get("abstained"):
-        rows.append({"tag": "markdown", "content":
-            "大盘：暂不判断（当前证据不足，暂不形成明确方向判断。）"})
-    else:
-        direction = {"STRONGER": "偏强", "RANGE_BOUND": "震荡", "WEAKER": "偏弱"}.get(
-            outlook.get("direction"), outlook.get("direction") or "未生成")
-        summary = _short_text(outlook.get("summary"), limit=110)
-        rows.append({"tag": "markdown", "content": f"大盘方向：**{direction}**\n{summary}"})
-    strong = list(outlook.get("strong_industries") or [])[:3]
-    weak = list(outlook.get("weak_industries") or [])[:3]
-    if strong:
-        rows.append({"tag": "markdown", "content":
-            "相对看强：" + "、".join(str(i.get("name")) for i in strong)})
-    if weak:
-        rows.append({"tag": "markdown", "content":
-            "相对看弱：" + "、".join(str(i.get("name")) for i in weak)})
-    invalidation = list(outlook.get("invalidation") or [])[:1]
-    if invalidation:
+    rows.append({"tag": "markdown", "content": "**下一交易日前瞻**\n" + text})
+    missing = [str(m) for m in (outlook.get("missing") or [])][:4]
+    if missing:
         rows.append({"tag": "note", "elements": [{"tag": "plain_text",
-                     "content": f"失效条件：{_short_text(invalidation[0], limit=90)}"}]})
-    gaps = list(outlook.get("data_gaps") or [])[:3]
-    if gaps:
-        gap_cn = {"OVERSEAS_EQUITY_INDEX_UNAVAILABLE": "海外市场信息未纳入",
-                  "USDCNY_STALE_SINCE_2021_05": "美元兑人民币数据缺失",
-                  "SOCIAL_FINANCING_MISSING": "社融序列缺失",
-                  "SCHEDULE_NO_RELIABLE_SOURCE": "未来事件日程无可靠来源"}
-        rows.append({"tag": "note", "elements": [{"tag": "plain_text",
-                     "content": "数据限制：" + "；".join(gap_cn.get(g, g) for g in gaps)}]})
+                     "content": "数据限制：缺" + "、".join(missing) + "序列，相关判断为资料不足。"}]})
     return rows
 
 

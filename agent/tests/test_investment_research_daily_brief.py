@@ -629,7 +629,7 @@ def test_daily_brief_exports_low_value_leader_excel(tmp_path: Path) -> None:
 
     workbook = load_workbook(output, data_only=True)
 
-    assert workbook.sheetnames == ["今日价格条件", "低估龙头池", "深度低估"]
+    assert workbook.sheetnames == ["今日价格条件", "低估龙头池", "深度低估", "下一交易日前瞻"]
     assert [cell.value for cell in workbook["低估龙头池"][1]] == [
         "股票代码", "公司", "行业", "估值状态", "现价", "合理价值低", "合理价值中", "合理价值高",
         "相对中位值差距", "历史支撑低", "历史支撑高",

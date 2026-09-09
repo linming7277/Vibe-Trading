@@ -205,33 +205,36 @@ def test_13_forecast_failed_still_brief(db: Path) -> None:
     assert any("当前宏观环境" in str(r.get("content", "")) for r in rows)  # 宏观段不受影响
 
 
-def test_14_calendar_unverified_shown(db: Path) -> None:
+def test_14_outlook_without_text_shown_unavailable(db: Path) -> None:
     brief = {"brief_payload": {"macro_environment": {"available": True, "text": "x"},
-                                "next_outlook": {"available": True, "calendar_unverified": True}}}
+                                "next_outlook": {"available": True, "text": ""}}}
     rows = _next_outlook_block(brief)
-    assert any("尚未完成日历确认" in str(r.get("content", "")) for r in rows)
+    assert any("暂未生成" in str(r.get("content", "")) for r in rows)
 
 
-def test_15_16_strong_weak_max3(db: Path) -> None:
-    outlook = {"available": True, "direction": "RANGE_BOUND", "summary": "s",
-               "strong_industries": [{"name": f"强{i}"} for i in range(6)],
-               "weak_industries": [{"name": f"弱{i}"} for i in range(6)],
-               "invalidation": [], "data_gaps": []}
+def test_15_16_card_renders_shared_projection_text_only(db: Path) -> None:
+    """卡片只渲染共享投影 text；不在 text 里的行业名不得凭空出现。"""
+    outlook_text = (
+        "【走势】基准中性（把握低·影子）。\n"
+        "【资金】资料不足。\n"
+        "【板块】近5日相对沪深300最强：电子+1.0%、机械+0.8%、通信+0.5%；最弱：煤炭-2.0%、地产-1.5%、钢铁-1.2%。\n"
+        "以上不改今天 Focus 名单。"
+    )
+    outlook = {"available": True, "text": outlook_text, "missing": []}
     brief = {"brief_payload": {"macro_environment": {"available": True, "text": "x"}, "next_outlook": outlook}}
-    text = json.dumps(_next_outlook_block(brief), ensure_ascii=False)
-    assert "强5" not in text
-    strong_names = [f"强{i}" for i in range(3)]
-    assert all(name in text for name in strong_names)
-    assert "强3" not in text  # 第4个（index 3）不出现
+    rendered = json.dumps(_next_outlook_block(brief), ensure_ascii=False)
+    assert "电子+1.0%" in rendered
+    assert "白酒" not in rendered  # 未进入投影 text 的行业不得出现
+    assert "M1" not in rendered and "A1" not in rendered
 
 
-def test_17_data_gaps_max3(db: Path) -> None:
-    outlook = {"available": True, "direction": "RANGE_BOUND", "summary": "s",
-               "strong_industries": [], "weak_industries": [],
-               "invalidation": [], "data_gaps": [f"GAP{i}" for i in range(5)]}
+def test_17_missing_series_max4(db: Path) -> None:
+    outlook = {"available": True,
+               "text": "【走势】基准中性（把握低）。\n【资金】资料不足。\n【板块】资料不足。\n以上不改今天 Focus 名单。",
+               "missing": [f"GAP{i}" for i in range(6)]}
     brief = {"brief_payload": {"macro_environment": {"available": True, "text": "x"}, "next_outlook": outlook}}
-    text = json.dumps(_next_outlook_block(brief), ensure_ascii=False)
-    assert "GAP0" in text and "GAP2" in text and "GAP3" not in text and "GAP4" not in text
+    rendered = json.dumps(_next_outlook_block(brief), ensure_ascii=False)
+    assert "GAP0" in rendered and "GAP3" in rendered and "GAP4" not in rendered and "GAP5" not in rendered
 
 
 def test_18_19_strategy_events_watchpoints_retained() -> None:
