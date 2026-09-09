@@ -280,18 +280,27 @@ def test_no_thesis_watchpoint_fallback_is_deterministic(monkeypatch) -> None:
     """Fix §7: without a thesis, watchpoints degrade from persisted facts only."""
     builder = CioSectionBuilder("CN", "600460.SH", "2026-08-28")
     builder._thesis = lambda: {}  # type: ignore[method-assign]
-    # Chronological ascending rows in yuan (matching persisted history shape).
-    builder._financial = lambda: {  # type: ignore[method-assign]
-        "history": [
-            {"period_type": "annual", "report_date": "2024-12-31", "revenue": 112e8,
-             "net_profit": 2.2e8, "gross_margin": 20.0, "operating_cash_flow": 4.4e8,
-             "accounts_receivable": 33e8, "inventory": 38e8},
-            {"period_type": "annual", "report_date": "2025-12-31", "revenue": 130e8,
-             "net_profit": 4.0e8, "gross_margin": 21.0, "operating_cash_flow": 15.0e8,
-             "accounts_receivable": 30e8, "inventory": 40e8},
-        ],
-        "forecast": {"scenarios": {"BASE": {"forecast": [{"year": "2028E", "revenue": 205.9e8}]}}},
-    }
+    # Chronological ascending rows in yuan (matching persisted history shape):
+    # the vendor puts single-quarter flows on every row, so the 12-31 annual
+    # row carries Q4 flows plus ratios/balances; fiscal-year totals are the
+    # four quarters summed.
+    history: list[dict] = []
+    for year, revenue, net_profit, ocf, gross_margin, receivable, inventory in (
+        (2024, 112e8, 2.2e8, 4.4e8, 20.0, 33e8, 38e8),
+        (2025, 130e8, 4.0e8, 15.0e8, 21.0, 30e8, 40e8),
+    ):
+        for suffix, announced in (("03-31", f"{year}-04-26"), ("06-30", f"{year}-08-27"),
+                                  ("09-30", f"{year}-10-30"), ("12-31", f"{year + 1}-04-24")):
+            is_annual = suffix == "12-31"
+            history.append({
+                "period_type": "annual" if is_annual else "quarter",
+                "report_date": f"{year}-{suffix}", "announcement_date": announced,
+                "revenue": revenue / 4, "net_profit": net_profit / 4, "operating_cash_flow": ocf / 4,
+                **({"gross_margin": gross_margin, "accounts_receivable": receivable, "inventory": inventory}
+                   if is_annual else {}),
+            })
+    builder._financial = lambda: {"history": history, "forecast": {"scenarios": {"BASE": {"forecast": [{"year": "2028E", "revenue": 205.9e8}]}}}}  # type: ignore[method-assign]
+    builder._fy_raw_rows = lambda: history  # type: ignore[method-assign]  # 保持用例封闭，不读真实缓存
     builder._zones = lambda: {"valuation": {"fair_value_mid": 28.18}}  # type: ignore[method-assign]
     builder._watchpoint_projection = lambda: {}  # type: ignore[method-assign]
     section = builder.build_thesis_watchpoints()

@@ -252,12 +252,16 @@ class CioReportService:
             "role": "research_lead", "phase": "CIO_SYNTHESIS",
             "model": str(config["model"]), "instruction": instruction, "payload": payload,
         }
+        # 1800-3500 字的推理模型综合在默认 120s 超时下必然失败（历史上
+        # 22/34 份报告因此落到模板兜底）；综合专用放宽到 8 分钟。
         if config.get("base_url") and hasattr(runtime, "invoke_with_connection"):
             output = runtime.invoke_with_connection(
                 **kwargs, base_url=str(config["base_url"]), api_key=str(config.get("api_key") or ""),
+                timeout_seconds=480,
             )
         else:
-            output = runtime.invoke(**kwargs, provider=str(config.get("provider") or "openai"))
+            output = runtime.invoke(**kwargs, provider=str(config.get("provider") or "openai"),
+                                    timeout_seconds=480)
         report_md = str(dict(output).get("report_md") or "").strip()
         if not report_md or _TRADING_LANGUAGE.search(report_md):
             raise ValueError("CIO synthesis failed safety validation")

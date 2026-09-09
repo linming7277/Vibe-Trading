@@ -989,13 +989,28 @@ def get_cio_quick_brief(stock_code: str, as_of: str = "") -> str:
     try:
         from src.cio_report import get_cio_report_service
 
-        brief = get_cio_report_service().get_quick_brief(
-            "CN", _resolve_cio_stock_code(stock_code), as_of=as_of or None)
+        code = _resolve_cio_stock_code(stock_code)
+        brief = get_cio_report_service().get_quick_brief("CN", code, as_of=as_of or None)
+        if isinstance(brief, dict):
+            brief.setdefault("stock_name", _lookup_stock_name(code))
         return _json_ok(brief=brief)
     except ValueError as exc:
         return _json_error(str(exc), error_type="cio_report_not_found")
     except (OSError, RuntimeError, TypeError) as exc:
         return _json_error(str(exc), error_type="cio_quick_brief_unavailable")
+
+
+def _lookup_stock_name(stock_code: str) -> str:
+    """Resolve a display name for the MCP JSON so the LLM never guesses."""
+    try:
+        from src.financial_analysis.service import FinancialAnalysisService
+
+        security = FinancialAnalysisService._resolve_cached_security(stock_code, "")
+        if security and security.get("name"):
+            return str(security["name"])
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
 
 
 @mcp.tool
@@ -1010,18 +1025,22 @@ def get_cio_report(stock_code: str, as_of: str = "") -> str:
     try:
         from src.cio_report import get_cio_report_service
 
-        report = get_cio_report_service().get_report(
-            "CN", _resolve_cio_stock_code(stock_code), as_of=as_of or None)
+        code = _resolve_cio_stock_code(stock_code)
+        report = get_cio_report_service().get_report("CN", code, as_of=as_of or None)
         if report is None:
             return _json_error(
                 "该公司尚未生成 CIO 报告；可先调用 refresh_cio_report 生成（或直接用 ask_investment_research_supervisor 读取综合研究）",
                 error_type="cio_report_not_found",
+                stock_code=code,
+                stock_name=_lookup_stock_name(code),
             )
         return _json_ok(report={
-            key: report.get(key) for key in (
-                "stock_code", "research_as_of", "status", "overall_freshness",
+            "stock_code": code,
+            "stock_name": _lookup_stock_name(code),
+            **{key: report.get(key) for key in (
+                "research_as_of", "status", "overall_freshness",
                 "input_fingerprint", "narrative_report_md", "synthesis_source",
-            )
+            )}
         } | {"sections": [
             {"section_type": s.get("section_type"), "title": s.get("title"),
              "narrative_md": s.get("narrative_md"), "freshness_status": s.get("freshness_status")}
@@ -1042,11 +1061,14 @@ def refresh_cio_report(stock_code: str, as_of: str = "", force_synthesis: bool =
     try:
         from src.cio_report import get_cio_report_service
 
+        code = _resolve_cio_stock_code(stock_code)
         result = get_cio_report_service().build_report(
-            "CN", _resolve_cio_stock_code(stock_code), as_of=as_of or None, force_synthesis=force_synthesis,
+            "CN", code, as_of=as_of or None, force_synthesis=force_synthesis,
         )
         return _json_ok(report={
-            "stock_code": result.get("stock_code"), "research_as_of": result.get("research_as_of"),
+            "stock_code": code,
+            "stock_name": _lookup_stock_name(code),
+            "research_as_of": result.get("research_as_of"),
             "status": result.get("status"), "overall_freshness": result.get("overall_freshness"),
             "synthesis_source": result.get("synthesis_source"),
             "idempotent_reuse": result.get("idempotent_reuse"),

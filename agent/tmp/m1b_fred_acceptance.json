@@ -1,0 +1,63 @@
+{
+ "as_of": "2026-09-08T13:18:19+08:00",
+ "us_treasury_2y_fred": {
+  "latest_observation_date": "2026-09-03",
+  "value": 4.34,
+  "captured_at": "2026-09-08T13:17:50+08:00",
+  "pit_status": "HISTORICAL_BACKFILL",
+  "release_date": "2026-09-04",
+  "freshness": "READY"
+ },
+ "us_treasury_10y_fred": {
+  "latest_observation_date": "2026-09-03",
+  "value": 4.77,
+  "captured_at": "2026-09-08T13:17:50+08:00",
+  "pit_status": "HISTORICAL_BACKFILL",
+  "release_date": "2026-09-04",
+  "freshness": "READY"
+ },
+ "wti_spot": {
+  "latest_observation_date": "2026-09-01",
+  "value": 91.48,
+  "captured_at": "2026-09-08T13:17:50+08:00",
+  "pit_status": "HISTORICAL_BACKFILL",
+  "release_date": "2026-09-02",
+  "freshness": "READY"
+ },
+ "copper_world_monthly": {
+  "latest_observation_date": "2026-07-01",
+  "value": 13542.82086956522,
+  "captured_at": "2026-09-08T13:17:53+08:00",
+  "pit_status": "HISTORICAL_BACKFILL",
+  "release_date": "2026-08-15",
+  "freshness": "READY"
+ },
+ "treasury_fred_crosscheck": {
+  "policy": "Treasury 为主、FRED 为 fallback，不做平均",
+  "legs": {
+   "us2y": {
+    "matched_days": 1246,
+    "mean_abs_diff": 0.0,
+    "max_abs_diff": 0.0,
+    "sufficient": true,
+    "min_common_days": 30
+   },
+   "us10y": {
+    "matched_days": 1246,
+    "mean_abs_diff": 0.0,
+    "max_abs_diff": 0.0,
+    "sufficient": true,
+    "min_common_days": 30
+   }
+  }
+ },
+ "row_counts": {
+  "us_treasury_2y": 1420,
+  "us_treasury_10y": 1420,
+  "usd_cny_official_mid": 15,
+  "us_treasury_2y_fred": 1246,
+  "us_treasury_10y_fred": 1246,
+  "wti_spot": 1243,
+  "copper_world_monthly": 119
+ }
+}

@@ -75,13 +75,22 @@ def _sample_quality(valid_peer_count: int, total_peer_count: int) -> str:
 
 
 def _annual_rows(rows: list[dict[str, Any]], symbol: str) -> list[dict[str, Any]]:
-    annual = [
+    from src.tdx_data.financial_history import fiscal_year_flows
+
+    own = [
         row for row in rows
         if str(row.get("symbol") or "").upper() == symbol
         and row.get("period_type") == "annual"
     ]
-    annual.sort(key=lambda row: (str(row.get("report_date") or ""), str(row.get("announcement_date") or "")))
-    return annual
+    own.sort(key=lambda row: (str(row.get("report_date") or ""), str(row.get("announcement_date") or "")))
+    # 供应商的流量字段是单季值，12-31 年报行只装 Q4；改用四个单季合成的
+    # 财年总量。凑不齐连续四季的年份流量置缺，绝不拿单季冒充年度。
+    flows = {str(entry["fiscal_year"]): entry for entry in fiscal_year_flows(rows)}
+    for row in own:
+        entry = flows.get(str(row.get("report_date") or "")[:4])
+        for field in ("revenue", "net_profit", "operating_cash_flow", "capex"):
+            row[field] = entry.get(field) if entry else None
+    return own
 
 
 class LeaderQualityProfileService:
@@ -224,14 +233,20 @@ class LeaderQualityProfileService:
         metrics = {item["metric"]: item for item in peer_items}
         profitability = [metrics[key] for key in ("roe", "gross_margin", "net_margin") if key in metrics]
         cash = [metrics[key] for key in ("cash_conversion", "ocf_margin") if key in metrics]
+        # 空数据 fail-soft：peer_percentile 全缺失时中位数取 None（数据不足），
+        # 不允许单只股票的缺数据打断整个 EOD 管线（2026-09-08 001248.SZ 教训）。
+        profitability_scores = [float(item["peer_percentile"]) for item in profitability
+                                if item.get("peer_percentile") is not None]
+        cash_scores = [float(item["peer_percentile"]) for item in cash
+                       if item.get("peer_percentile") is not None]
         positive_ocf_years = sum(1 for row in annual if (_number(row.get("operating_cash_flow")) or 0) > 0)
         return {
             "status": _status(
-                median([float(item["peer_percentile"]) for item in profitability if item.get("peer_percentile") is not None]) if profitability else None,
+                median(profitability_scores) if profitability_scores else None,
                 min((int(item["valid_peer_count"]) for item in profitability if item.get("peer_percentile") is not None), default=0),
             ),
             "cash_quality_status": _status(
-                median([float(item["peer_percentile"]) for item in cash if item.get("peer_percentile") is not None]) if cash else None,
+                median(cash_scores) if cash_scores else None,
                 min((int(item["valid_peer_count"]) for item in cash if item.get("peer_percentile") is not None), default=0),
             ),
             "history": history,

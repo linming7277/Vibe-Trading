@@ -69,7 +69,8 @@ class FinancialAnalysisStore:
         return item
 
     def latest_leader(self, stock_code: str, as_of: str | None = None) -> dict[str, Any] | None:
-        clauses = ["l.stock_code=?", "l.eligibility_status='eligible'"]
+        # 行业龙头身份只看规模排名；质量不足的规模龙头也应被识别为龙头。
+        clauses = ["l.stock_code=?", "l.leader_rank IS NOT NULL", "l.leader_rank<=2"]
         args: list[Any] = [stock_code.upper()]
         if as_of:
             clauses.append("r.as_of<=?")

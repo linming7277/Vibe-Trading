@@ -30,6 +30,7 @@ from .value.sector_score import FORMULA_VERSION as VALUE_SECTOR_VERSION, WEIGHTS
 from .value.timing import FORMULA_VERSION as VALUE_TIMING_VERSION, WEIGHTS as VALUE_TIMING_WEIGHTS
 from .value.valuation import FORMULA_VERSION as VALUE_VALUATION_VERSION
 from .value.leader_score_v2 import FORMULA_VERSION as VALUE_LEADER_V2_VERSION, WEIGHTS as VALUE_LEADER_V2_WEIGHTS
+from .value.leader_score_v3 import FORMULA_VERSION as VALUE_LEADER_V3_VERSION, QUALITY_WEIGHTS as VALUE_LEADER_V3_WEIGHTS
 from .value.macro_regime_v2 import FORMULA_VERSION as VALUE_MACRO_V2_VERSION
 from .value.macro_sector_v2 import FORMULA_VERSION as VALUE_MACRO_SECTOR_V2_VERSION
 from .value.sector_score_v2 import FORMULA_VERSION as VALUE_SECTOR_V2_VERSION, WEIGHTS as VALUE_SECTOR_V2_WEIGHTS
@@ -47,6 +48,7 @@ FORMULAS: tuple[dict[str, Any], ...] = (
     {"id": "value_macro_sector_v2", "strategy_line": "value", "name": "价值线 V2 宏观行业矩阵", "version": VALUE_MACRO_SECTOR_V2_VERSION, "weights": {}, "engine_path": "src.strategy_engines.value.macro_sector_v2", "universe": "CN:TDX-881", "minimum_coverage": None},
     {"id": "value_sector_v2", "strategy_line": "value", "name": "价值线 V2 行业评分", "version": VALUE_SECTOR_V2_VERSION, "weights": VALUE_SECTOR_V2_WEIGHTS, "engine_path": "src.strategy_engines.value.sector_score_v2", "universe": "CN:TDX-881", "minimum_coverage": .80},
     {"id": "value_leader_v2", "strategy_line": "value", "name": "价值线 V2 龙头评分", "version": VALUE_LEADER_V2_VERSION, "weights": VALUE_LEADER_V2_WEIGHTS, "engine_path": "src.strategy_engines.value.leader_score_v2", "universe": "CN:TDX-881", "minimum_coverage": .80},
+    {"id": "value_leader_v3", "strategy_line": "value", "name": "价值线 V3 两段式龙头（规模定名单+质量定资格）", "version": VALUE_LEADER_V3_VERSION, "weights": VALUE_LEADER_V3_WEIGHTS, "engine_path": "src.strategy_engines.value.leader_score_v3", "universe": "CN:TDX-881", "minimum_coverage": .80},
     {"id": "emotion_market_v1", "strategy_line": "emotion", "name": "市场情绪评分", "version": EMOTION_MARKET_VERSION, "weights": EMOTION_MARKET_WEIGHTS, "engine_path": "src.strategy_engines.emotion.emotion_score", "universe": "CN,HK", "minimum_coverage": .70},
     {"id": "emotion_regime_v1", "strategy_line": "emotion", "name": "情绪周期状态机", "version": EMOTION_REGIME_VERSION, "weights": {}, "engine_path": "src.strategy_engines.emotion.emotion_regime", "universe": "CN,HK", "minimum_coverage": None},
     {"id": "emotion_sector_v1", "strategy_line": "emotion", "name": "情绪板块热度", "version": EMOTION_SECTOR_VERSION, "weights": EMOTION_SECTOR_WEIGHTS, "engine_path": "src.strategy_engines.emotion.sector_heat", "universe": "CN,HK", "minimum_coverage": .70},

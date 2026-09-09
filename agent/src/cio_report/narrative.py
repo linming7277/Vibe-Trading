@@ -129,12 +129,18 @@ class BossRenderer:
         """Return (路径句, 收入利润同步判断)."""
         if len(self.rows) < 3:
             return "年度数据不足，暂无法刻画完整路径。", "当前资料不足，暂无法判断"
-        profits = [(str(r.get("report_date") or "")[:4], _f(r.get("net_profit"))) for r in self.rows]
-        revenues = [(str(r.get("report_date") or "")[:4], _f(r.get("revenue"))) for r in self.rows]
+        # 上市较新的公司部分年份没有完整四季，流量为缺；聚合时跳过缺失年。
+        profits = [(str(r.get("report_date") or "")[:4], _f(r.get("net_profit")))
+                   for r in self.rows if _f(r.get("net_profit")) is not None]
+        revenues = [_f(r.get("revenue")) for r in self.rows if _f(r.get("revenue")) is not None]
+        if not profits or len(revenues) < 2:
+            return "年度利润数据不完整，暂无法刻画完整路径。", "当前资料不足，暂无法判断"
         peak_year, peak = max(profits, key=lambda x: x[1])
         trough_year, trough = min(profits, key=lambda x: x[1])
         last_year, last = profits[-1]
-        rev_first, rev_last = revenues[0][1], revenues[-1][1]
+        known = [value for _, value in profits]
+        prev = known[-2] if len(known) >= 2 else None
+        rev_first, rev_last = revenues[0], revenues[-1]
         grew = rev_last > rev_first
         if trough < 0:
             path = (
@@ -145,7 +151,7 @@ class BossRenderer:
         else:
             path = f"净利润高点出现在 {peak_year} 年（{_yi(peak)}），最新年度为 {_yi(last)}。"
         sync = (
-            "收入与利润同步增长" if grew and last > 0 and last >= profits[-2][1] and (not peak or last >= peak * 0.6)
+            "收入与利润同步增长" if grew and last > 0 and (prev is None or last >= prev) and (not peak or last >= peak * 0.6)
             else "收入增长但利润未同步恢复" if grew
             else "收入与利润均承压")
         return path, sync

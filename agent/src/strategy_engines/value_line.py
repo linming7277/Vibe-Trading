@@ -12,7 +12,12 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from src.tdx_data.financial_history import FinancialHistoryService, cagr
+from src.tdx_data.financial_history import (
+    FinancialHistoryService,
+    cagr,
+    fiscal_year_flows,
+    trailing_twelve_month_flows,
+)
 from src.tdx_data.service import get_tdx_service
 from src.tdx_data.store import TdxDataStore, utc_now
 
@@ -21,12 +26,13 @@ from .common.provenance import stable_fingerprint
 from .common.scoring import weighted_score
 from .macro_data import MacroDataService
 from .policy_data import PolicyDataService
-from .value.leader_score_v2 import (
+from .value.leader_score_v3 import (
     DIMENSION_METRIC_WEIGHTS,
     FORMULA_VERSION as LEADER_VERSION,
     METRIC_DEFINITIONS,
-    WEIGHTS as LEADER_WEIGHTS,
-    calculate as leader_calculate,
+    QUALITY_WEIGHTS as LEADER_WEIGHTS,
+    calculate_position as leader_position,
+    calculate_quality as leader_calculate,
 )
 from .value_data_store import ValueDataStore, now
 from .value_market_history import BENCHMARK, ValueMarketHistoryService
@@ -260,15 +266,43 @@ class ValueLineService:
             if "ST" in name.upper() or "退" in name:
                 continue
             annual = [row for row in financials.get(symbol, []) if row.get("period_type") == "annual"]
-            latest = annual[-1] if annual else {}
-            revenue_cagr = cagr([(row["report_date"], row.get("revenue")) for row in annual])
-            profit_cagr = cagr([(row["report_date"], row.get("net_profit")) for row in annual])
-            rev_growth = [row.get("revenue_yoy") for row in annual if row.get("revenue_yoy") is not None]
-            profit_growth = [row.get("net_profit_yoy") for row in annual if row.get("net_profit_yoy") is not None]
-            ocf = [row.get("operating_cash_flow") for row in annual if row.get("operating_cash_flow") is not None]
+            # Flow fields are vendor single-quarter values; fiscal-year totals
+            # come from summing the four quarters of the same fiscal year.
+            # Mid-year listings never published the missing quarter, so when no
+            # complete fiscal year exists the scale metrics fall back to the
+            # latest four consecutive report quarters (TTM), never to a fake
+            # single-quarter or zero value.
+            fy_flows = fiscal_year_flows(financials.get(symbol, []))
+            scale_years = [entry for entry in fy_flows if entry["revenue"] is not None and entry["net_profit"] is not None]
+            ttm_flow = trailing_twelve_month_flows(financials.get(symbol, []))
+            if scale_years:
+                latest_fy = scale_years[-1]
+                flow_basis = "fiscal_year"
+            elif ttm_flow and ttm_flow.get("revenue") is not None and ttm_flow.get("net_profit") is not None:
+                latest_fy = ttm_flow
+                flow_basis = "ttm"
+            else:
+                latest_fy = {}
+                flow_basis = "insufficient"
+            # Keep ratios on the annual row of the same fiscal year as the
+            # flows so the feature snapshot stays internally coherent.
+            ratio_year = str(latest_fy.get("fiscal_year") or str(latest_fy.get("last_report_date") or "")[:4] or "")[:4]
+            if ratio_year:
+                matched = [row for row in annual if str(row.get("report_date") or "").startswith(ratio_year)]
+                latest = matched[-1] if matched else annual[-1] if annual else {}
+            else:
+                latest = annual[-1] if annual else {}
+            revenue_cagr = cagr([(entry["report_date"], entry["revenue"]) for entry in fy_flows if entry["revenue"] is not None])
+            profit_cagr = cagr([(entry["report_date"], entry["net_profit"]) for entry in fy_flows if entry["net_profit"] is not None])
+            # YoY ratios on report rows whose flows the vendor never populated
+            # are placeholders, so they only count when the row carries revenue.
+            rev_growth = [row.get("revenue_yoy") for row in annual if row.get("revenue_yoy") is not None and (row.get("revenue") or 0) != 0]
+            profit_growth = [row.get("net_profit_yoy") for row in annual if row.get("net_profit_yoy") is not None and (row.get("revenue") or 0) != 0]
+            ocf = [entry["operating_cash_flow"] for entry in fy_flows if entry["operating_cash_flow"] is not None]
+            ocf_latest = latest_fy.get("operating_cash_flow")
             shareholders = [row.get("shareholders") for row in annual if row.get("shareholders") not in {None, 0}]
-            net_profit = latest.get("net_profit")
-            revenue = latest.get("revenue")
+            net_profit = latest_fy.get("net_profit")
+            revenue = latest_fy.get("revenue")
             raw = {
                 "market_cap": fundamental.get("market_cap_100m"), "revenue": revenue, "net_profit": net_profit,
                 "roe": latest.get("roe"), "gross_margin": latest.get("gross_margin"), "net_margin": latest.get("net_margin"),
@@ -284,8 +318,8 @@ class ValueLineService:
                     statistics.pstdev(rev_growth) if len(rev_growth) >= 2 else None,
                     statistics.pstdev(profit_growth) if len(profit_growth) >= 2 else None,
                 ]) is not None else None,
-                "cash_conversion": (latest.get("operating_cash_flow") / net_profit * 100) if latest.get("operating_cash_flow") is not None and net_profit not in {None, 0} else None,
-                "ocf_margin": (latest.get("operating_cash_flow") / revenue * 100) if latest.get("operating_cash_flow") is not None and revenue not in {None, 0} else None,
+                "cash_conversion": (ocf_latest / net_profit * 100) if ocf_latest is not None and net_profit not in {None, 0} else None,
+                "ocf_margin": (ocf_latest / revenue * 100) if ocf_latest is not None and revenue not in {None, 0} else None,
                 "positive_ocf_years": sum(value > 0 for value in ocf) / len(ocf) * 100 if ocf else None,
                 "ocf_trend": ((ocf[-1] / ocf[-4]) ** (1 / 3) - 1) * 100 if len(ocf) >= 4 and ocf[-1] > 0 and ocf[-4] > 0 else None,
                 "pe": fundamental.get("pe_ttm") if _number(fundamental.get("pe_ttm")) and float(fundamental["pe_ttm"]) > 0 else None,
@@ -297,7 +331,7 @@ class ValueLineService:
             }
             candidates.append(raw)
             identities.append({"symbol": symbol, "name": name})
-            statuses.append({"revenue_cagr": revenue_cagr["status"], "profit_cagr": profit_cagr["status"]})
+            statuses.append({"revenue_cagr": revenue_cagr["status"], "profit_cagr": profit_cagr["status"], "flow_basis": flow_basis})
         if not candidates:
             return []
         directions = {
@@ -311,6 +345,8 @@ class ValueLineService:
                 name: weighted_score(normalized[index], weights, minimum_coverage=.50).score
                 for name, weights in DIMENSION_METRIC_WEIGHTS.items()
             }
+            # 两段式：第一阶段规模分位决定排名，第二阶段质量分决定池子资格。
+            position = leader_position(normalized[index])
             score = leader_calculate(components)
             missing = [key for key in LEADER_WEIGHTS if components.get(key) is None]
             provenance = stable_fingerprint({
@@ -320,6 +356,7 @@ class ValueLineService:
             result_rows.append({
                 **identity, "sector_code": sector_code, "sector_name": sector_name,
                 "score": score.score, "base_score": score.score, "coverage": score.coverage,
+                "position_score": position.score, "position_coverage": position.coverage,
                 "confidence": _confidence(score.coverage), "status": score.status,
                 "raw_features": candidates[index], "normalized_features": normalized[index],
                 "component_scores": components, "components": _component_details(components, components, LEADER_WEIGHTS, score),
@@ -330,7 +367,8 @@ class ValueLineService:
                 "sources": ["TongDaXin professional finance", "TongDaXin quote/fundamental"],
                 "provenance_key": provenance,
             })
-        result_rows.sort(key=lambda row: (row["score"] is None, -(row["score"] or 0), row["symbol"]))
+        # 排名=第一阶段规模分位；质量分缺失不再把公司挤出排名。
+        result_rows.sort(key=lambda row: (row["position_score"] is None, -(row["position_score"] or 0), row["symbol"]))
         for rank, row in enumerate(result_rows, 1):
             row["rank"] = rank
         return result_rows

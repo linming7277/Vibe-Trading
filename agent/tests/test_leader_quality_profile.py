@@ -21,13 +21,21 @@ def _financials(as_of: str):
         for year in range(2020, 2026):
             revenue = (100 - index * 25) * 100_000_000 + (year - 2020) * 10_000_000
             profit = (10 - index * 4) * 100_000_000 + (year - 2020) * 1_000_000
-            rows.append({
-                "symbol": symbol, "period_type": "annual", "report_date": f"{year}-12-31",
-                "announcement_date": f"{year + 1}-04-25", "revenue": revenue,
-                "net_profit": profit, "operating_cash_flow": profit * (1.1 - index * .1),
-                "capex": revenue * (.08 + index * .02), "roe": 20 - index * 5,
-                "gross_margin": 35 - index * 5, "net_margin": 12 - index * 3,
-            })
+            ocf = profit * (1.1 - index * .1)
+            capex = revenue * (.08 + index * .02)
+            # Vendor rows carry single-quarter flows; the 12-31 row holds Q4
+            # flows plus ratios. Fiscal-year totals come from four quarters.
+            for suffix, announced in (("03-31", f"{year}-04-25"), ("06-30", f"{year}-08-26"),
+                                      ("09-30", f"{year}-10-29"), ("12-31", f"{year + 1}-04-25")):
+                is_annual = suffix == "12-31"
+                rows.append({
+                    "symbol": symbol, "period_type": "annual" if is_annual else "quarter",
+                    "report_date": f"{year}-{suffix}", "announcement_date": announced,
+                    "revenue": revenue / 4, "net_profit": profit / 4,
+                    "operating_cash_flow": ocf / 4, "capex": capex / 4,
+                    **({"roe": 20 - index * 5, "gross_margin": 35 - index * 5,
+                        "net_margin": 12 - index * 3} if is_annual else {}),
+                })
         result[symbol] = rows
     return result
 

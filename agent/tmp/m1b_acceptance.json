@@ -1,0 +1,203 @@
+{
+ "as_of_run": "2026-09-08T11:47:35+08:00",
+ "US2Y": {
+  "series_id": "us_treasury_2y",
+  "latest_observation_date": "2026-09-04",
+  "value": 4.37,
+  "unit": "percent",
+  "captured_at": "2026-09-08T11:43:29+08:00",
+  "source_id": "treasury.gov.yield_curve",
+  "source_tier": "OFFICIAL_GOVT",
+  "series_native_id": "2 Yr",
+  "definition_tag": "us_treasury_par_yield_2y",
+  "frequency": "DAILY",
+  "timezone": "America/New_York",
+  "captured_via": "KEYLESS_OFFICIAL_CSV",
+  "pit_status": "HISTORICAL_BACKFILL",
+  "source_hash": "997d25f6b93e0162",
+  "release_date": "2026-09-04"
+ },
+ "US10Y": {
+  "series_id": "us_treasury_10y",
+  "latest_observation_date": "2026-09-04",
+  "value": 4.78,
+  "unit": "percent",
+  "captured_at": "2026-09-08T11:43:29+08:00",
+  "source_id": "treasury.gov.yield_curve",
+  "source_tier": "OFFICIAL_GOVT",
+  "series_native_id": "10 Yr",
+  "definition_tag": "us_treasury_par_yield_10y",
+  "frequency": "DAILY",
+  "timezone": "America/New_York",
+  "captured_via": "KEYLESS_OFFICIAL_CSV",
+  "pit_status": "HISTORICAL_BACKFILL",
+  "source_hash": "454183081f9bc9d8",
+  "release_date": "2026-09-04"
+ },
+ "USDCNY_MID": {
+  "series_id": "usd_cny_official_mid",
+  "latest_observation_date": "2026-09-08",
+  "value": 6.7804,
+  "unit": "CNY_per_USD",
+  "captured_at": "2026-09-08T11:46:27+08:00",
+  "source_id": "chinamoney.usdcny_mid",
+  "source_tier": "OFFICIAL_BENCHMARK",
+  "series_native_id": "USD/CNY",
+  "definition_tag": "cny_official_mid_rate",
+  "frequency": "DAILY",
+  "timezone": "Asia/Shanghai",
+  "captured_via": "PUBLIC_JSON",
+  "pit_status": "FORWARD_CAPTURED",
+  "source_hash": "8bbc51d46b7799d6",
+  "release_date": "2026-09-08"
+ },
+ "freshness": {
+  "us_treasury_2y": "READY",
+  "us_treasury_10y": "READY",
+  "usd_cny_official_mid": "READY",
+  "us_treasury_2y_fred": "MISSING",
+  "us_treasury_10y_fred": "MISSING",
+  "wti_spot": "MISSING",
+  "copper_world_monthly": "MISSING"
+ },
+ "curve": {
+  "curve_observation_date": "2026-09-04",
+  "curve_value_pp": 0.41,
+  "latest_2y_date": "2026-09-04",
+  "latest_10y_date": "2026-09-04",
+  "dates_match": true,
+  "common_days": 1420
+ },
+ "metadata_sampling": {
+  "us_treasury_2y": [
+   {
+    "obs": "2021-01-04",
+    "value": 0.11,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2021-01-05",
+    "value": 0.13,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2021-01-06",
+    "value": 0.14,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2026-09-02",
+    "value": 4.39,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2026-09-03",
+    "value": 4.34,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2026-09-04",
+    "value": 4.37,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   }
+  ],
+  "us_treasury_10y": [
+   {
+    "obs": "2021-01-04",
+    "value": 0.93,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2021-01-05",
+    "value": 0.96,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2021-01-06",
+    "value": 1.04,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2026-09-02",
+    "value": 4.79,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2026-09-03",
+    "value": 4.77,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2026-09-04",
+    "value": 4.78,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   }
+  ],
+  "usd_cny_official_mid": [
+   {
+    "obs": "2026-08-19",
+    "value": 6.7854,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2026-08-20",
+    "value": 6.7808,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2026-08-21",
+    "value": 6.7817,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2026-09-04",
+    "value": 6.7787,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2026-09-07",
+    "value": 6.7795,
+    "fields_ok": true,
+    "pit_status": "HISTORICAL_BACKFILL"
+   },
+   {
+    "obs": "2026-09-08",
+    "value": 6.7804,
+    "fields_ok": true,
+    "pit_status": "FORWARD_CAPTURED"
+   }
+  ]
+ },
+ "idempotent_rerun": {
+  "treasury": {
+   "inserted": 0,
+   "rows": 2840
+  },
+  "chinamoney": {
+   "inserted": 0,
+   "rows": 15
+  }
+ },
+ "row_counts": {
+  "us_treasury_2y": 1420,
+  "us_treasury_10y": 1420,
+  "usd_cny_official_mid": 15,
+  "macro_series_total": 13158
+ }
+}

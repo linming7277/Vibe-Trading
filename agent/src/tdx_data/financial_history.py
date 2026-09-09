@@ -3,7 +3,10 @@
 The vendor API is deliberately used instead of decoding ``gpcw*.dat`` files.
 All monetary fields returned by the tested TQ build are expressed in yuan.
 Unknown or inapplicable fields remain ``None``; zero is never used as a
-missing-value sentinel.
+missing-value sentinel — except the three flow fields (revenue, net profit,
+operating cash flow) where the vendor demonstrably returns 0.00 for report
+rows it never populated (2025-2026 IPO annual rows), so those zeros are
+normalized to ``None``.
 """
 
 from __future__ import annotations
@@ -112,12 +115,101 @@ def package_fingerprint(cw_dir: Path) -> tuple[str, list[dict[str, Any]]]:
     return digest.hexdigest()[:24] if files else "", files
 
 
+_SUFFIX_KIND = {"03-31": "q1", "06-30": "semiannual", "09-30": "q3", "12-31": "annual"}
+_QUARTER_KINDS = ("q1", "semiannual", "q3", "annual")
+_KIND_ORDER = {kind: index for index, kind in enumerate(_QUARTER_KINDS)}
+
+
+def _latest_quarter_rows(rows: Iterable[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    """Latest announcement per (fiscal year, quarter kind), keyed by quarter index."""
+    chosen: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in sorted(
+        rows, key=lambda item: (str(item.get("announcement_date") or ""), str(item.get("report_date") or "")),
+    ):
+        period = str(row.get("report_date") or "")
+        kind = _SUFFIX_KIND.get(period[5:10])
+        if kind:
+            chosen[(period[:4], kind)] = row
+    return {int(year) * 4 + _KIND_ORDER[kind]: row for (year, kind), row in chosen.items()}
+
+
+def _sum_flows(quarters: list[dict[str, Any]], field: str) -> float | None:
+    values = [_number(row.get(field), zero_is_missing=True) for row in quarters]
+    return sum(values) if all(value is not None for value in values) else None
+
+
+def fiscal_year_flows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Aggregate vendor single-period quarterly flows into fiscal-year totals.
+
+    TDX professional finance exposes revenue / net profit / operating cash
+    flow per row as single-quarter values, so the 12-31 row carries Q4 only
+    (verified 2026-09: Montage FY2024 = 7.4+9.3+9.1+10.7 = 36.5亿 against the
+    four quarterly rows).  A fiscal year is therefore usable only when all
+    four quarterly rows are present; partial years are never summed.
+
+    The vendor also emits 0.00 flow values for report rows it never populated
+    (2025-2026 IPOs return annual rows with populated balance sheets and
+    zero revenue/profit/OCF), so zero flow values are treated as missing
+    rather than summed.  Ratios on the annual row stay usable for callers
+    that read them separately.
+    """
+    by_year: dict[str, dict[str, dict[str, Any]]] = {}
+    for index, row in _latest_quarter_rows(rows).items():
+        year = str(row.get("report_date") or "")[:4]
+        by_year.setdefault(year, {})[_QUARTER_KINDS[index % 4]] = row
+    result: list[dict[str, Any]] = []
+    for year in sorted(by_year):
+        quarters = by_year[year]
+        if set(_QUARTER_KINDS) != set(quarters):
+            continue
+        entry: dict[str, Any] = {
+            "fiscal_year": year,
+            "report_date": f"{year}-12-31",
+            "announcement_date": max(str(q.get("announcement_date") or "") for q in quarters.values()),
+        }
+        for field in ("revenue", "net_profit", "operating_cash_flow", "capex"):
+            entry[field] = _sum_flows(list(quarters[kind] for kind in _QUARTER_KINDS), field)
+        if any(entry[field] is not None for field in ("revenue", "net_profit", "operating_cash_flow", "capex")):
+            result.append(entry)
+    return result
+
+
+def trailing_twelve_month_flows(rows: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
+    """Aggregate the latest four *consecutive* report quarters into TTM totals.
+
+    Companies listed mid-year never published the missing first quarter, so
+    no complete fiscal year can be assembled from filings; four consecutive
+    published quarters remain a truthful trailing-year measure and are used
+    as the documented fallback for scale metrics.  Returns ``None`` unless
+    four consecutive quarter rows exist.  Zero flow values are vendor
+    placeholders and treated as missing, per ``fiscal_year_flows``.
+    """
+    indexed = _latest_quarter_rows(rows)
+    if not indexed:
+        return None
+    last = max(indexed)
+    window = [indexed.get(last - offset) for offset in (3, 2, 1, 0)]
+    if any(row is None for row in window):
+        return None
+    entry: dict[str, Any] = {
+        "last_report_date": str(window[-1].get("report_date") or ""),
+        "announcement_date": max(str(row.get("announcement_date") or "") for row in window),
+    }
+    for field in ("revenue", "net_profit", "operating_cash_flow"):
+        entry[field] = _sum_flows(window, field)  # type: ignore[arg-type]
+    if all(entry[field] is None for field in ("revenue", "net_profit", "operating_cash_flow")):
+        return None
+    return entry
+
+
 def normalize_financial_row(symbol: str, row: dict[str, Any], raw_version: str) -> dict[str, Any] | None:
     report_date = _date_text(row.get("tag_time"))
     announcement_date = _date_text(row.get("announce_time"))
     if not report_date or not announcement_date:
         return None
-    revenue = _number(row.get("FN230"))
+    # Flow fields: the vendor returns 0.00 for rows it never populated
+    # (verified on 2025-2026 IPO annual rows), so zero means missing here.
+    revenue = _number(row.get("FN230"), zero_is_missing=True)
     gross_margin = _number(row.get("FN202"), zero_is_missing=True)
     gross_profit = revenue * gross_margin / 100 if revenue is not None and gross_margin is not None else None
     return {
@@ -126,8 +218,8 @@ def normalize_financial_row(symbol: str, row: dict[str, Any], raw_version: str) 
         "announcement_date": announcement_date,
         "period_type": _period_type(report_date),
         "revenue": revenue,
-        "net_profit": _number(row.get("FN232")),
-        "operating_cash_flow": _number(row.get("FN234")),
+        "net_profit": _number(row.get("FN232"), zero_is_missing=True),
+        "operating_cash_flow": _number(row.get("FN234"), zero_is_missing=True),
         "equity": _number(row.get("FN72")),
         "parent_equity": _number(row.get("FN271")),
         "assets": _number(row.get("FN40")),

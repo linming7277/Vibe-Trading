@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ..common.scoring import weighted_score
 
-FORMULA_VERSION = "value-leader-v2.0.0"
+FORMULA_VERSION = "value-leader-v2.1.0"
 WEIGHTS = {
     "industry_position": .25,
     "profitability": .20,
@@ -40,8 +40,8 @@ DIMENSION_METRIC_WEIGHTS = {
 
 METRIC_DEFINITIONS = {
     "market_cap": {"label": "总市值", "unit": "亿元", "higher_is_better": True, "description": "公司当前总市值"},
-    "revenue": {"label": "营业收入", "unit": "元", "higher_is_better": True, "description": "最新完整年度营业收入"},
-    "net_profit": {"label": "净利润", "unit": "元", "higher_is_better": True, "description": "最新完整年度净利润"},
+    "revenue": {"label": "营业收入", "unit": "元", "higher_is_better": True, "description": "最新完整年度营业收入；无完整年度时（年中上市）用最近四个连续报告期TTM"},
+    "net_profit": {"label": "净利润", "unit": "元", "higher_is_better": True, "description": "最新完整年度净利润；无完整年度时（年中上市）用最近四个连续报告期TTM"},
     "roe": {"label": "ROE", "unit": "%", "higher_is_better": True, "description": "最新完整年度净资产收益率"},
     "gross_margin": {"label": "毛利率", "unit": "%", "higher_is_better": True, "description": "最新完整年度毛利率"},
     "net_margin": {"label": "净利率", "unit": "%", "higher_is_better": True, "description": "最新完整年度净利率"},

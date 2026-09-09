@@ -294,8 +294,14 @@ class Level3LeaderStore:
         ).fetchone()
         return self._pool(row) if row else None
 
-    def materialize_pool(self, source_run_id: str, *, leader_limit: int = 2) -> tuple[dict[str, Any], bool]:
+    def materialize_pool(
+        self, source_run_id: str, *, leader_limit: int = 2, force: bool = False,
+    ) -> tuple[dict[str, Any], bool]:
         """Create one immutable Top-N pool and its lifecycle diff.
+
+        Industry-leader membership is size-rank only: every terminal-industry
+        Top-N company enters the pool even when quality scoring is incomplete.
+        Quality / undervaluation gates belong downstream, not here.
 
         Lifecycle is evaluated per terminal-industry membership.  Company
         research state is then aggregated per stock so a company that remains
@@ -303,18 +309,19 @@ class Level3LeaderStore:
         """
         if int(leader_limit) != 2:
             raise ValueError("Value Line V1 uses a fixed Top2 leader pool")
-        if existing := self.pool_for_source_run(source_run_id):
+        existing = self.pool_for_source_run(source_run_id)
+        if existing and not force:
             return self.get_pool(existing["id"], include_inactive=True) or existing, False
         source = self.get_run(source_run_id)
         if source["status"] != "COMPLETED":
             raise ValueError("leader run is not completed")
         current_rows = [
             row for row in self.all_rows(source_run_id)
-            if row["eligibility_status"] == "eligible"
-            and row.get("leader_rank") is not None
+            if row.get("leader_rank") is not None
             and int(row["leader_rank"]) <= leader_limit
         ]
-        previous_pool = self.current_pool()
+        # Prefer the pool being replaced as the lifecycle baseline when force-rematerializing.
+        previous_pool = existing or self.current_pool()
         previous_rows: list[dict[str, Any]] = []
         if previous_pool:
             previous_rows = (self.get_pool(previous_pool["id"], include_inactive=False) or {}).get("members", [])
@@ -382,6 +389,13 @@ class Level3LeaderStore:
             "left": counts["OUT_OF_TOP2"], "reentered": counts["REENTERED"],
         }
         with self._lock, self._conn:
+            if force and existing:
+                # source_leader_run_id is unique; replace the stale pool so size-only
+                # Top2 membership can be rewritten without inventing a new leader run.
+                self._conn.execute(
+                    "DELETE FROM l3_leader_pool_runs WHERE id=?",
+                    (existing["id"],),
+                )
             self._conn.execute(
                 """INSERT INTO l3_leader_pool_runs(
                    id,source_leader_run_id,as_of,status,formula_version,catalog_as_of,

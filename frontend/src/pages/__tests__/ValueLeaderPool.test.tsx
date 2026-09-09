@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 const apiMock = vi.hoisted(() => ({
   getValueIndustries: vi.fn(),
   getCurrentLeaderPool: vi.fn(),
+  getAllLevel3Leaders: vi.fn(),
   getLevel3IndustryLeaders: vi.fn(),
   getCompanyFinancialAnalysis: vi.fn(),
   getCompanyResearchConclusion: vi.fn(() => Promise.reject(new Error("not seeded"))),
@@ -87,6 +88,9 @@ describe("ValueLeaderPoolPage", () => {
       created_at: "2026-08-19", members: [first, second], research_states: [], formula,
       industry_summaries: { I1: { member_count: 4, eligible_count: 4, excluded_count: 0, selected_count: 2, sample_warning: "可评分公司少于5家，排名属于小样本结果。" } },
     });
+    apiMock.getAllLevel3Leaders.mockResolvedValue({
+      as_of: "2026-08-19", items: { I1: [first, second] }, total: 1, snapshot_status: "ready",
+    });
     apiMock.getLevel3IndustryLeaders.mockResolvedValue({
       industry, as_of: "2026-08-19", formula_version: formula.version, company_count: 4,
       eligible_count: 3, items: [first, second, leader("000003.SZ", "丙公司", 3, 70)],
@@ -99,10 +103,10 @@ describe("ValueLeaderPoolPage", () => {
 
     expect(await screen.findByRole("heading", { name: "三级行业量化龙头候选" })).toBeInTheDocument();
     expect(screen.getByText("1 基础资格校验")).toBeInTheDocument();
-    expect(screen.getByText("4 每行业前2进入研究池")).toBeInTheDocument();
+    expect(screen.getByText("4 质量分仅供展示与后续低估筛选")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /查看详细筛选说明/ })).toHaveAttribute("href", "/value/methodology");
     expect(screen.getByText("可评分公司少于5家，排名属于小样本结果。")).toBeInTheDocument();
-    expect(screen.getByText("2 个量化候选席位", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("2 家行业龙头", { exact: false })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /查看全行业排名与排除原因/ }));
     await waitFor(() => expect(apiMock.getLevel3IndustryLeaders).toHaveBeenCalledWith("I1", 100));
@@ -128,6 +132,9 @@ describe("ValueLeaderPoolPage", () => {
       reentered_count: 0, diff: { entered: 0, stayed: 2, left: 0, reentered: 0 },
       created_at: "2026-08-19", members: [first, leader("000002.SZ", "乙公司", 2, 82)], research_states: [], formula,
       industry_summaries: { I1: { member_count: 4, eligible_count: 4, excluded_count: 0, selected_count: 2 } },
+    });
+    apiMock.getAllLevel3Leaders.mockResolvedValue({
+      as_of: "2026-08-19", items: { I1: [first, leader("000002.SZ", "乙公司", 2, 82)] }, total: 1, snapshot_status: "ready",
     });
     apiMock.getCompanyFinancialAnalysis.mockRejectedValue(new Error("no local snapshot"));
     apiMock.getCompanyPriceZones.mockResolvedValue({
@@ -177,4 +184,39 @@ describe("ValueLeaderPoolPage", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "龙头快速判断" })).not.toBeInTheDocument());
   });
+  it("shows quality-unknown stage-1 leaders with a placeholder badge", async () => {
+    const unknown = {
+      ...leader("000009.SZ", "鑫公司", 1, 0),
+      leader_score: null, coverage: 0.6, eligibility_status: "ineligible",
+      explanation: {
+        summary: "行业规模排名第1（共4家入排名），进入行业前2龙头名单。质量评分数据不足，暂不入量化候选池。",
+        selected: true, comparison_scope: "仅与科技设备行业内可评分公司比较", member_count: 4,
+        eligible_count: 3, excluded_count: 1, rank: 1, top_percent: 25,
+        strongest: [], weakest: [], sample_warning: null,
+        score_interpretation: "行业内加权相对分，不是绝对质量分。",
+      },
+    };
+    apiMock.getValueIndustries.mockResolvedValue({
+      items: [industry], total: 1, level1_total: 1, level2_total: 1, level3_total: 1, source: "TDX",
+    });
+    apiMock.getCurrentLeaderPool.mockResolvedValue({
+      id: "pool-1", source_leader_run_id: "run-1", as_of: "2026-08-19", status: "COMPLETED",
+      formula_version: formula.version, catalog_as_of: "2026-08-19", terminal_industry_count: 1,
+      current_membership_count: 1, company_count: 1, new_count: 0, active_count: 1, out_count: 0,
+      reentered_count: 0, diff: { entered: 0, stayed: 1, left: 0, reentered: 0 },
+      created_at: "2026-08-19", members: [leader("000002.SZ", "乙公司", 2, 82)], research_states: [], formula,
+      industry_summaries: { I1: { member_count: 4, eligible_count: 3, excluded_count: 1, selected_count: 2 } },
+    });
+    apiMock.getAllLevel3Leaders.mockResolvedValue({
+      as_of: "2026-08-19", items: { I1: [unknown, leader("000002.SZ", "乙公司", 2, 82)] }, total: 1, snapshot_status: "ready",
+    });
+
+    render(<MemoryRouter><ValueLeaderPoolPage /></MemoryRouter>);
+    // 页面挂载会命中模块级缓存，点击「刷新」强制重取榜单。
+    fireEvent.click(await screen.findByRole("button", { name: "刷新" }));
+
+    expect(await screen.findByText("鑫公司")).toBeInTheDocument();
+    expect(screen.getByText("质量数据不足 · 暂不入池")).toBeInTheDocument();
+  });
+
 });

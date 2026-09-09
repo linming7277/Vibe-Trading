@@ -70,6 +70,28 @@ def _yi(value: Any) -> str:
         return "—"
 
 
+def _annual_rows_with_fy_flows(history: list[Any], raw_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Annual rows with vendor single-quarter flow fields replaced by fiscal-year totals.
+
+    TDX reports revenue / net profit / operating cash flow / capex as
+    single-quarter values on every row, so a raw 12-31 annual row carries Q4
+    only.  Totals are aggregated from the raw professional-finance cache
+    (which holds the quarterly rows the analysis snapshot drops).  Fiscal
+    years without four consecutive published quarters keep their ratio and
+    balance-sheet fields but lose the flow fields — a bare Q4 value is never
+    presented as the annual figure.
+    """
+    from src.tdx_data.financial_history import fiscal_year_flows
+
+    annual = [dict(r) for r in history if str(r.get("period_type") or "") == "annual"]
+    flows = {str(entry["fiscal_year"]): entry for entry in fiscal_year_flows(raw_rows)}
+    for row in annual:
+        entry = flows.get(str(row.get("report_date") or "")[:4])
+        for field in ("revenue", "net_profit", "operating_cash_flow", "capex"):
+            row[field] = entry.get(field) if entry else None
+    return annual
+
+
 def _num(value: Any, suffix: str = "") -> str:
     try:
         return f"{float(value):.2f}{suffix}"
@@ -96,8 +118,37 @@ class CioSectionBuilder:
 
     def __init__(self, market: str, stock_code: str, as_of: str) -> None:
         self.market, self.code, self.as_of = market, stock_code.upper(), as_of
+        self._fy_raw_cache: list[dict[str, Any]] | None = None
 
     # -- shared reads ---------------------------------------------------
+    def _fy_raw_rows(self) -> list[dict[str, Any]]:
+        """Raw professional-finance rows (quarterly included) for FY aggregation.
+
+        The financial analysis snapshot drops quarterly rows, so fiscal-year
+        totals must come from the raw TDX cache, PIT-bounded by announcement
+        date to match the report's research clock.
+        """
+        if self._fy_raw_cache is None:
+            rows: list[dict[str, Any]] = []
+            try:
+                from src.tdx_data.store import TdxDataStore
+
+                store = TdxDataStore()
+                try:
+                    items = store.list_records(
+                        "financial_history", category=str(self.code).upper(), limit=1000,
+                    )["items"]
+                    rows = [dict(item["payload"]) for item in items]
+                finally:
+                    store.close()
+            except Exception:  # noqa: BLE001 - a raw-cache read failure degrades to gaps
+                rows = []
+            cutoff = str(self.as_of or "")
+            if cutoff:
+                rows = [r for r in rows if str(r.get("announcement_date") or "9999-12-31") <= cutoff]
+            self._fy_raw_cache = rows
+        return self._fy_raw_cache
+
     def _financial(self) -> dict[str, Any]:
         from src.financial_analysis.service import get_financial_analysis_service
 
@@ -266,7 +317,7 @@ class CioSectionBuilder:
     # -- 03 多年财务路径 ---------------------------------------------------
     def build_financial_path(self) -> dict[str, Any]:
         financial = self._financial()
-        rows = [dict(r) for r in list(financial.get("history") or []) if str(r.get("period_type") or "") == "annual"]
+        rows = _annual_rows_with_fy_flows(list(financial.get("history") or []), self._fy_raw_rows())
         if not rows:
             return self._gap_section("financial_path", "暂无年化财务历史")
         rows = rows[-8:]
@@ -425,8 +476,7 @@ class CioSectionBuilder:
         risk = self._risk()
         risks = [dict(r) for r in list(risk.get("risks") or [])[:6]]
         financial = self._financial()
-        annual = [dict(r) for r in list(financial.get("history") or [])
-                  if str(r.get("period_type") or "") == "annual"]
+        annual = _annual_rows_with_fy_flows(list(financial.get("history") or []), self._fy_raw_rows())
         latest = annual[-1] if annual else {}
         # Fact observations supplement the confirmed rule risks — they are
         # never promoted to a risk level (quality fix §6).
@@ -771,8 +821,7 @@ class CioSectionBuilder:
         valuation_status = str((zones.get("valuation") or {}).get("status") or "")
         focus = self._focus_entry()
         financial = self._financial()
-        annual = [dict(r) for r in list(financial.get("history") or [])
-                  if str(r.get("period_type") or "") == "annual"]
+        annual = _annual_rows_with_fy_flows(list(financial.get("history") or []), self._fy_raw_rows())
         quarterly = [dict(r) for r in list(financial.get("history") or [])
                      if str(r.get("period_type") or "") != "annual"]
         reasons: list[str] = []
@@ -972,8 +1021,7 @@ class CioSectionBuilder:
         No invented thesis, no trading parameters (no MA/stop/target/position).
         """
         financial = self._financial()
-        annual = [dict(r) for r in list(financial.get("history") or [])
-                  if str(r.get("period_type") or "") == "annual"]
+        annual = _annual_rows_with_fy_flows(list(financial.get("history") or []), self._fy_raw_rows())
         items: list[str] = []
         if len(annual) >= 2:
             prev, latest = annual[-2], annual[-1]

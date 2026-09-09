@@ -9,12 +9,12 @@ from typing import Any
 from src.strategy_engines.common.provenance import stable_fingerprint
 from src.strategy_engines.common.normalization import cross_sectional_percentiles
 from src.strategy_engines.common.scoring import weighted_score
-from src.strategy_engines.value.leader_score_v2 import (
+from src.strategy_engines.value.leader_score_v3 import (
     DIMENSION_LABELS,
     DIMENSION_METRIC_WEIGHTS,
     FORMULA_VERSION,
     METRIC_DEFINITIONS,
-    WEIGHTS,
+    QUALITY_WEIGHTS,
     formula_contract,
 )
 from src.strategy_engines.value_line import ValueLineService
@@ -34,7 +34,8 @@ ELIGIBILITY_REASON_LABELS = {
     "LISTED_TOO_RECENTLY": "上市时间不足20个交易日",
     "MARKET_DATA_STALE": "行情缺失或超过5个交易日未更新",
     "INSUFFICIENT_FINANCIAL_HISTORY": "缺少年度专业财务历史",
-    "INSUFFICIENT_LEADER_COVERAGE": "可用评分维度不足80%",
+    "INSUFFICIENT_LEADER_COVERAGE": "可用评分维度不足80%（多为上市较新、财报历史不够的公司）",
+    "QUALITY_DATA_INSUFFICIENT": "行业龙头（规模口径）已入名单，但质量评分数据不足",
 }
 
 
@@ -95,10 +96,9 @@ class Level3IndustryLeaderService:
 
     @classmethod
     def _enrich_industry_rows(cls, rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        eligible = [
-            row for row in rows
-            if row.get("eligibility_status") == "eligible" and row.get("leader_rank") is not None
-        ]
+        # 两段式展示：items 为第一阶段规模排名的全部公司（含质量分未知的龙头）。
+        # 行业龙头池只看规模排名；eligibility/质量分留给后续低估筛选，不挡入池。
+        eligible = [row for row in rows if row.get("leader_rank") is not None]
         directions = {
             key: bool(value["higher_is_better"])
             for key, value in METRIC_DEFINITIONS.items()
@@ -112,7 +112,7 @@ class Level3IndustryLeaderService:
         for index, row in enumerate(eligible):
             normalized = normalized_rows[index]
             component_scores = dict(row.get("component_scores") or {})
-            overall = weighted_score(component_scores, WEIGHTS, minimum_coverage=.80)
+            overall = weighted_score(component_scores, QUALITY_WEIGHTS, minimum_coverage=.80)
             components: list[dict[str, Any]] = []
             for dimension_key, metric_weights in DIMENSION_METRIC_WEIGHTS.items():
                 dimension_result = weighted_score(normalized, metric_weights, minimum_coverage=.50)
@@ -120,7 +120,7 @@ class Level3IndustryLeaderService:
                 components.append({
                     "key": dimension_key,
                     "label": DIMENSION_LABELS[dimension_key],
-                    "weight": WEIGHTS[dimension_key],
+                    "weight": QUALITY_WEIGHTS.get(dimension_key, 1.0),
                     "score": dimension_score,
                     "coverage": dimension_result.coverage,
                     "status": dimension_result.status,
@@ -150,25 +150,31 @@ class Level3IndustryLeaderService:
                 for component in components for metric in component["metrics"]
             )
             total_metrics = sum(len(component["metrics"]) for component in components)
-            scored_components = [item for item in components if item["score"] is not None]
+            scored_components = [
+                item for item in components
+                if item["score"] is not None and item["key"] != "industry_position"
+            ]
             strongest = sorted(scored_components, key=lambda item: float(item["score"]), reverse=True)[:2]
             weakest = sorted(scored_components, key=lambda item: float(item["score"]))[:2]
             rank = int(row["leader_rank"])
             selected = rank <= VALUE_LINE_LEADER_LIMIT
             missing_dimensions = [
                 {"key": key, "label": DIMENSION_LABELS[key]}
-                for key in WEIGHTS if component_scores.get(key) is None
+                for key in QUALITY_WEIGHTS if component_scores.get(key) is None
             ]
             overall_reweighted = bool(
                 overall.used_weights
                 and any(abs(overall.used_weights.get(key, 0) - weight) > 1e-9
-                        for key, weight in WEIGHTS.items())
+                        for key, weight in QUALITY_WEIGHTS.items())
             )
+            quality_ready = row.get("eligibility_status") == "eligible" and row.get("leader_score") is not None
             summary = (
-                f"在{eligible_count}家可评分公司中排名第{rank}，"
-                f"{'进入行业前2量化候选' if selected else '未进入行业前2量化候选'}。"
+                f"行业规模排名第{rank}（共{eligible_count}家入排名），"
+                f"{'进入行业前2龙头名单' if selected else '未进入行业前2龙头名单'}。"
             )
-            if strongest:
+            if not quality_ready:
+                summary += "质量评分数据不足；行业龙头席位仍按规模保留，质量留给后续低估筛选。"
+            elif strongest:
                 summary += f"相对优势主要来自{'、'.join(item['label'] for item in strongest)}。"
             if weakest:
                 summary += f"{'、'.join(item['label'] for item in weakest)}需要重点复核。"
@@ -176,6 +182,7 @@ class Level3IndustryLeaderService:
                 **row,
                 "normalized_features": normalized,
                 "components": components,
+                "quality_status": "READY" if quality_ready else "UNKNOWN",
                 "raw_metric_coverage": round(available_metrics / total_metrics, 4) if total_metrics else 0,
                 "raw_metric_available": available_metrics,
                 "raw_metric_total": total_metrics,
@@ -199,7 +206,8 @@ class Level3IndustryLeaderService:
             })
         excluded = []
         for row in rows:
-            if row.get("eligibility_status") == "eligible" and row.get("leader_rank") is not None:
+            # 已进入规模排名的行都在 items 里（含质量未知的龙头），不重复归入排除列表。
+            if row.get("leader_rank") is not None:
                 continue
             reasons = list(row.get("eligibility_reasons") or ["INSUFFICIENT_LEADER_COVERAGE"])
             excluded.append({
@@ -253,8 +261,7 @@ class Level3IndustryLeaderService:
         symbols = sorted({
             str(row["stock_code"]).upper()
             for row in self.store.all_rows(run_id)
-            if row.get("eligibility_status") == "eligible"
-            and row.get("leader_rank") is not None
+            if row.get("leader_rank") is not None
             and int(row["leader_rank"]) <= VALUE_LINE_LEADER_LIMIT
         })
         if not symbols:
@@ -301,8 +308,7 @@ class Level3IndustryLeaderService:
         snapshot = self.store.valuation_snapshot(run_id)
         expected = sum(
             1 for row in self.store.all_rows(run_id)
-            if row.get("eligibility_status") == "eligible"
-            and row.get("leader_rank") is not None
+            if row.get("leader_rank") is not None
             and int(row["leader_rank"]) <= VALUE_LINE_LEADER_LIMIT
         )
         return {
@@ -453,16 +459,20 @@ class Level3IndustryLeaderService:
                     financials, fundamentals, quotes,
                     {"market_data_as_of": market_as_of, "market_data_status": "COMPLETE"},
                 )
-                scored_rows = [row for row in scored if row.get("score") is not None]
-                for rank, row in enumerate(scored_rows, 1):
-                    row["rank"] = rank
-                scored_by_symbol = {row["symbol"]: row for row in scored_rows}
+                # 两段式：排名由第一阶段规模分位给出（_leader_rows 内已按
+                # position_score 排序编号）。质量分缺失仍保留规模排名并入行业龙头池；
+                # eligibility 只标记质量是否可评，供后续低估筛选使用。
+                scored_by_symbol = {row["symbol"]: row for row in scored}
                 notes = self._metric_notes(industry["level3_name"])
                 for symbol in members:
                     scored_row = scored_by_symbol.get(symbol)
                     reasons = exclusions.get(symbol, [])
+                    quality_ready = scored_row is not None and scored_row.get("score") is not None
                     if symbol in eligible and scored_row is None:
                         reasons = ["INSUFFICIENT_LEADER_COVERAGE"]
+                        exclusion_counts.update(reasons)
+                    elif symbol in eligible and not quality_ready:
+                        reasons = ["QUALITY_DATA_INSUFFICIENT"]
                         exclusion_counts.update(reasons)
                     all_rows.append({
                         "as_of": as_of,
@@ -481,7 +491,8 @@ class Level3IndustryLeaderService:
                         "leader_formula_version": FORMULA_VERSION,
                         "component_scores": (scored_row or {}).get("component_scores") or {},
                         "coverage": float((scored_row or {}).get("coverage") or 0),
-                        "eligibility_status": "eligible" if scored_row else "ineligible",
+                        # eligible=质量可评；行业龙头入池只看 leader_rank，不看此项。
+                        "eligibility_status": "eligible" if quality_ready else "ineligible",
                         "eligibility_reasons": reasons,
                         "metric_applicability_notes": notes,
                         "raw_features": (scored_row or {}).get("raw_features") or {},
@@ -489,7 +500,8 @@ class Level3IndustryLeaderService:
                     })
                 industry_stats.append({
                     "level3_code": industry["level3_code"], "level3_name": industry["level3_name"],
-                    "company_count": len(members), "eligible_count": len(scored_rows),
+                    "company_count": len(members),
+                    "eligible_count": sum(1 for row in scored if row.get("score") is not None),
                 })
             eligible_counts = [row["eligible_count"] for row in industry_stats]
             company_counts = [row["company_count"] for row in industry_stats]
@@ -551,10 +563,20 @@ class Level3IndustryLeaderService:
         run = self.store.latest_run(as_of)
         if not run:
             return {"as_of": as_of, "items": [], "total": 0, "snapshot_status": "not_built"}
-        by_industry: dict[str, list[dict[str, Any]]] = {}
+        groups: dict[str, list[dict[str, Any]]] = {}
         for row in self.store.all_rows(run["id"]):
-            if row["eligibility_status"] == "eligible" and row["leader_rank"] is not None and row["leader_rank"] <= limit:
-                by_industry.setdefault(row["level3_code"], []).append(row)
+            groups.setdefault(row["level3_code"], []).append(row)
+        by_industry: dict[str, list[dict[str, Any]]] = {}
+        for code, rows in groups.items():
+            # 两段式展示：每个行业的第一阶段前2龙头全部返回，质量数据不足的
+            # 龙头（leader_score 为空）带着标注一起返回，不再从页面消失。
+            enriched, _summary = self._enrich_industry_rows(rows)
+            leaders = sorted(
+                (row for row in enriched if row["leader_rank"] is not None and row["leader_rank"] <= limit),
+                key=lambda row: row["leader_rank"],
+            )
+            if leaders:
+                by_industry[code] = leaders
         return {
             "as_of": run["as_of"], "items": by_industry, "total": len(by_industry),
             "snapshot_status": "ready", "valuation_snapshot": self._valuation_snapshot_for_run(run["id"]),
@@ -564,11 +586,13 @@ class Level3IndustryLeaderService:
         pool = self.store.get_pool(pool_id, include_inactive=include_inactive)
         return self._enrich_pool(pool) if pool else None
 
-    def ensure_current_pool(self) -> dict[str, Any]:
+    def ensure_current_pool(self, *, force: bool = False) -> dict[str, Any]:
         run = self.store.latest_run()
         if not run:
             raise KeyError("no completed level3 leader run")
-        pool, _created = self.store.materialize_pool(run["id"], leader_limit=VALUE_LINE_LEADER_LIMIT)
+        pool, _created = self.store.materialize_pool(
+            run["id"], leader_limit=VALUE_LINE_LEADER_LIMIT, force=force,
+        )
         return {
             **self._enrich_pool(pool),
             "valuation_snapshot": self._valuation_snapshot_for_run(run["id"]),

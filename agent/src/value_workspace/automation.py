@@ -388,6 +388,79 @@ class ValueResearchScheduler:
                 logger.warning("macro line refresh failed (fail-soft)", exc_info=True)
                 stages["MACRO_LINE_READY"] = "FAILED"
 
+            # Macro Forecast V28 review stage（§十九）：评价 target=今日 的预测。
+            # 前置：今日收盘 K 线需已入库；行情不齐 → PENDING（fail-soft，不阻塞日报）。
+            try:
+                from src.macro_forecast.outcome import evaluate_forecast_outcome, persist_outcome
+                from src.tdx_data.store import TdxDataStore
+
+                tdx_store = TdxDataStore()
+                try:
+                    local_days = [str(row.get("key") or "") for row in
+                                  tdx_store.list_records("trading_dates", limit=5000)["items"]]
+                finally:
+                    tdx_store.close()
+                # 今日在本地日历内（=今日已收盘入库）才尝试复盘
+                if as_of.replace("-", "") in local_days:
+                    import sqlite3 as _sqlite3
+                    from src.config.paths import get_runtime_root as _root
+
+                    conn = _sqlite3.connect(f"file:{(_root() / 'research.db').as_posix()}?mode=ro", uri=True)
+                    try:
+                        pending_ids = [row[0] for row in conn.execute(
+                            "SELECT id FROM macro_market_forecasts WHERE target_trade_date=? "
+                            "AND status IN ('SHADOW','OFFICIAL','DRAFT') "
+                            "AND id NOT IN (SELECT forecast_id FROM macro_forecast_outcomes)",
+                            (as_of,),
+                        ).fetchall()]
+                    finally:
+                        conn.close()
+                    evaluated = 0
+                    for forecast_id in pending_ids:
+                        result = evaluate_forecast_outcome(forecast_id)
+                        if result.get("status") in {"EVALUATED", "NOT_EVALUABLE"}:
+                            persist_outcome(result)
+                            evaluated += 1
+                        elif result.get("status") == "PENDING":
+                            break  # T 行情未齐：今天不再尝试（不无限轮询）
+                    stages["MACRO_FORECAST_REVIEW_READY"] = f"EVALUATED={evaluated}" if evaluated else "PENDING"
+                else:
+                    stages["MACRO_FORECAST_REVIEW_READY"] = "PENDING"
+            except Exception:
+                logger.warning("macro forecast review failed (fail-soft)", exc_info=True)
+                stages["MACRO_FORECAST_REVIEW_READY"] = "FAILED"
+
+            # Forecast 输入准备（M1-B 日报事故修复）：bars 刷新 + 次日 bundle
+            # 固化进流水线（原先靠 EOD 外人工脚本，2026-09-08 缺席导致日报
+            # 三段全灭）。fail-soft：任一步失败不阻塞 EOD。
+            forecast_target = None
+            try:
+                from src.macro_forecast.eod_steps import prepare_forecast_inputs_step
+
+                step_result = prepare_forecast_inputs_step()
+                stages["FORECAST_BARS_READY"] = str(step_result.get("bars_status") or "FAILED")
+                stages["FORECAST_BUNDLE_READY"] = str(step_result.get("bundle_status") or "FAILED")
+                forecast_target = str(step_result.get("target_date") or "") or None
+            except Exception:
+                logger.warning("forecast input step failed (fail-soft)", exc_info=True)
+                stages["FORECAST_BARS_READY"] = "FAILED"
+                stages["FORECAST_BUNDLE_READY"] = "FAILED"
+
+            # Macro Forecast V28 next-day stage（§二十）：EOD 内唯一允许 LLM 的宏观点。
+            # 失败/超时 → PARTIAL，前瞻如实"未生成"；绝不阻塞日报（§二十一）。
+            try:
+                from src.macro_forecast.forecast_service import run_macro_forecast
+
+                next_result = run_macro_forecast(mode="shadow", target_date=forecast_target)
+                status = str(next_result.get("status") or "")
+                stages["MACRO_NEXT_FORECAST_READY"] = (
+                    status if status in {"SHADOW", "ABSTAINED"} else "PARTIAL")
+                if status in {"MODEL_FAILED", "INVALID_OUTPUT", "SINGLE_FLIGHT_BUSY"}:
+                    stages["MACRO_NEXT_FORECAST_DETAIL"] = status
+            except Exception:
+                logger.warning("macro next-day forecast failed (fail-soft)", exc_info=True)
+                stages["MACRO_NEXT_FORECAST_READY"] = "FAILED"
+
             from src.investment_research_supervisor import (
                 get_daily_brief_bitable_publisher,
                 get_daily_brief_notification_service,

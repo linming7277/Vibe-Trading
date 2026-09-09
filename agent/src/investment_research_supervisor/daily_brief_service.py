@@ -20,7 +20,7 @@ from .daily_brief_bitable_service import LOW_VALUE_LEADER_BITABLE_URL
 from .daily_brief_store import InvestmentResearchDailyBriefRepository
 
 
-FORMULA_VERSION = "daily-brief-v27"
+FORMULA_VERSION = "daily-brief-v28"
 # v26: 新增「今日价格条件」摘要节（price_condition_digest）——把有效价格条件、
 # 落点句与主动作投成老板一行可读的例外清单；纯投影，不改变任何研究计算。
 # v27: 落点句枚举 5→6 种（新增「现价未落入关注/观察/复核带」，不再把带上方
@@ -225,8 +225,10 @@ class InvestmentResearchDailyBriefService:
             self._price_zone_service = get_value_price_zone_service()
         return self._price_zone_service
 
-    def build(self, *, research_as_of: str) -> DailyBriefBuildResult:
-        existing = self.repository.get_completed(research_as_of)
+    def build(self, *, research_as_of: str, force: bool = False) -> DailyBriefBuildResult:
+        # force=True：运维恢复用——同日上游修复（行情/bars/预测补齐）后强制
+        # 重建并重发更正版，而不是被同版本 READY 行复用挡住（plan §20.3）。
+        existing = None if force else self.repository.get_completed(research_as_of)
         if existing and existing.get("formula_version") == FORMULA_VERSION and self._brief_is_reusable(existing):
             return DailyBriefBuildResult("READY", existing, reused=True)
         try:
@@ -333,6 +335,7 @@ class InvestmentResearchDailyBriefService:
         )
         strategy_changes = self._strategy_changes(research_as_of)
         macro_environment = self._macro_environment_text(research_as_of)
+        market_review, forecast_review, next_outlook = self._macro_market_sections(research_as_of)
         price_condition_digest = self._price_condition_digest(
             research_as_of=research_as_of,
             watchlist=executive_watchlist,
@@ -365,6 +368,9 @@ class InvestmentResearchDailyBriefService:
             "strategy_changes": strategy_changes,
             "macro_environment": macro_environment,
             "price_condition_digest": price_condition_digest,
+            "market_review": market_review,
+            "forecast_review": forecast_review,
+            "next_outlook": next_outlook,
             "data_gaps": _dedupe([*data_gaps, *price_condition_digest.pop("_gaps", [])]),
             "brief_payload": {
                 "text": rendered,
@@ -375,6 +381,9 @@ class InvestmentResearchDailyBriefService:
                 "strategy_changes": strategy_changes,
                 "macro_environment": macro_environment,
                 "price_condition_digest": price_condition_digest,
+                "market_review": market_review,
+                "forecast_review": forecast_review,
+                "next_outlook": next_outlook,
                 "low_value_leader_table": low_value_leader_table,
                 "low_value_leader_bitable_url": LOW_VALUE_LEADER_BITABLE_URL,
                 "deeply_undervalued_count": len(deeply_undervalued),
@@ -1084,10 +1093,14 @@ class InvestmentResearchDailyBriefService:
                 "suspension_status": str(suspension.get("status") or "UNKNOWN"),
                 "reason_short": (cautions[0] if cautions else (freshness_notice or "")) + suspension_suffix,
                 "_sort": (
-                    0 if (code in exited_today or effective in {"BLOCKED", "VALUATION_REVIEW_REQUIRED", "DATA_REVIEW_REQUIRED"})
-                    else 1 if effective == "HIGH_ATTENTION"
-                    else 2 if effective == "ATTENTION"
-                    else 3
+                    (0 if (code in exited_today or effective in {"BLOCKED", "VALUATION_REVIEW_REQUIRED", "DATA_REVIEW_REQUIRED"})
+                     else 1 if effective == "HIGH_ATTENTION"
+                     else 2 if effective == "ATTENTION"
+                     else 3)
+                    # 范围外/停牌推断的行排后：无真实成交的条件价值低，
+                    # 不得挤掉在范围内的可执行条件（2026-09-08 卡片教训）。
+                    + (10 if (outside or code in exited_today) else 0)
+                    + (5 if suspension.get("status") == "SUSPENDED_INFERRED" else 0)
                 ),
             })
         candidates.sort(key=lambda item: (item["_sort"], item["stock_code"]))
@@ -1139,6 +1152,157 @@ class InvestmentResearchDailyBriefService:
             "disclaimer": _PRICE_DIGEST_DISCLAIMER,
             "_gaps": gaps,
         }
+
+    def _macro_market_sections(self, research_as_of: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        """V28 三大新段：今日市场复盘 / 昨日预测复盘 / 下一交易日前瞻。
+
+        全部只读持久化产物（0 LLM / 0 网络）；任何一段失败 → 该段如实
+        标记不可用，绝不阻塞日报（预测失败隔离 §二十一）。
+        """
+        market_review: dict[str, Any] = {"available": False, "reason": "未生成"}
+        forecast_review: dict[str, Any] = {"available": False, "reason": "无当日预测复盘"}
+        next_outlook: dict[str, Any] = {"available": False, "reason": "前瞻未生成"}
+        try:
+            from src.macro_forecast.market_review import build_market_review
+
+            today = research_as_of.replace("-", "")
+            # 就绪判定以行情事实为准（本地日历快照可能滞后于 bars 采集）：
+            # bars 中已有今日基准 K 线即视为已收盘入库。
+            import sqlite3 as _sqlite3
+            from src.config.paths import get_runtime_root as _root
+
+            conn = _sqlite3.connect(f"file:{(_root() / 'research.db').as_posix()}?mode=ro", uri=True)
+            try:
+                has_today = conn.execute(
+                    "SELECT 1 FROM forecast_index_bars WHERE code='000300.SH' AND trade_date=? LIMIT 1",
+                    (today,),
+                ).fetchone() is not None
+                previous = conn.execute(
+                    "SELECT MAX(trade_date) FROM forecast_index_bars WHERE code='000300.SH' AND trade_date<?",
+                    (today,),
+                ).fetchone()[0]
+            finally:
+                conn.close()
+            if has_today and previous:
+                market_review = build_market_review(as_of=today, previous_date=str(previous))
+                market_review["available"] = True
+            else:
+                market_review = {"available": False, "reason": "今日收盘行情未入库"}
+        except Exception:
+            pass
+        try:
+            import sqlite3 as _sqlite3
+            from src.config.paths import get_runtime_root as _root
+
+            conn = _sqlite3.connect(f"file:{(_root() / 'research.db').as_posix()}?mode=ro", uri=True)
+            conn.row_factory = _sqlite3.Row
+            try:
+                # 实验臂（input_fingerprint 带 ":arm="）不进入生产日报复盘（§A/B 隔离）
+                outcome_row = conn.execute(
+                    """SELECT o.* FROM macro_forecast_outcomes o
+                       JOIN macro_market_forecasts f ON f.id = o.forecast_id
+                       WHERE o.target_trade_date=? AND f.input_fingerprint NOT LIKE '%:arm=%'
+                       ORDER BY CASE o.run_mode WHEN 'OFFICIAL' THEN 0 ELSE 1 END, o.created_at DESC
+                       LIMIT 1""",
+                    (research_as_of,),
+                ).fetchone()
+            finally:
+                conn.close()
+            if outcome_row:
+                import json as _json
+
+                outcome = dict(outcome_row)
+                try:
+                    outcome["industry_results"] = _json.loads(outcome.pop("industry_results_json") or "[]")
+                except (TypeError, ValueError):
+                    outcome["industry_results"] = []
+                strong = [i for i in outcome["industry_results"] if i.get("side") == "RELATIVE_STRONG"]
+                weak = [i for i in outcome["industry_results"] if i.get("side") == "RELATIVE_WEAK"]
+                forecast_review = {
+                    "available": True,
+                    "is_shadow": outcome.get("run_mode") != "OFFICIAL",
+                    "forecast_id": outcome.get("forecast_id"),
+                    "market": {
+                        "predicted": outcome.get("predicted_market_direction"),
+                        "actual_class": outcome.get("actual_market_class"),
+                        "actual_return": outcome.get("actual_return"),
+                        "evaluation": outcome.get("market_evaluation"),
+                    },
+                    "strong_industries": [
+                        {"name": i.get("display_name"), "rr": i.get("rr"), "evaluation": i.get("evaluation")}
+                        for i in strong],
+                    "weak_industries": [
+                        {"name": i.get("display_name"), "rr": i.get("rr"), "evaluation": i.get("evaluation")}
+                        for i in weak],
+                    "sample_warning": "当前预测样本仍少于20个交易日，暂不评价长期有效性。",
+                }
+        except Exception:
+            pass
+        try:
+            import sqlite3 as _sqlite3
+
+            from src.macro_forecast.forecast_service import get_latest_macro_forecast
+            from src.config.paths import get_runtime_root as _root
+
+            latest = get_latest_macro_forecast(exclude_experiment_arm=True)
+            if latest and latest.get("status") in {"SHADOW", "OFFICIAL", "ABSTAINED", "DRAFT"}:
+                structured = latest.get("structured_payload") or {}
+                output = structured.get("model_output") or {}
+                # §十三/语义守则：优先采用语义修正视图的摘要/失效条件（不重跑模型）。
+                # 旧留档无内嵌 semantic → 读 forecast_semantic_validations 衍生报告。
+                semantic = structured.get("semantic")
+                if not semantic:
+                    try:
+                        import json as _json
+
+                        conn = _sqlite3.connect(f"file:{(_root() / 'research.db').as_posix()}?mode=ro", uri=True)
+                        try:
+                            row = conn.execute(
+                                "SELECT report_json FROM forecast_semantic_validations WHERE forecast_id=? ORDER BY created_at DESC LIMIT 1",
+                                (latest.get("id"),),
+                            ).fetchone()
+                        finally:
+                            conn.close()
+                        if row:
+                            semantic = _json.loads(row[0] or "{}")
+                    except Exception:
+                        semantic = None
+                semantic = semantic or {}
+                revised_summary = (semantic.get("market_summary") or {}).get("revised_summary")
+                market = dict(output.get("market") or {})
+                if revised_summary:
+                    market["summary"] = revised_summary
+                if semantic.get("invalidation", {}).get("kept") is not None:
+                    market["invalidation_conditions"] = semantic["invalidation"]["kept"]
+                revised_industries = {}
+                for audit in semantic.get("industries") or []:
+                    revised_industries[(audit.get("industry_id"), audit.get("side"))] = audit
+                entries = (structured.get("validation") or {}).get("industry_entries") or []
+                for entry in entries:
+                    audit = revised_industries.get((entry.get("industry_id"), entry.get("side")))
+                    if audit:
+                        entry["reason"] = audit.get("revised_reason") or entry.get("reason")
+                        entry["reason_basis"] = audit.get("reason_basis") or entry.get("reason_basis")
+                input_info = structured.get("input") or {}
+                next_outlook = {
+                    "available": True,
+                    "forecast_id": latest.get("id"),
+                    "status": latest.get("status"),
+                    "target_trade_date": input_info.get("target_trade_date"),
+                    "calendar_unverified": input_info.get("calendar_status") == "CALENDAR_UNVERIFIED_NEXT_SESSION",
+                    "abstained": bool(output.get("abstain")),
+                    "direction": market.get("direction"),
+                    "summary": market.get("summary"),
+                    "strong_industries": [{"name": e.get("display_name")} for e in entries if e.get("side") == "RELATIVE_STRONG"][:3],
+                    "weak_industries": [{"name": e.get("display_name")} for e in entries if e.get("side") == "RELATIVE_WEAK"][:3],
+                    "invalidation": [str(i) for i in (market.get("invalidation_conditions") or [])][:1],
+                    "data_gaps": list(input_info.get("gaps") or [])[:3],
+                }
+                if output.get("abstain"):
+                    next_outlook["abstain_reason"] = output.get("abstain_reason")
+        except Exception:
+            pass
+        return market_review, forecast_review, next_outlook
 
     @staticmethod
     def _macro_environment_text(research_as_of: str | None = None) -> dict[str, Any]:

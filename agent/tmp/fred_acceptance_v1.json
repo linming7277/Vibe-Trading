@@ -1,0 +1,151 @@
+{
+ "as_of": "2026-09-08T13:21:40+08:00",
+ "us_treasury_2y_fred": {
+  "latest_observation_date": "2026-09-03",
+  "value": 4.34,
+  "release_date": "2026-09-04",
+  "captured_at": "2026-09-08T13:17:50+08:00",
+  "pit_status": "HISTORICAL_BACKFILL",
+  "freshness": "READY"
+ },
+ "us_treasury_10y_fred": {
+  "latest_observation_date": "2026-09-03",
+  "value": 4.77,
+  "release_date": "2026-09-04",
+  "captured_at": "2026-09-08T13:17:50+08:00",
+  "pit_status": "HISTORICAL_BACKFILL",
+  "freshness": "READY"
+ },
+ "wti_spot": {
+  "latest_observation_date": "2026-09-01",
+  "value": 91.48,
+  "release_date": "2026-09-02",
+  "captured_at": "2026-09-08T13:17:50+08:00",
+  "pit_status": "HISTORICAL_BACKFILL",
+  "freshness": "READY"
+ },
+ "copper_world_monthly": {
+  "latest_observation_date": "2026-07-01",
+  "value": 13542.82086956522,
+  "release_date": "2026-08-15",
+  "captured_at": "2026-09-08T13:17:53+08:00",
+  "pit_status": "HISTORICAL_BACKFILL",
+  "freshness": "READY"
+ },
+ "crosscheck": {
+  "us2y": {
+   "matched_days": 30,
+   "mean_abs_diff": 0.0,
+   "max_abs_diff": 0.0,
+   "latest_common_date": "2026-09-03",
+   "latest_values": {
+    "treasury_primary": 4.34,
+    "fred_fallback": 4.34
+   },
+   "gate": "PASS"
+  },
+  "us10y": {
+   "matched_days": 30,
+   "mean_abs_diff": 0.0,
+   "max_abs_diff": 0.0,
+   "latest_common_date": "2026-09-03",
+   "latest_values": {
+    "treasury_primary": 4.77,
+    "fred_fallback": 4.77
+   },
+   "gate": "PASS"
+  },
+  "policy": "Treasury Primary / FRED Fallback，不做平均（Primary 未切换）"
+ },
+ "identity_sampling": {
+  "us_treasury_2y_fred": [
+   {
+    "obs": "2021-09-09",
+    "complete": true,
+    "native": "DGS2",
+    "via": "API_KEY_FRED"
+   },
+   {
+    "obs": "2024-03-08",
+    "complete": true,
+    "native": "DGS2",
+    "via": "API_KEY_FRED"
+   },
+   {
+    "obs": "2026-09-03",
+    "complete": true,
+    "native": "DGS2",
+    "via": "API_KEY_FRED"
+   }
+  ],
+  "us_treasury_10y_fred": [
+   {
+    "obs": "2021-09-09",
+    "complete": true,
+    "native": "DGS10",
+    "via": "API_KEY_FRED"
+   },
+   {
+    "obs": "2024-03-08",
+    "complete": true,
+    "native": "DGS10",
+    "via": "API_KEY_FRED"
+   },
+   {
+    "obs": "2026-09-03",
+    "complete": true,
+    "native": "DGS10",
+    "via": "API_KEY_FRED"
+   }
+  ],
+  "wti_spot": [
+   {
+    "obs": "2021-09-09",
+    "complete": true,
+    "native": "DCOILWTICO",
+    "via": "API_KEY_FRED"
+   },
+   {
+    "obs": "2024-03-05",
+    "complete": true,
+    "native": "DCOILWTICO",
+    "via": "API_KEY_FRED"
+   },
+   {
+    "obs": "2026-09-01",
+    "complete": true,
+    "native": "DCOILWTICO",
+    "via": "API_KEY_FRED"
+   }
+  ],
+  "copper_world_monthly": [
+   {
+    "obs": "2016-09-01",
+    "complete": true,
+    "native": "PCOPPUSDM",
+    "via": "API_KEY_FRED"
+   },
+   {
+    "obs": "2021-08-01",
+    "complete": true,
+    "native": "PCOPPUSDM",
+    "via": "API_KEY_FRED"
+   },
+   {
+    "obs": "2026-07-01",
+    "complete": true,
+    "native": "PCOPPUSDM",
+    "via": "API_KEY_FRED"
+   }
+  ]
+ },
+ "row_counts": {
+  "us_treasury_2y": 1420,
+  "us_treasury_10y": 1420,
+  "usd_cny_official_mid": 15,
+  "us_treasury_2y_fred": 1246,
+  "us_treasury_10y_fred": 1246,
+  "wti_spot": 1243,
+  "copper_world_monthly": 119
+ }
+}

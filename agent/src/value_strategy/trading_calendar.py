@@ -59,6 +59,34 @@ def _floor(sorted_days: list[str], key: str) -> str | None:
     return floor
 
 
+def next_trading_day(day: object, days: list[str]) -> str | None:
+    """严格晚于 day 的下一个交易日键；日历未覆盖返回 None（不按 weekday 猜测）。"""
+    key = normalize_day(day)
+    if not key:
+        return None
+    for item in sorted({normalize_day(item) for item in days if normalize_day(item)}):
+        if item > key:
+            return item
+    return None
+
+
+def previous_trading_day(day: object, days: list[str]) -> str | None:
+    """严格早于 day 的最近交易日键；无更早日期返回 None。"""
+    key = normalize_day(day)
+    if not key:
+        return None
+    return _floor(sorted({normalize_day(item) for item in days if normalize_day(item)}), key)
+
+
+def is_trading_day(day: object, days: list[str]) -> bool | None:
+    """日历内确认返回 True/False；日历缺失或未覆盖返回 None。"""
+    key = normalize_day(day)
+    normalized = sorted({normalize_day(item) for item in days if normalize_day(item)})
+    if not key or not normalized:
+        return None
+    return key in normalized
+
+
 _CACHE: list[str] | None = None
 _CACHE_LOADED = False
 

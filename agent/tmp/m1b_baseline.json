@@ -1,0 +1,42 @@
+{
+ "captured_at": "2026-09-08T11:42:39+08:00",
+ "db": "C:\\Users\\Administrator\\.vibe-trading\\research.db",
+ "macro_tables": {
+  "macro_series": 10303,
+  "macro_snapshots": 18,
+  "macro_events": 15,
+  "macro_market_forecasts": 3,
+  "macro_forecast_outcomes": 0,
+  "forecast_input_bundles": 4
+ },
+ "target_series_rows": {
+  "us_treasury_2y": 0,
+  "us_treasury_10y": 0,
+  "us_treasury_2y_fred": 0,
+  "us_treasury_10y_fred": 0,
+  "usd_cny_official_mid": 0,
+  "wti_spot": 0,
+  "copper_world_monthly": 0
+ },
+ "value_line_tables": {
+  "company_low_value_leader_pool": 245,
+  "company_low_value_leader_pool_snapshots": 2462,
+  "company_low_value_risk_snapshots": 2350,
+  "low_value_leader_pool_refreshes": 12,
+  "low_value_leader_events": 169,
+  "company_theses": 184,
+  "company_thesis_history": 0,
+  "company_thesis_lifecycle_events": 184,
+  "company_cio_research_reports": 32,
+  "value_strategy_state_cursors": 204,
+  "value_strategy_state_events": 381,
+  "value_strategy_event_deliveries": 0,
+  "value_signal_evaluations": 0,
+  "value_monitor_events": 0,
+  "strategy_signals": 0,
+  "value_entry_monitors": 0,
+  "value_research_events": 0,
+  "value_research_automation": 1,
+  "investment_research_daily_briefs": 11
+ }
+}

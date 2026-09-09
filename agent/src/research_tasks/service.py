@@ -160,7 +160,8 @@ class ProviderModelRuntime:
                instruction: str, payload: dict[str, Any],
                target_schema: dict[str, Any] | None = None,
                max_tokens: int | None = None,
-               extra_body: dict[str, Any] | None = None) -> dict[str, Any]:
+               extra_body: dict[str, Any] | None = None,
+               timeout_seconds: int | None = None) -> dict[str, Any]:
         client = ChatLLM(model_name=model, provider_name=provider, max_tokens=max_tokens, extra_body=extra_body)
         is_ollama = provider.strip().lower() == "ollama"
         if is_ollama:
@@ -173,7 +174,8 @@ class ProviderModelRuntime:
         response = client.chat([
             {"role": "system", "content": instruction},
             {"role": "user", "content": user_content},
-        ], response_format=target_schema or _structured_response_format(phase, payload))
+        ], response_format=target_schema or _structured_response_format(phase, payload),
+            timeout=timeout_seconds)
         if not response.content:
             raise RuntimeError("empty model response")
         return _parse_json(response.content)
@@ -182,7 +184,8 @@ class ProviderModelRuntime:
                                 base_url: str, api_key: str, instruction: str,
                                 payload: dict[str, Any], target_schema: dict[str, Any] | None = None,
                                 max_tokens: int | None = None,
-                                extra_body: dict[str, Any] | None = None) -> dict[str, Any]:
+                                extra_body: dict[str, Any] | None = None,
+                                timeout_seconds: int | None = None) -> dict[str, Any]:
         client = ChatLLM(
             model_name=model,
             provider_name="openai",
@@ -194,7 +197,8 @@ class ProviderModelRuntime:
         response = client.chat([
             {"role": "system", "content": instruction},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False, default=str)},
-        ], response_format=target_schema or _structured_response_format(phase, payload))
+        ], response_format=target_schema or _structured_response_format(phase, payload),
+            timeout=timeout_seconds)
         if not response.content:
             raise RuntimeError("empty model response")
         return _parse_json(response.content)

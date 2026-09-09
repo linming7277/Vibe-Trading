@@ -340,7 +340,7 @@ def _compact_investment_changes(payload: dict[str, Any]) -> list[dict[str, Any]]
     return rows
 
 
-def _value_observation_table(brief: dict[str, Any]) -> list[dict[str, Any]]:
+def _value_observation_table(brief: dict[str, Any], *, compact: bool = False) -> list[dict[str, Any]]:
     """每家两行的紧凑摘要：一行身份与现价，一行估值与支撑。"""
     payload = dict(brief.get("brief_payload") or {})
     watchlist = list(payload.get("executive_watchlist") or [])
@@ -349,10 +349,22 @@ def _value_observation_table(brief: dict[str, Any]) -> list[dict[str, Any]]:
 
     elements: list[dict[str, Any]] = []
     for index, item in enumerate(watchlist, start=1):
-        support = dict(item.get("historical_support") or {})
-        support_text = _range_text(support.get("low"), support.get("high"))
         industry = _card_value(item.get("industry_name"))
         code = _card_value(item.get("stock_code"))
+        if compact:
+            # §十二/§廿八：老板端压缩——公司/行业/研究状态/一句重点（≤4 字段）；
+            # 合理价值三档等详情留公司页。变化标识由 research_status_label 承载。
+            focus_note = _short_text(
+                item.get("research_note") or item.get("focus_summary")
+                or item.get("valuation_summary") or "研究状态无变化", limit=44)
+            state = _card_value(item.get("research_status_label") or "重点研究")
+            elements.append({"tag": "markdown", "content":
+                f"**{index}. {_card_value(item.get('company_name'))}**　{code}"
+                + (f"　·　{industry}" if industry and industry != "—" else "")
+                + f"　·　{state}\n　{focus_note}"})
+            continue
+        support = dict(item.get("historical_support") or {})
+        support_text = _range_text(support.get("low"), support.get("high"))
         head = (
             f"**{index}. {_card_value(item.get('company_name'))}**　{code}"
             + (f"　·　{industry}" if industry and industry != "—" else "")
@@ -365,6 +377,117 @@ def _value_observation_table(brief: dict[str, Any]) -> list[dict[str, Any]]:
         )
         elements.append({"tag": "markdown", "content": head + "\n" + detail})
     return elements
+
+
+def _market_review_block(brief: dict[str, Any]) -> list[dict[str, Any]]:
+    """§四-一：今日市场复盘（指数 + 行业强弱 Top/Bottom3）。"""
+    payload = dict(brief.get("brief_payload") or brief)
+    review = dict(payload.get("market_review") or {})
+    if not review.get("available"):
+        return [{"tag": "markdown", "content": "**今日市场复盘**\n暂无可靠数据（今日收盘行情未入库）。"}]
+    rows: list[dict[str, Any]] = [{"tag": "markdown", "content": "**今日市场复盘**"}]
+    benchmark = dict(review.get("benchmark") or {})
+    parts = []
+    for index in review.get("indices") or []:
+        if index.get("status") != "READY":
+            continue
+        ret = index.get("ret_1d")
+        parts.append(f"{index['name']} {ret * 100:+.2f}%" if ret is not None else f"{index['name']} 暂无可靠数据")
+    if benchmark.get("market_class"):
+        rows.append({"tag": "markdown", "content":
+            f"沪深300 **{benchmark['market_class']}**（{parts[0] if parts else '—'}）"})
+    if parts[1:]:
+        rows.append({"tag": "markdown", "content": "　".join(parts[1:4])})
+    strong = list(review.get("strong_industries") or [])[:3]
+    weak = list(review.get("weak_industries") or [])[:3]
+    if strong or weak:
+        strong_text = "、".join(f"{i['name']} {i['rr'] * 100:+.1f}pp" for i in strong) or "—"
+        weak_text = "、".join(f"{i['name']} {i['rr'] * 100:+.1f}pp" for i in weak) or "—"
+        rows.append({"tag": "markdown", "content":
+            f"相对沪深300最强：{strong_text}\n相对沪深300最弱：{weak_text}"})
+    if review.get("one_liner"):
+        rows.append({"tag": "markdown", "content": f"{review['one_liner']}"})
+    return rows
+
+
+def _forecast_review_block(brief: dict[str, Any]) -> list[dict[str, Any]]:
+    """§四-二：昨日预测复盘（官方优先；SHADOW 标注）。"""
+    payload = dict(brief.get("brief_payload") or brief)
+    review = dict(payload.get("forecast_review") or {})
+    if not review.get("available"):
+        return [{"tag": "markdown", "content":
+            "**昨日预测复盘**\n上一交易日未形成有效预测，本日无预测成绩可复盘。"}]
+    rows: list[dict[str, Any]] = [{"tag": "markdown", "content":
+        "**昨日预测复盘**" + ("（影子预测复盘）" if review.get("is_shadow") else "")}]
+    market = dict(review.get("market") or {})
+    if market.get("evaluation") in ("HIT", "MISS"):
+        result = "命中" if market["evaluation"] == "HIT" else "未命中"
+        predicted = {"STRONGER": "偏强", "RANGE_BOUND": "震荡", "WEAKER": "偏弱"}.get(
+            market.get("predicted"), market.get("predicted") or "未生成")
+        actual_ret = market.get("actual_return")
+        rows.append({"tag": "markdown", "content":
+            f"大盘：预测**{predicted}**，实际{market.get('actual_class')}（{actual_ret * 100:+.2f}%）→ **{result}**"})
+    elif market.get("evaluation") == "ABSTAINED":
+        rows.append({"tag": "markdown", "content": "大盘：预测暂不判断（不计入成绩）。"})
+    else:
+        rows.append({"tag": "markdown", "content": "大盘：数据不足无法评价。"})
+    for side_label, key in (("相对看强", "strong_industries"), ("相对看弱", "weak_industries")):
+        items = list(review.get(key) or [])[:3]
+        if not items:
+            continue
+        text_parts = "、".join(
+            f"{i['name']} {i['rr'] * 100:+.2f}pp {'命中' if i.get('evaluation') == 'HIT' else '未命中'}"
+            if i.get("rr") is not None else str(i.get("name")) for i in items)
+        rows.append({"tag": "markdown", "content": f"{side_label}：{text_parts}"})
+    rows.append({"tag": "note", "elements": [{"tag": "plain_text",
+                 "content": "当前预测样本仍少于20个交易日，暂不评价长期有效性。"}]})
+    return rows
+
+
+def _next_outlook_block(brief: dict[str, Any]) -> list[dict[str, Any]]:
+    """§四-三：宏观环境（复用现环境块）+ 下一交易日前瞻。"""
+    rows: list[dict[str, Any]] = [*_macro_environment_block(brief)]
+    payload = dict(brief.get("brief_payload") or brief)
+    outlook = dict(payload.get("next_outlook") or {})
+    if not outlook.get("available"):
+        reason = str(outlook.get("reason") or "")
+        rows.append({"tag": "markdown", "content":
+            f"**下一交易日前瞻**\n下一交易日前瞻暂未生成：{'模型运行失败' if 'MODEL' in reason.upper() or not reason else reason or '未生成'}。"})
+        return rows
+    if outlook.get("calendar_unverified"):
+        rows.append({"tag": "markdown", "content":
+            "**下一交易日前瞻**\n下一交易日尚未完成日历确认，前瞻暂按候选交易日留档，不作为正式预测。"})
+        return rows
+    rows.append({"tag": "markdown", "content": "**下一交易日前瞻**"})
+    if outlook.get("abstained"):
+        rows.append({"tag": "markdown", "content":
+            "大盘：暂不判断（当前证据不足，暂不形成明确方向判断。）"})
+    else:
+        direction = {"STRONGER": "偏强", "RANGE_BOUND": "震荡", "WEAKER": "偏弱"}.get(
+            outlook.get("direction"), outlook.get("direction") or "未生成")
+        summary = _short_text(outlook.get("summary"), limit=110)
+        rows.append({"tag": "markdown", "content": f"大盘方向：**{direction}**\n{summary}"})
+    strong = list(outlook.get("strong_industries") or [])[:3]
+    weak = list(outlook.get("weak_industries") or [])[:3]
+    if strong:
+        rows.append({"tag": "markdown", "content":
+            "相对看强：" + "、".join(str(i.get("name")) for i in strong)})
+    if weak:
+        rows.append({"tag": "markdown", "content":
+            "相对看弱：" + "、".join(str(i.get("name")) for i in weak)})
+    invalidation = list(outlook.get("invalidation") or [])[:1]
+    if invalidation:
+        rows.append({"tag": "note", "elements": [{"tag": "plain_text",
+                     "content": f"失效条件：{_short_text(invalidation[0], limit=90)}"}]})
+    gaps = list(outlook.get("data_gaps") or [])[:3]
+    if gaps:
+        gap_cn = {"OVERSEAS_EQUITY_INDEX_UNAVAILABLE": "海外市场信息未纳入",
+                  "USDCNY_STALE_SINCE_2021_05": "美元兑人民币数据缺失",
+                  "SOCIAL_FINANCING_MISSING": "社融序列缺失",
+                  "SCHEDULE_NO_RELIABLE_SOURCE": "未来事件日程无可靠来源"}
+        rows.append({"tag": "note", "elements": [{"tag": "plain_text",
+                     "content": "数据限制：" + "；".join(gap_cn.get(g, g) for g in gaps)}]})
+    return rows
 
 
 def _macro_environment_block(brief: dict[str, Any]) -> list[dict[str, Any]]:
@@ -386,7 +509,7 @@ def _price_condition_digest_of(brief: dict[str, Any]) -> dict[str, Any]:
     return digest
 
 
-def _price_condition_digest_block(brief: dict[str, Any]) -> list[dict[str, Any]]:
+def _price_condition_digest_block(brief: dict[str, Any], *, max_lines: int = 8) -> list[dict[str, Any]]:
     """老板第一眼：今天盯谁 / 谁要复核 / 谁掉出名单（研究结论，不是交易指令）。"""
     digest = _price_condition_digest_of(brief)
     rows: list[dict[str, Any]] = [
@@ -396,6 +519,7 @@ def _price_condition_digest_block(brief: dict[str, Any]) -> list[dict[str, Any]]
     if not lines:
         rows.append({"tag": "markdown", "content": "今日无价格条件变化。"})
         return rows
+    lines = lines[:max_lines]  # §廿七：卡片最多 max_lines 条，其余留在 narrative/公司页
     for item in lines:
         company = _card_value(item.get("company_name"))
         code = _card_value(item.get("stock_code"))
@@ -430,19 +554,20 @@ def build_daily_brief_card(
     as_of = _card_value(payload.get("research_as_of"))
     elements: list[dict[str, Any]] = [
         {"tag": "markdown", "content": _summary_metrics(payload)},
-        *_macro_environment_block(brief),
-        *_price_condition_digest_block(brief),
-    ]
-    changes = [
+        *_market_review_block(brief),
+        *_forecast_review_block(brief),
+        *_next_outlook_block(brief),
+        {"tag": "hr"},
+        {"tag": "markdown", "content": "**今日投资判断变化**"},
         *_compact_strategy_changes(payload),
         *_compact_investment_changes(payload),
+        # §廿七：价格条件摘要压缩至 ≤3 条并入变化段，不再占据市场复盘位置
+        *_price_condition_digest_block(brief, max_lines=3),
     ]
-    if changes:
-        elements.extend(changes)
     elements.extend([
         {"tag": "hr"},
         {"tag": "markdown", "content": f"**重点研究 · {len(list(payload.get('executive_watchlist') or []))} 家**　*研究结论，不构成买卖建议*"},
-        *_value_observation_table(brief),
+        *_value_observation_table(brief, compact=True),
     ])
     if bitable_url and include_bitable_link:
         elements.extend([

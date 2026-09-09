@@ -1,0 +1,2658 @@
+{
+  "input_bundle_version": "macro-forecast-input-v1.1.0",
+  "time_contract_version": "macro-forecast-time-v1.0.0",
+  "pit_contract_version": "macro-forecast-pit-v1.0.0",
+  "registry_version": "forecast-instrument-registry-v1.0.0",
+  "transmission_matrix_version": "value-macro-sector-v2.1.0",
+  "transmission_matrix_status": "HYPOTHESIS",
+  "kind": "LIVE_FORWARD_INPUTS",
+  "target": {
+    "target_date": "2026-09-09",
+    "previous_date": "2026-09-08",
+    "cutoff_at": "2026-09-09T08:50:00+08:00",
+    "publish_deadline": "2026-09-09T09:10:00+08:00",
+    "calendar_status": "CALENDAR_UNVERIFIED_NEXT_SESSION",
+    "notes": [
+      "日历尚未覆盖目标日；按候选 T 处理，正式计分预测前须复核（§4.3）",
+      "P 为日历内最后已知交易日；日历更新后若出现更近交易日，重新冻结将生成新版本输入包"
+    ]
+  },
+  "data_mode": "FACTS_ONLY",
+  "bars_as_of": "2026-09-07",
+  "market": {
+    "benchmark_code": "000300.SH",
+    "benchmark": {
+      "status": "EXCLUDED_NO_P_BAR",
+      "last_bar_date": "2026-09-07",
+      "expected_p": "2026-09-08",
+      "closings": 520
+    },
+    "reference": {
+      "881002.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881005.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881007.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881008.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881011.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881016.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881019.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881026.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881034.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881044.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881051.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881055.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881062.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881065.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881069.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881071.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881075.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881078.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881082.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881087.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881091.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881094.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881097.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881104.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881106.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881111.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881115.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881116.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881119.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881123.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881127.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881130.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881136.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881139.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881140.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881144.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881151.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881157.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881162.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881167.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881171.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881177.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881180.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881184.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881187.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881190.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881194.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881198.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881200.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881204.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881205.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881206.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881207.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881212.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881215.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881218.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881224.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881227.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881231.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881234.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881241.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881247.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881252.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881256.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881257.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881261.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881262.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881268.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881275.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881282.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881285.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881287.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881288.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881289.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881290.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881291.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881293.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881294.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881303.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881310.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881313.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881319.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881326.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881329.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881333.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881336.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881338.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881344.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881347.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881352.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881355.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881359.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881364.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881369.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881370.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881373.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881376.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881380.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881384.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881386.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881389.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881394.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881395.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881396.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881406.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881407.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881410.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881415.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881416.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881418.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881422.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881427.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881428.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881429.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881432.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881436.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881442.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881446.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881449.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881452.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881459.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881467.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881468.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881470.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881471.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881476.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881478.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      "881479.SH": {
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 51
+      }
+    },
+    "benchmark_ready": false
+  },
+  "industries": {
+    "entries": [
+      {
+        "code": "881002.SH",
+        "name_zh": "煤炭开采",
+        "matrix_key": "煤炭开采",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881005.SH",
+        "name_zh": "焦炭加工",
+        "matrix_key": "焦炭加工",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881007.SH",
+        "name_zh": "油气开采",
+        "matrix_key": "油气开采",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881008.SH",
+        "name_zh": "油服工程",
+        "matrix_key": "油服工程",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881011.SH",
+        "name_zh": "石油化工",
+        "matrix_key": "石油化工",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881016.SH",
+        "name_zh": "日用化工",
+        "matrix_key": "日用化工",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881019.SH",
+        "name_zh": "化纤",
+        "matrix_key": "化纤",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881026.SH",
+        "name_zh": "化学原料",
+        "matrix_key": "化学原料",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881034.SH",
+        "name_zh": "化学制品",
+        "matrix_key": "化学制品",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881044.SH",
+        "name_zh": "塑料",
+        "matrix_key": "塑料",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881051.SH",
+        "name_zh": "橡胶",
+        "matrix_key": "橡胶",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881055.SH",
+        "name_zh": "农用化工",
+        "matrix_key": "农用化工",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881062.SH",
+        "name_zh": "冶钢原料",
+        "matrix_key": "冶钢原料",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881065.SH",
+        "name_zh": "普钢",
+        "matrix_key": "普钢",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881069.SH",
+        "name_zh": "特钢",
+        "matrix_key": "特钢",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881071.SH",
+        "name_zh": "工业金属",
+        "matrix_key": "工业金属",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881075.SH",
+        "name_zh": "贵金属",
+        "matrix_key": "贵金属",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881078.SH",
+        "name_zh": "能源金属",
+        "matrix_key": "能源金属",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881082.SH",
+        "name_zh": "稀有金属",
+        "matrix_key": "稀有金属",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881087.SH",
+        "name_zh": "金属新材料",
+        "matrix_key": "金属新材料",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881091.SH",
+        "name_zh": "水泥",
+        "matrix_key": "水泥",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881094.SH",
+        "name_zh": "玻璃玻纤",
+        "matrix_key": "玻璃玻纤",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881097.SH",
+        "name_zh": "装饰建材",
+        "matrix_key": "装饰建材",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881104.SH",
+        "name_zh": "非金属材料",
+        "matrix_key": "非金属材料",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881106.SH",
+        "name_zh": "种植业",
+        "matrix_key": "种植业",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881111.SH",
+        "name_zh": "养殖业",
+        "matrix_key": "养殖业",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881115.SH",
+        "name_zh": "林业",
+        "matrix_key": "林业",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881116.SH",
+        "name_zh": "渔业",
+        "matrix_key": "渔业",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881119.SH",
+        "name_zh": "饲料",
+        "matrix_key": "饲料",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881123.SH",
+        "name_zh": "农产品加工",
+        "matrix_key": "农产品加工",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881127.SH",
+        "name_zh": "动物保健",
+        "matrix_key": "动物保健",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881130.SH",
+        "name_zh": "酿酒",
+        "matrix_key": "酿酒",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881136.SH",
+        "name_zh": "饮料乳品",
+        "matrix_key": "饮料乳品",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881139.SH",
+        "name_zh": "调味品",
+        "matrix_key": "调味品",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881140.SH",
+        "name_zh": "休闲食品",
+        "matrix_key": "休闲食品",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881144.SH",
+        "name_zh": "食品加工",
+        "matrix_key": "食品加工",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881151.SH",
+        "name_zh": "纺织制造",
+        "matrix_key": "纺织制造",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881157.SH",
+        "name_zh": "服装家纺",
+        "matrix_key": "服装家纺",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881162.SH",
+        "name_zh": "饰品",
+        "matrix_key": "饰品",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881167.SH",
+        "name_zh": "造纸",
+        "matrix_key": "造纸",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881171.SH",
+        "name_zh": "包装印刷",
+        "matrix_key": "包装印刷",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881177.SH",
+        "name_zh": "家居用品",
+        "matrix_key": "家居用品",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881180.SH",
+        "name_zh": "文娱用品",
+        "matrix_key": "文娱用品",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881184.SH",
+        "name_zh": "白色家电",
+        "matrix_key": "白色家电",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881187.SH",
+        "name_zh": "黑色家电",
+        "matrix_key": "黑色家电",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881190.SH",
+        "name_zh": "小家电",
+        "matrix_key": "小家电",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881194.SH",
+        "name_zh": "厨卫电器",
+        "matrix_key": "厨卫电器",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881198.SH",
+        "name_zh": "家电零部件",
+        "matrix_key": "家电零部件",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881200.SH",
+        "name_zh": "一般零售",
+        "matrix_key": "一般零售",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881204.SH",
+        "name_zh": "商业物业经营",
+        "matrix_key": "商业物业经营",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881205.SH",
+        "name_zh": "专业连锁",
+        "matrix_key": "专业连锁",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881206.SH",
+        "name_zh": "贸易",
+        "matrix_key": "贸易",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881207.SH",
+        "name_zh": "电子商务",
+        "matrix_key": "电子商务",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881212.SH",
+        "name_zh": "乘用车",
+        "matrix_key": "乘用车",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881215.SH",
+        "name_zh": "商用车",
+        "matrix_key": "商用车",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881218.SH",
+        "name_zh": "汽车零部件",
+        "matrix_key": "汽车零部件",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881224.SH",
+        "name_zh": "汽车服务",
+        "matrix_key": "汽车服务",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881227.SH",
+        "name_zh": "摩托车及其他",
+        "matrix_key": "摩托车及其他",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881231.SH",
+        "name_zh": "化学制药",
+        "matrix_key": "化学制药",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881234.SH",
+        "name_zh": "生物制品",
+        "matrix_key": "生物制品",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881241.SH",
+        "name_zh": "医疗器械",
+        "matrix_key": "医疗器械",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881247.SH",
+        "name_zh": "医疗服务",
+        "matrix_key": "医疗服务",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881252.SH",
+        "name_zh": "医药商业",
+        "matrix_key": "医药商业",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881256.SH",
+        "name_zh": "中药",
+        "matrix_key": "中药",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881257.SH",
+        "name_zh": "医疗美容",
+        "matrix_key": "医疗美容",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881261.SH",
+        "name_zh": "电机制造",
+        "matrix_key": "电机制造",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881262.SH",
+        "name_zh": "电池",
+        "matrix_key": "电池",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881268.SH",
+        "name_zh": "电网设备",
+        "matrix_key": "电网设备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881275.SH",
+        "name_zh": "光伏设备",
+        "matrix_key": "光伏设备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881282.SH",
+        "name_zh": "风电设备",
+        "matrix_key": "风电设备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881285.SH",
+        "name_zh": "其他发电设备",
+        "matrix_key": "其他发电设备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881287.SH",
+        "name_zh": "地面兵装",
+        "matrix_key": "地面兵装",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881288.SH",
+        "name_zh": "航空装备",
+        "matrix_key": "航空装备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881289.SH",
+        "name_zh": "航天装备",
+        "matrix_key": "航天装备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881290.SH",
+        "name_zh": "航海装备",
+        "matrix_key": "航海装备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881291.SH",
+        "name_zh": "军工电子",
+        "matrix_key": "军工电子",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881293.SH",
+        "name_zh": "轨交设备",
+        "matrix_key": "轨交设备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881294.SH",
+        "name_zh": "通用设备",
+        "matrix_key": "通用设备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881303.SH",
+        "name_zh": "专用设备",
+        "matrix_key": "专用设备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881310.SH",
+        "name_zh": "工程机械",
+        "matrix_key": "工程机械",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881313.SH",
+        "name_zh": "自动化设备",
+        "matrix_key": "自动化设备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881319.SH",
+        "name_zh": "半导体",
+        "matrix_key": "半导体",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881326.SH",
+        "name_zh": "消费电子",
+        "matrix_key": "消费电子",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881329.SH",
+        "name_zh": "光学光电",
+        "matrix_key": "光学光电",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881333.SH",
+        "name_zh": "元器件",
+        "matrix_key": "元器件",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881336.SH",
+        "name_zh": "其他电子",
+        "matrix_key": "其他电子",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881338.SH",
+        "name_zh": "通信设备",
+        "matrix_key": "通信设备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881344.SH",
+        "name_zh": "电信服务",
+        "matrix_key": "电信服务",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881347.SH",
+        "name_zh": "通信工程",
+        "matrix_key": "通信工程",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881352.SH",
+        "name_zh": "IT设备",
+        "matrix_key": "IT设备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881355.SH",
+        "name_zh": "软件服务",
+        "matrix_key": "软件服务",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881359.SH",
+        "name_zh": "云服务",
+        "matrix_key": "云服务",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881364.SH",
+        "name_zh": "产业互联网",
+        "matrix_key": "产业互联网",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881369.SH",
+        "name_zh": "游戏",
+        "matrix_key": "游戏",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881370.SH",
+        "name_zh": "广告营销",
+        "matrix_key": "广告营销",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881373.SH",
+        "name_zh": "影视院线",
+        "matrix_key": "影视院线",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881376.SH",
+        "name_zh": "数字媒体",
+        "matrix_key": "数字媒体",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881380.SH",
+        "name_zh": "出版业",
+        "matrix_key": "出版业",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881384.SH",
+        "name_zh": "广播电视",
+        "matrix_key": "广播电视",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881386.SH",
+        "name_zh": "全国性银行",
+        "matrix_key": "全国性银行",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881389.SH",
+        "name_zh": "地方性银行",
+        "matrix_key": "地方性银行",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881394.SH",
+        "name_zh": "证券",
+        "matrix_key": "证券",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881395.SH",
+        "name_zh": "保险",
+        "matrix_key": "保险",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881396.SH",
+        "name_zh": "多元金融",
+        "matrix_key": "多元金融",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881406.SH",
+        "name_zh": "房屋建设",
+        "matrix_key": "房屋建设",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881407.SH",
+        "name_zh": "基础建设",
+        "matrix_key": "基础建设",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881410.SH",
+        "name_zh": "专业工程",
+        "matrix_key": "专业工程",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881415.SH",
+        "name_zh": "工程咨询服务",
+        "matrix_key": "工程咨询服务",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881416.SH",
+        "name_zh": "装修装饰",
+        "matrix_key": "装修装饰",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881418.SH",
+        "name_zh": "房地产开发",
+        "matrix_key": "房地产开发",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881422.SH",
+        "name_zh": "房产服务",
+        "matrix_key": "房产服务",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881427.SH",
+        "name_zh": "体育",
+        "matrix_key": "体育",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881428.SH",
+        "name_zh": "教育培训",
+        "matrix_key": "教育培训",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881429.SH",
+        "name_zh": "酒店餐饮",
+        "matrix_key": "酒店餐饮",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881432.SH",
+        "name_zh": "旅游",
+        "matrix_key": "旅游",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881436.SH",
+        "name_zh": "专业服务",
+        "matrix_key": "专业服务",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881442.SH",
+        "name_zh": "公路铁路",
+        "matrix_key": "公路铁路",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881446.SH",
+        "name_zh": "航空机场",
+        "matrix_key": "航空机场",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881449.SH",
+        "name_zh": "航运港口",
+        "matrix_key": "航运港口",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881452.SH",
+        "name_zh": "物流",
+        "matrix_key": "物流",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881459.SH",
+        "name_zh": "电力",
+        "matrix_key": "电力",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881467.SH",
+        "name_zh": "燃气",
+        "matrix_key": "燃气",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881468.SH",
+        "name_zh": "水务",
+        "matrix_key": "水务",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881470.SH",
+        "name_zh": "环保设备",
+        "matrix_key": "环保设备",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881471.SH",
+        "name_zh": "环境治理",
+        "matrix_key": "环境治理",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881476.SH",
+        "name_zh": "环境监测",
+        "matrix_key": "环境监测",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881478.SH",
+        "name_zh": "综合类",
+        "matrix_key": "综合类",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 261
+      },
+      {
+        "code": "881479.SH",
+        "name_zh": "电子化学品",
+        "matrix_key": "电子化学品",
+        "matrix_linked": true,
+        "status": "EXCLUDED_NO_P_BAR",
+        "last_bar_date": "2026-09-07",
+        "expected_p": "2026-09-08",
+        "closings": 51
+      }
+    ],
+    "ready_count": 0,
+    "total": 128,
+    "matrix_version": "value-macro-sector-v2.1.0",
+    "matrix_status": "HYPOTHESIS",
+    "benchmark_for_excess": "000300.SH"
+  },
+  "macro_facts": [
+    {
+      "series_id": "a_share_breadth_20d",
+      "observation_date": "2026-08-19",
+      "value": 78.74614966479434,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T03:41:39.324411+00:00",
+      "revision_id": "72433a058e4df70b",
+      "source": "TongDaXin market-history cache",
+      "comparison_value": 86.9541583620221,
+      "comparison_period": "2026-08-18",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "DOWN",
+      "delta": -8.2080086972,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "cpi_yoy",
+      "observation_date": "2026-07-01",
+      "value": 0.5,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "0a6770dbe726db65",
+      "source": "国家统计局",
+      "comparison_value": 1.0,
+      "comparison_period": "2026-06-01",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "DOWN",
+      "delta": -0.5,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "csi_all_share_risk_appetite",
+      "observation_date": "2026-08-19",
+      "value": 16.568483063328433,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T03:41:39.324411+00:00",
+      "revision_id": "700d4c266cef50a9",
+      "source": "TongDaXin market-history cache",
+      "comparison_value": 16.93313953488371,
+      "comparison_period": "2026-08-18",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "DOWN",
+      "delta": -0.3646564716,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "exports_yoy",
+      "observation_date": "2025-08-07",
+      "value": 7.2,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "07ba0f00903ea2e0",
+      "source": "海关总署",
+      "comparison_value": 5.8,
+      "comparison_period": "2025-07-14",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "UP",
+      "delta": 1.4,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "fixed_asset_investment_yoy",
+      "observation_date": "2026-07-01",
+      "value": -14.19,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "06c01dc064c7a489",
+      "source": "国家统计局",
+      "comparison_value": -15.6,
+      "comparison_period": "2026-06-01",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "UP",
+      "delta": 1.41,
+      "negative_base_guard": true
+    },
+    {
+      "series_id": "gdp_yoy",
+      "observation_date": "2026-03-01",
+      "value": 5.0,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "9f61b3731ed1d060",
+      "source": "国家统计局",
+      "comparison_value": 5.4,
+      "comparison_period": "2025-03-01",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "DOWN",
+      "delta": -0.4,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "industrial_output_yoy",
+      "observation_date": "2026-07-01",
+      "value": 4.5,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "57a89e89a62d5633",
+      "source": "国家统计局",
+      "comparison_value": 5.3,
+      "comparison_period": "2026-06-01",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "DOWN",
+      "delta": -0.8,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "lpr_1y",
+      "observation_date": "2026-08-20",
+      "value": 3.0,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T03:40:47.230256+00:00",
+      "revision_id": "e0f2a8e69181ee82",
+      "source": "全国银行间同业拆借中心",
+      "comparison_value": 3.0,
+      "comparison_period": "2026-07-20",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "FLAT",
+      "delta": 0.0,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "lpr_5y",
+      "observation_date": "2026-08-20",
+      "value": 3.5,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T03:40:47.230256+00:00",
+      "revision_id": "3406039f713147bb",
+      "source": "全国银行间同业拆借中心",
+      "comparison_value": 3.5,
+      "comparison_period": "2026-07-20",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "FLAT",
+      "delta": 0.0,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "m1_yoy",
+      "observation_date": "2026-07-01",
+      "value": 4.0,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "b210d2a4665b6c26",
+      "source": "中国人民银行",
+      "comparison_value": 4.0,
+      "comparison_period": "2026-06-01",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "FLAT",
+      "delta": 0.0,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "m2_yoy",
+      "observation_date": "2026-07-01",
+      "value": 7.7,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "f97c7ce1194a6aad",
+      "source": "中国人民银行",
+      "comparison_value": 8.0,
+      "comparison_period": "2026-06-01",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "DOWN",
+      "delta": -0.3,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "new_rmb_loans_yoy",
+      "observation_date": "2026-07-01",
+      "value": -37.24394786,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "bb20fc9d5d26f8be",
+      "source": "中国人民银行",
+      "comparison_value": -25.21186441,
+      "comparison_period": "2026-06-01",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "DOWN",
+      "delta": -12.03208345,
+      "negative_base_guard": true
+    },
+    {
+      "series_id": "pmi_manufacturing",
+      "observation_date": "2026-08-01",
+      "value": 49.8,
+      "unit": "index",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "b4fd377adaa5e7be",
+      "source": "国家统计局",
+      "comparison_value": 49.2,
+      "comparison_period": "2026-07-01",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "UP",
+      "delta": 0.6,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "ppi_yoy",
+      "observation_date": "2026-07-01",
+      "value": 3.5,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "369460e3289f3f68",
+      "source": "国家统计局",
+      "comparison_value": 4.1,
+      "comparison_period": "2026-06-01",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "DOWN",
+      "delta": -0.6,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "retail_sales_yoy",
+      "observation_date": "2026-07-01",
+      "value": 0.6,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "bee74acbe4f4d0b0",
+      "source": "国家统计局",
+      "comparison_value": 1.0,
+      "comparison_period": "2026-06-01",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "DOWN",
+      "delta": -0.4,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "shibor_3m",
+      "observation_date": "2026-09-08",
+      "value": 1.43,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "18506a7e2cb39395",
+      "source": "全国银行间同业拆借中心",
+      "comparison_value": 1.43,
+      "comparison_period": "2026-09-07",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "FLAT",
+      "delta": 0.0,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "shibor_overnight",
+      "observation_date": "2026-09-08",
+      "value": 1.371,
+      "unit": "%",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T23:59:59+08:00",
+      "revision_id": "ad226201b10e9515",
+      "source": "全国银行间同业拆借中心",
+      "comparison_value": 1.372,
+      "comparison_period": "2026-09-07",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "DOWN",
+      "delta": -0.001,
+      "negative_base_guard": false
+    },
+    {
+      "series_id": "usd_cny",
+      "observation_date": "2021-05-13",
+      "value": 6.4612,
+      "unit": "CNY/USD",
+      "pit_status": "CONSERVATIVE_UPPER_BOUND",
+      "visible_at": "2026-09-08T03:40:47.230256+00:00",
+      "revision_id": "e908a52b42925beb",
+      "source": "中国人民银行",
+      "comparison_value": 6.4258,
+      "comparison_period": "2021-05-12",
+      "comparison_basis": "同序列上一可见观测（同单位）",
+      "direction": "UP",
+      "delta": 0.0354,
+      "negative_base_guard": false
+    }
+  ],
+  "macro_coverage": {
+    "groups_with_usable_fact": [
+      "credit_liquidity",
+      "fx",
+      "growth",
+      "market_internal",
+      "prices"
+    ],
+    "direction_groups_covered": [
+      "credit_liquidity",
+      "growth",
+      "prices"
+    ],
+    "direction_groups_required": 2,
+    "direction_input_ok": true
+  },
+  "macro_series_catalog": [
+    {
+      "series_id": "gdp_yoy",
+      "name_zh": "GDP 同比",
+      "group": "growth",
+      "frequency": "quarterly",
+      "unit": "%"
+    },
+    {
+      "series_id": "industrial_output_yoy",
+      "name_zh": "工业增加值同比",
+      "group": "growth",
+      "frequency": "monthly",
+      "unit": "%"
+    },
+    {
+      "series_id": "retail_sales_yoy",
+      "name_zh": "社会消费品零售同比",
+      "group": "growth",
+      "frequency": "monthly",
+      "unit": "%"
+    },
+    {
+      "series_id": "exports_yoy",
+      "name_zh": "出口同比",
+      "group": "growth",
+      "frequency": "monthly",
+      "unit": "%"
+    },
+    {
+      "series_id": "fixed_asset_investment_yoy",
+      "name_zh": "固定资产投资同比",
+      "group": "growth",
+      "frequency": "monthly",
+      "unit": "%"
+    },
+    {
+      "series_id": "pmi_manufacturing",
+      "name_zh": "制造业 PMI",
+      "group": "growth",
+      "frequency": "monthly",
+      "unit": "指数"
+    },
+    {
+      "series_id": "cpi_yoy",
+      "name_zh": "CPI 同比",
+      "group": "prices",
+      "frequency": "monthly",
+      "unit": "%"
+    },
+    {
+      "series_id": "ppi_yoy",
+      "name_zh": "PPI 同比",
+      "group": "prices",
+      "frequency": "monthly",
+      "unit": "%"
+    },
+    {
+      "series_id": "m1_yoy",
+      "name_zh": "M1 同比",
+      "group": "credit_liquidity",
+      "frequency": "monthly",
+      "unit": "%"
+    },
+    {
+      "series_id": "m2_yoy",
+      "name_zh": "M2 同比",
+      "group": "credit_liquidity",
+      "frequency": "monthly",
+      "unit": "%"
+    },
+    {
+      "series_id": "new_rmb_loans_yoy",
+      "name_zh": "新增人民币贷款同比",
+      "group": "credit_liquidity",
+      "frequency": "monthly",
+      "unit": "%"
+    },
+    {
+      "series_id": "lpr_1y",
+      "name_zh": "1年期 LPR",
+      "group": "credit_liquidity",
+      "frequency": "monthly",
+      "unit": "%"
+    },
+    {
+      "series_id": "lpr_5y",
+      "name_zh": "5年期以上 LPR",
+      "group": "credit_liquidity",
+      "frequency": "monthly",
+      "unit": "%"
+    },
+    {
+      "series_id": "shibor_3m",
+      "name_zh": "SHIBOR 3个月",
+      "group": "credit_liquidity",
+      "frequency": "daily",
+      "unit": "%"
+    },
+    {
+      "series_id": "shibor_overnight",
+      "name_zh": "SHIBOR 隔夜",
+      "group": "credit_liquidity",
+      "frequency": "daily",
+      "unit": "%"
+    },
+    {
+      "series_id": "usd_cny",
+      "name_zh": "美元兑人民币",
+      "group": "fx",
+      "frequency": "daily",
+      "unit": "元"
+    },
+    {
+      "series_id": "a_share_breadth_20d",
+      "name_zh": "A股 20日宽度",
+      "group": "market_internal",
+      "frequency": "daily",
+      "unit": "比值"
+    },
+    {
+      "series_id": "csi_all_share_risk_appetite",
+      "name_zh": "中证全指风险偏好",
+      "group": "market_internal",
+      "frequency": "daily",
+      "unit": "指数"
+    },
+    {
+      "series_id": "social_financing_increment",
+      "name_zh": "社融增量",
+      "group": "credit_liquidity",
+      "frequency": "monthly",
+      "unit": "亿元",
+      "note": "本地 0 条，序列缺失（缺口）"
+    }
+  ],
+  "cross_market_context": {
+    "status": "PARTIAL",
+    "entries_ready": 4,
+    "entries_total": 6,
+    "us_rates": {
+      "treasury_2y": {
+        "value": 4.37,
+        "observed_at": "2026-09-04",
+        "unit": "percent",
+        "frequency": "DAILY",
+        "source_id": "treasury.gov.yield_curve",
+        "source_tier": "OFFICIAL_GOVT",
+        "actual_source_used": "treasury.gov.yield_curve",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "pit_status": "CONSERVATIVE_UPPER_BOUND",
+        "freshness": "READY",
+        "changes": {
+          "chg_1d": 0.03,
+          "chg_5d": 0.03
+        }
+      },
+      "treasury_10y": {
+        "value": 4.78,
+        "observed_at": "2026-09-04",
+        "unit": "percent",
+        "frequency": "DAILY",
+        "source_id": "treasury.gov.yield_curve",
+        "source_tier": "OFFICIAL_GOVT",
+        "actual_source_used": "treasury.gov.yield_curve",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "pit_status": "CONSERVATIVE_UPPER_BOUND",
+        "freshness": "READY",
+        "changes": {
+          "chg_1d": 0.01,
+          "chg_5d": 0.05
+        }
+      },
+      "curve_10y_2y": {
+        "value": 0.41,
+        "observed_at": "2026-09-04",
+        "unit": "percentage_points",
+        "frequency": "DAILY",
+        "source_id": "derived",
+        "source_tier": "DERIVED",
+        "actual_source_used": "treasury.gov.yield_curve+treasury.gov.yield_curve",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "pit_status": "DERIVED_FROM_VISIBLE",
+        "freshness": "READY",
+        "changes": {
+          "chg_1d": -0.02,
+          "chg_5d": 0.02
+        }
+      }
+    },
+    "fx": {
+      "usd_cny_official_mid": {
+        "value": 6.7804,
+        "observed_at": "2026-09-08",
+        "unit": "CNY_per_USD",
+        "frequency": "DAILY",
+        "source_id": "chinamoney.usdcny_mid",
+        "source_tier": "OFFICIAL_BENCHMARK",
+        "actual_source_used": "chinamoney.usdcny_mid",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "pit_status": "STRICT_PIT",
+        "freshness": "READY",
+        "changes": {
+          "chg_1d_pct": 0.000133,
+          "chg_5d_pct": -7.4e-05
+        }
+      }
+    },
+    "commodities": {
+      "wti_spot": {
+        "value": null,
+        "observed_at": null,
+        "unit": "USD_per_barrel",
+        "frequency": "DAILY",
+        "source_id": "fred.dcoilwtico",
+        "source_tier": "OFFICIAL_PUBLIC",
+        "actual_source_used": "fred.dcoilwtico",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "pit_status": null,
+        "freshness": "MISSING",
+        "changes": {}
+      },
+      "copper_monthly": {
+        "value": null,
+        "observed_at": null,
+        "unit": "USD_per_metric_ton",
+        "frequency": "MONTHLY",
+        "source_id": "fred.pcoppusdm",
+        "source_tier": "OFFICIAL_PUBLIC",
+        "actual_source_used": "fred.pcoppusdm",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "pit_status": null,
+        "freshness": "MISSING",
+        "changes": {}
+      }
+    }
+  },
+  "schedule": {
+    "status": "NO_RELIABLE_SOURCE",
+    "entries": [],
+    "note": "无官方发布日程来源；不输出精确时刻，待接入可信日程源后按 §6.2 例外类型登记"
+  },
+  "gaps": [
+    "BENCHMARK_P_CLOSE_NOT_READY",
+    "OVERSEAS_EQUITY_INDEX_UNAVAILABLE",
+    "P_DAY_CLOSE_PENDING",
+    "SCHEDULE_NO_RELIABLE_SOURCE",
+    "SOCIAL_FINANCING_MISSING"
+  ],
+  "evaluation": {
+    "neutral_band": 0.003,
+    "relative_band": 0.002,
+    "band_basis": "本版固定评价区间（主规格 §7.1/§7.3），配置变更只对未来生效"
+  },
+  "fingerprint": "mfi_2364ecfd1f3f83f8250cfc5f3b495190e0b763b6"
+}

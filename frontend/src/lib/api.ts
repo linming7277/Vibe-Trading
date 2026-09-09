@@ -127,7 +127,8 @@ export interface Level3Leader {
   stock_code: string;
   stock_name: string;
   leader_rank: number;
-  leader_score: number;
+  leader_score: number | null;
+  quality_status?: "READY" | "UNKNOWN";
   leader_formula_version: string;
   component_scores: Record<string, number | null>;
   coverage: number;
