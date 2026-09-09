@@ -83,9 +83,14 @@ def _load_st_codes(tdx_conn: sqlite3.Connection) -> set[str]:
     return codes
 
 
-def scan_limit_ups(as_of: str, *, tdx_home: Path | str | None = None,
-                   tdx_db_path: Path | str | None = None) -> list[dict[str, Any]]:
-    """只读扫描 P 日涨停（本机 .day 全市场日 K + 成交额中位数门槛）。"""
+def day_tail_universe(as_of: str, *, tdx_home: Path | str | None = None,
+                      tdx_db_path: Path | str | None = None,
+                      count: int = 2) -> dict[str, list[dict[str, Any]]]:
+    """涨停/宽度共用的全市场有效样本：P 日有 bar 的沪深非北交非 ST 股票。
+
+    返回 {code: 尾部 bars}（bars 含 P 日共 count 根）。排除：.BJ/4-8 前缀
+    （北交所/三板）、名称含 ST/*ST、P 日零成交（停牌/零量）。
+    """
     from src.tdx_data.day_file import default_tdx_home, read_lday_tail
 
     home = Path(tdx_home) if tdx_home else default_tdx_home()
@@ -104,7 +109,7 @@ def scan_limit_ups(as_of: str, *, tdx_home: Path | str | None = None,
         st_codes = set()
 
     target_day = _dash(as_of)
-    tail_by_code: dict[str, list[dict[str, Any]]] = {}
+    universe: dict[str, list[dict[str, Any]]] = {}
     for exchange in ("sh", "sz"):
         directory = home / "vipdoc" / exchange / "lday"
         try:
@@ -113,9 +118,21 @@ def scan_limit_ups(as_of: str, *, tdx_home: Path | str | None = None,
             paths = []
         for path in paths:
             code = f"{path.stem[2:]}.{exchange.upper()}"
-            bars = read_lday_tail(path, count=2)
-            if len(bars) >= 2 and bars[-1]["date"] == target_day:
-                tail_by_code[code] = bars
+            if code.endswith(_BJ_SUFFIX) or code[:1] in {"4", "8"}:
+                continue  # 北交所/三板未计入
+            if code in st_codes:
+                continue  # 名称含 ST/*ST 未计入
+            bars = read_lday_tail(path, count=count)
+            if len(bars) >= 2 and bars[-1]["date"] == target_day and bars[-1]["volume"] > 0:
+                universe[code] = bars
+    return universe
+
+
+def scan_limit_ups(as_of: str, *, tdx_home: Path | str | None = None,
+                   tdx_db_path: Path | str | None = None) -> list[dict[str, Any]]:
+    """只读扫描 P 日涨停（本机 .day 全市场日 K + 成交额中位数门槛）。"""
+    tail_by_code = day_tail_universe(as_of, tdx_home=tdx_home, tdx_db_path=tdx_db_path,
+                                     count=2)
     if not tail_by_code:
         return []
 
@@ -128,17 +145,13 @@ def scan_limit_ups(as_of: str, *, tdx_home: Path | str | None = None,
 
     hits: list[dict[str, Any]] = []
     for code, bars in sorted(tail_by_code.items()):
-        if code.endswith(_BJ_SUFFIX) or code[:1] in {"4", "8"}:
-            continue  # 北交所/三板未计入（含错位落盘的防御排除）
-        if code in st_codes:
-            continue  # 名称含 ST/*ST 未计入
         prev_bar, today_bar = bars[-2], bars[-1]
         prev_close, close = float(prev_bar["close"]), float(today_bar["close"])
         amount = float(today_bar["amount"])
         if prev_close <= 0:
             continue  # 无前收
         if amount <= 0 or amount < threshold:
-            continue  # 停牌/零成交/低于额门槛
+            continue  # 低于额门槛
         limit_price = prev_close * (1 + _limit_up_rate(code))
         if close >= limit_price * _LIMIT_UP_PRICE_TOLERANCE:
             hits.append({

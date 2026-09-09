@@ -184,6 +184,61 @@ def load_breadth_from_bars(as_of: str, day_p: str, day_prev: str) -> dict[str, A
     }
 
 
+def count_20d_new_highs(as_of: str, *, tdx_home: Path | str | None = None,
+                        tdx_db_path: Path | str | None = None) -> int | None:
+    """P 日收盘创过去 20 个交易日收盘新高的家数（与涨停扫描同一宇宙）。
+
+    宇宙为空（无 .day/无 P 日数据）→ None（数据不足）；个别股票不足
+    21 根不计入，不编数。
+    """
+    try:
+        from src.value_strategy.market_events import day_tail_universe
+
+        universe = day_tail_universe(as_of, tdx_home=tdx_home, tdx_db_path=tdx_db_path,
+                                     count=21)
+    except Exception:  # noqa: BLE001
+        return None
+    if not universe:
+        return None
+    count = 0
+    for bars in universe.values():
+        closes = [float(bar["close"]) for bar in bars]
+        if len(closes) < 21:
+            continue
+        if closes[-1] >= max(closes[:-1]):
+            count += 1
+    return count
+
+
+def count_limit_up_events(as_of: str, *, research_db_path: Path | str | None = None,
+                          tdx_home: Path | str | None = None,
+                          tdx_db_path: Path | str | None = None) -> int | None:
+    """当日 LIMIT_UP 事件条数（事件表优先）；表缺失/当日 0 条 → 现场用
+    同一套涨停函数计数，绝不另写第二套涨停定义。都失败 → None。"""
+    count: int | None = None
+    try:
+        from src.value_strategy.event_store import ValueStrategyEventRepository
+
+        repository = ValueStrategyEventRepository(
+            Path(research_db_path) if research_db_path else None)
+        try:
+            count = len(repository.list_events(
+                market="CN", event_type="LIMIT_UP",
+                research_as_of=as_of, limit=500))
+        finally:
+            repository.close()
+    except Exception:  # noqa: BLE001
+        count = None
+    if count:
+        return count
+    try:
+        from src.value_strategy.market_events import scan_limit_ups
+
+        return len(scan_limit_ups(as_of, tdx_home=tdx_home, tdx_db_path=tdx_db_path))
+    except Exception:  # noqa: BLE001
+        return count if count is not None else None
+
+
 def _tape(bars: list[dict[str, Any]], forecast: dict[str, Any] | None) -> dict[str, Any]:
     if len(bars) < 21 or not bars[-1].get("close"):
         return {
@@ -251,8 +306,12 @@ def _flow(bars: list[dict[str, Any]], breadth: dict[str, int] | None) -> dict[st
     else:
         missing.insert(0, "成交额")
 
+    volume_ratio: float | None = None
+    amounts_all = [float(b["amount"]) for b in bars if b.get("amount")]
+    if len(amounts_all) >= 21 and amounts_all[-1] > 0:
+        volume_ratio = round(amounts_all[-1] / (sum(amounts_all[-21:-1]) / 20), 4)
     if breadth_edge is None and volume_class is None:
-        return {"status": "资料不足", "basis": "", "missing": missing}
+        return {"status": "资料不足", "basis": "", "missing": missing, "volume_ratio": volume_ratio}
     if volume_class is None:
         # 只有宽度没有量：明显一边偏轮动，均衡则方向不明
         status = "板块轮动" if breadth_edge in {"up", "down"} else "方向不明"
@@ -267,7 +326,7 @@ def _flow(bars: list[dict[str, Any]], breadth: dict[str, int] | None) -> dict[st
     else:
         status = "板块轮动"
     basis = "，".join(signals)
-    return {"status": status, "basis": basis, "missing": missing}
+    return {"status": status, "basis": basis, "missing": missing, "volume_ratio": volume_ratio}
 
 
 _SW1_MIN_USABLE = 20  # 30 个申万一级里可用（末根==P日）少于该数 → 整段资料不足
@@ -332,7 +391,12 @@ def _assert_boss_safe(text: str) -> str:
 def build_next_session_outlook(as_of: str, *, index_bars: list[dict[str, Any]] | None = None,
                                forecast: dict[str, Any] | None = None,
                                breadth: dict[str, int] | None = None,
-                               sw1_bars: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+                               sw1_bars: dict[str, dict[str, Any]] | None = None,
+                               new_highs: int | None = None,
+                               limit_up_count: int | None = None,
+                               tdx_home: Path | str | None = None,
+                               tdx_db_path: Path | str | None = None,
+                               research_db_path: Path | str | None = None) -> dict[str, Any]:
     """四段式下一交易日前瞻（只读）。缺数降级，绝不进入任何筛选链。"""
     bars = index_bars if index_bars is not None else load_index_bars(as_of)
     forecast = forecast if forecast is not None else load_forecast(as_of)
@@ -346,6 +410,18 @@ def build_next_session_outlook(as_of: str, *, index_bars: list[dict[str, Any]] |
     flow = _flow(bars, breadth)
     benchmark_r5 = tape.get("r5")
     sectors = _sectors(bars, benchmark_r5, sw1_bars)
+    # 宽度一句（P2，2026-09-09）：20日新高家数 + 当日涨停家数，紧跟【资金】行后。
+    # N 与涨停共用同一套宇宙/口径（day_tail_universe）；缺数写「数据不足」。
+    if new_highs is None or limit_up_count is None:
+        from src.investment_research_supervisor.next_session_outlook import (
+            count_20d_new_highs as _cnh, count_limit_up_events as _clu,
+        )
+
+        if new_highs is None:
+            new_highs = _cnh(as_of, tdx_home=tdx_home, tdx_db_path=tdx_db_path)
+        if limit_up_count is None:
+            limit_up_count = _clu(as_of, research_db_path=research_db_path,
+                                  tdx_home=tdx_home, tdx_db_path=tdx_db_path)
 
     if tape["direction"] == "资料不足":
         tape_line = "【走势】资料不足。"
@@ -356,9 +432,18 @@ def build_next_session_outlook(as_of: str, *, index_bars: list[dict[str, Any]] |
         flow_line = "【资金】资料不足。"
     else:
         flow_line = f"【资金】{flow['status']}——{flow['basis']}。"
+    breadth_parts = [
+        f"20日新高 {new_highs} 家" if new_highs is not None else "20日新高 数据不足",
+        f"涨停 {limit_up_count} 家" if limit_up_count is not None else "涨停 数据不足",
+        f"成交 {flow['volume_ratio']:.2f}x" if flow.get("volume_ratio") is not None else "成交 数据不足",
+        flow["status"] if flow["status"] != "资料不足" else "数据不足",
+    ]
+    shadow_prefix = "SHADOW｜" if tape["shadow"] else ""
+    breadth_line = f"{shadow_prefix}{'，'.join(breadth_parts)}"
     text = "\n".join([
         _assert_boss_safe(tape_line),
         _assert_boss_safe(flow_line),
+        _assert_boss_safe(breadth_line),
         _assert_boss_safe(_sector_line(sectors)),
         "以上不改今天 Focus 名单。",
     ])
@@ -368,6 +453,8 @@ def build_next_session_outlook(as_of: str, *, index_bars: list[dict[str, Any]] |
         "shadow": tape["shadow"],
         "confidence": tape["confidence"],
         "tape": tape, "flow": flow, "sectors": sectors,
+        "breadth_new_highs": new_highs, "breadth_limit_ups": limit_up_count,
+        "breadth_line": breadth_line,
         "text": text,
         "missing": sorted(set(flow.get("missing") or []) | set(sectors.get("missing") or [])),
         "debug": {
