@@ -38,8 +38,8 @@ export const PRIMARY_NAVIGATION: PrimaryNavigationItem[] = [
     matches: ["/value", "/company"],
     secondary: [
       { to: "/value/leaders", label: "行业龙头", matches: ["/value/leaders", "/value/methodology"] },
-      { to: "/value", label: "低估龙头池", matches: ["=/value", "/value/focus", "/value/plans"] },
-      { to: "/value/opportunities", label: "机会与风险", matches: ["/value/opportunities", "/value/valuation", "/value/timing"] },
+      { to: "/value/focus", label: "低估龙头池", matches: ["/value/focus", "/value/plans"] },
+      { to: "/value/opportunities", label: "机会与风险", matches: ["=/value", "/value/opportunities", "/value/valuation", "/value/timing"] },
     ],
   },
   {

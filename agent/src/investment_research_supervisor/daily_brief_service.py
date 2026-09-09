@@ -23,8 +23,10 @@ from .daily_brief_store import InvestmentResearchDailyBriefRepository
 FORMULA_VERSION = "daily-brief-v28"
 # v26: 新增「今日价格条件」摘要节（price_condition_digest）——把有效价格条件、
 # 落点句与主动作投成老板一行可读的例外清单；纯投影，不改变任何研究计算。
-# v27: 落点句枚举 5→6 种（新增「现价未落入关注/观察/复核带」，不再把带上方
-# 误写成「带不完整」）——纯文案枚举变更，无纳入/排序/截断规则变化。
+# 落点文案（2026-09-09 产品约定）：只准用六句正典
+# （未落入（偏贵）/高估复核区/中性/低估关注区/低于低估关注区/资料不足），
+# 统一由价格区服务 price_position_label 产出；低于低估关注区下沿
+# 不得写成「未落入」。实现为纯文案切换，无纳入/排序/截断规则变化。
 _TRADING_TERMS = ("买入", "卖出", "推荐", "止盈", "止损", "仓位", "加仓", "减仓", "建议买入", "下单")
 _PRICE_DIGEST_DISCLAIMER = "研究结论，不是交易指令。只列出今天值得盯或需要复核的公司。"
 _PRICE_DIGEST_MAX_LINES = 8
@@ -40,54 +42,16 @@ _PRICE_DIGEST_DEMOTED_TO = {"WATCH", "WAIT"}
 def _price_position_sentence(
     current_price: Any,
     *,
-    confluence_zones: list[dict[str, Any]] | None = None,
-    support_zones: list[dict[str, Any]] | None = None,
-    review_zones: list[dict[str, Any]] | None = None,
-    fair_value_low: Any = None,
-    fair_value_high: Any = None,
+    valuation_zones: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Exactly six fixed position sentences (same list/priority as the
-    company page card).  "未落入" is honest when bands exist but the price
-    sits outside them — only a missing price or no evaluable band at all
-    may say "带不完整".
+    """老板可见落点：只准用价格区服务的六句正典（§产品约定 2026-09-09）。
+
+    旧的结构带句子（落在关注/观察/复核带内、未落入关注/观察/复核带）
+    已退役；低于低估关注区下沿必须写「低于低估关注区」。
     """
-    try:
-        price = float(current_price)
-    except (TypeError, ValueError):
-        return "带不完整，无法判断落点"
+    from src.value_price_zones.service import price_position_label
 
-    def in_zone(zone: dict[str, Any]) -> bool:
-        low, high = zone.get("low"), zone.get("high")
-        if low is None and high is None:
-            return False
-        if low is None:
-            return price <= float(high)
-        if high is None:
-            return price >= float(low)
-        return float(low) <= price <= float(high)
-
-    def at_or_above(zone: dict[str, Any]) -> bool:
-        low = zone.get("low")
-        return low is not None and price >= float(low)
-
-    def has_bound(zones: list[dict[str, Any]] | None) -> bool:
-        return any(zone.get("low") is not None or zone.get("high") is not None for zone in (zones or [])[:2])
-
-    if any(in_zone(zone) for zone in (confluence_zones or [])[:2]):
-        return "现价落在关注带内"
-    if any(in_zone(zone) for zone in (support_zones or [])[:2]):
-        return "现价落在观察带内"
-    if any(at_or_above(zone) for zone in (review_zones or [])[:2]):
-        return "现价落在复核带内"
-    if fair_value_low is not None:
-        try:
-            if price < float(fair_value_low):
-                return "现价低于合理价值带下限"
-        except (TypeError, ValueError):
-            pass
-    if has_bound(confluence_zones) or has_bound(support_zones) or has_bound(review_zones):
-        return "现价未落入关注/观察/复核带"
-    return "带不完整，无法判断落点"
+    return price_position_label(current_price, valuation_zones)
 
 
 def _format_price(value: Any) -> str:
@@ -1116,14 +1080,9 @@ class InvestmentResearchDailyBriefService:
             # 事件驱动入选的行不在日报 watchlist 里，现价从同一次价格带读取补齐。
             if item.get("current_price") is None:
                 item["current_price"] = zones.get("current_price")
-            valuation = dict(zones.get("valuation") or {})
             position = _price_position_sentence(
                 item.get("current_price"),
-                confluence_zones=list(zones.get("confluence_zones") or []),
-                support_zones=list(zones.get("support_zones") or []),
-                review_zones=list(zones.get("upper_review_zones") or []),
-                fair_value_low=valuation.get("fair_value_low"),
-                fair_value_high=valuation.get("fair_value_high"),
+                valuation_zones=list(zones.get("valuation_zones") or []),
             )
             scope_text = "不在范围内" if item["eligibility_status"] == "OUTSIDE_VALUE_SCOPE" else "在范围内"
             price_text = _format_price(item.get("current_price"))

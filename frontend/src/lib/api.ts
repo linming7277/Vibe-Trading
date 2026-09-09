@@ -884,6 +884,8 @@ export interface ValuePriceValuationMethod {
 }
 export interface ValuePriceZones {
   stock_code: string; as_of: string | null; current_price: number | null; formula_version: string;
+  /** 后端正典六句落点（2026-09-09 约定）；旧后端可能缺省，缺省时前端降级旧逻辑。 */
+  position_label?: string;
   valuation: { status: string; fair_value_low: number | null; fair_value_mid: number | null; fair_value_high: number | null; methods: ValuePriceValuationMethod[]; message: string; limitations: string[] };
   valuation_zones: ValuePriceZone[]; support_zones: ValuePriceZone[]; resistance_zones: ValuePriceZone[];
   confluence_zones: Array<ValuePriceZone & { valuation_status: string; support_strength?: string }>;

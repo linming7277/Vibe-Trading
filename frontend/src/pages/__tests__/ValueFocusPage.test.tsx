@@ -48,6 +48,9 @@ describe("ValueFocusPage", () => {
     expect(screen.getByRole("heading", { name: "今日变化" })).toBeInTheDocument();
     expect(screen.getByText("新增 1")).toBeInTheDocument();
     expect(screen.getByText("退出 1")).toBeInTheDocument();
+    // The change list is collapsed by default; expand it before reading events.
+    expect(screen.queryByText("🟠 新进入低估区域")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /今日变化/ }));
     expect(screen.getByText("🟠 新进入低估区域")).toBeInTheDocument();
     expect(screen.getByText("🔵 退出低估区域")).toBeInTheDocument();
     expect(screen.getByText("深度低估")).toBeInTheDocument();

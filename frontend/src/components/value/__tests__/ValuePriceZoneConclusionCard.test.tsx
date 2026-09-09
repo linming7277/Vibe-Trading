@@ -59,6 +59,42 @@ function makeZones(overrides: Partial<ValuePriceZones> = {}): ValuePriceZones {
 }
 
 beforeEach(() => { vi.clearAllMocks(); });
+beforeEach(() => { vi.clearAllMocks(); });
+
+describe("describePricePosition（正典六句，2026-09-09 约定）", () => {
+  it("position_label=低于低估关注区 → 逐字直显，不出现「未落入」", () => {
+    const zones = makeZones({ position_label: "低于低估关注区" });
+    expect(describePricePosition(zones)).toBe("低于低估关注区");
+  });
+
+  it("position_label=未落入（偏贵，尚未进入观察带）→ 逐字直显（仅用于全部带上方）", () => {
+    const zones = makeZones({
+      position_label: "未落入（偏贵，尚未进入观察带）",
+      current_price: 22,
+      valuation_zones: [
+        { name: "低估关注区", low: 9, high: 10, kind: "UNDERVALUED" },
+        { name: "偏高区", low: 20, high: 21, kind: "OVERVALUED" },
+      ],
+    });
+    expect(describePricePosition(zones)).toBe("未落入（偏贵，尚未进入观察带）");
+  });
+
+  it("降级（无 position_label）：现价低于合理价值下沿 → 低于合理价值带下限，不得写「未落入」", () => {
+    const zones = makeZones({
+      current_price: 11,
+      valuation: { status: "UNDERVALUED", fair_value_low: 12, fair_value_mid: 14, fair_value_high: 16, methods: [], message: "", limitations: [] },
+      confluence_zones: [{ low: 12, high: 13 }],
+      support_zones: [{ low: 9.5, high: 10.5 }],
+      upper_review_zones: [{ low: 17, high: 18 }],
+    });
+    const label = describePricePosition(zones);
+    // 现价 11 不在任何结构带内且低于 fair_value_low 12 → 降级句如实说「低于…下限」，
+    // 绝不写成「未落入」（低于下沿≠还没跌进带）
+    expect(label).toBe("现价低于合理价值带下限");
+    expect(label).not.toContain("未落入");
+  });
+});
+
 
 describe("ValuePriceZoneConclusionCard", () => {
   it("1. IN_VALUE_SCOPE + HIGH_ATTENTION + RELIABLE + FRESH → 主徽章用 effective_label，raw 只在折叠区", async () => {

@@ -83,25 +83,27 @@ export const router = createBrowserRouter([{
     { path: "/today", element: wrap(Today) },
 
     { path: "/value", element: wrap(ValueStrategy), children: [
-      { index: true, element: wrap(ValueFocusPage) },
+      // The default /value landing is the opportunities center; the low-value
+      // pool keeps its own address at /value/focus.
+      { index: true, element: redirect("/value/opportunities") },
       { path: "leaders", element: wrap(ValueLeaderPoolPage) },
       { path: "methodology", element: wrap(ValueLeaderMethodology) },
       { path: "research", element: wrap(ValueResearchQueue) },
       { path: "operations", element: redirect("/value/research") },
       { path: "opportunities", element: wrap(ValueOpportunitiesCenter) },
       // Deprecated compatibility addresses: keep them available while the new default is /value.
-      { path: "focus", element: redirect("/value") },
-      { path: "plans", element: redirect("/value") },
+      { path: "focus", element: wrap(ValueFocusPage) },
+      { path: "plans", element: redirect("/value/focus") },
       { path: "valuation", element: redirect("/value/opportunities") },
       { path: "monitor", element: redirect("/value/opportunities") },
-      { path: "legacy-workbench", element: redirect("/value") },
-      { path: "profiles", element: redirect("/value") },
+      { path: "legacy-workbench", element: redirect("/value/focus") },
+      { path: "profiles", element: redirect("/value/focus") },
       { path: "fine-tracks", element: redirect("/value/leaders") },
       { path: "company/:stockCode/financial", element: wrap(FinancialAnalysis) },
     ] },
     { path: "/macro", element: wrap(Macro) },
     { path: "/value/macro", element: redirect("/macro") },
-    { path: "/value/sectors", element: redirect("/value") },
+    { path: "/value/sectors", element: redirect("/value/focus") },
     { path: "/value/company", element: redirect("/value/research") },
     { path: "/value/timing", element: redirect("/value/opportunities") },
     { path: "/company", element: redirect("/value/research") },

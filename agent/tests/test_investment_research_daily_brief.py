@@ -939,6 +939,10 @@ def test_price_digest_high_attention_reliable_renders_one_line(tmp_path: Path) -
     zones = {"000002.SZ": {
         "current_price": 10.0,
         "valuation": {"fair_value_low": 12.0, "fair_value_mid": 14.0, "fair_value_high": 16.0},
+        "valuation_zones": [
+            {"name": "低估关注区", "low": 9.0, "high": 10.0, "kind": "UNDERVALUED"},
+            {"name": "合理区", "low": 10.0, "high": 16.0, "kind": "FAIR"},
+        ],
         "confluence_zones": [{"low": 9.5, "high": 10.5}], "support_zones": [], "upper_review_zones": [],
     }}
     service, _, briefs = _seed_with_strategy(tmp_path, states, zones=zones)
@@ -950,7 +954,7 @@ def test_price_digest_high_attention_reliable_renders_one_line(tmp_path: Path) -
     line = digest["lines"][0]
     assert line["company_name"] == "示例公司"
     assert "在范围内" in line["sentence"] and "价格条件高度值得关注" in line["sentence"]
-    assert "现价10.00" in line["sentence"] and line["position_sentence"] == "现价落在关注带内"
+    assert "现价10.00" in line["sentence"] and line["position_sentence"] == "低估关注区"
     assert "优先开展研究" in line["sentence"]
     assert "raw" not in line["sentence"] and "HIGH_ATTENTION" not in line["sentence"]
 
@@ -1047,25 +1051,35 @@ def test_price_digest_excel_sheet_lists_structured_rows(tmp_path: Path) -> None:
     assert rows[1][3] == "价格条件高度值得关注" and rows[1][7] == "估值依据偏弱"
 
 
-def test_price_digest_price_position_sentence_five_fixed_variants() -> None:
+def test_price_position_sentence_six_canonical_variants() -> None:
+    """六句正典（2026-09-09 产品约定）：低于低估关注区下沿不得写成「未落入」。"""
     from src.investment_research_supervisor.daily_brief_service import _price_position_sentence
 
-    zones_kw = dict(
-        confluence_zones=[{"low": 9.0, "high": 10.0}],
-        support_zones=[{"low": 8.0, "high": 9.0}],
-        review_zones=[{"low": 20.0, "high": 21.0}],
-        fair_value_low=12.0, fair_value_high=16.0,
-    )
-    assert _price_position_sentence(9.5, **zones_kw) == "现价落在关注带内"
-    assert _price_position_sentence(8.5, **zones_kw) == "现价落在观察带内"
-    assert _price_position_sentence(20.5, **zones_kw) == "现价落在复核带内"
-    assert _price_position_sentence(11.0, **zones_kw) == "现价低于合理价值带下限"
-    # 带存在但现价不在任何带内（含全部在上方）→ 「未落入」，不得伪装「带不完整」
-    assert _price_position_sentence(14.0, **zones_kw) == "现价未落入关注/观察/复核带"
-    # 仅现价缺失或无可判带 → 「带不完整」
-    assert _price_position_sentence(None, **zones_kw) == "带不完整，无法判断落点"
-    assert _price_position_sentence("资料不足", **zones_kw) == "带不完整，无法判断落点"
-    assert _price_position_sentence(14.0) == "带不完整，无法判断落点"
+    # 600216.SH 2026-09-08 对照：现价 12.95，合理价值 21.03–77.30（默认折扣阶梯）
+    ladder_600216 = [
+        {"name": "深度低估区", "low": None, "high": 14.72, "kind": "UNDERVALUED"},
+        {"name": "较高安全边际区", "low": 14.72, "high": 16.82, "kind": "UNDERVALUED"},
+        {"name": "低估关注区", "low": 16.82, "high": 21.03, "kind": "UNDERVALUED"},
+        {"name": "合理区", "low": 21.03, "high": 77.30, "kind": "FAIR"},
+        {"name": "偏高区", "low": 77.30, "high": 85.03, "kind": "OVERVALUED"},
+        {"name": "明显偏高区", "low": 85.03, "high": None, "kind": "OVERVALUED"},
+    ]
+    assert _price_position_sentence(12.95, valuation_zones=ladder_600216) == "低于低估关注区"
+    assert _price_position_sentence(18.0, valuation_zones=ladder_600216) == "低估关注区"
+    assert _price_position_sentence(40.0, valuation_zones=ladder_600216) == "中性"
+    assert _price_position_sentence(80.0, valuation_zones=ladder_600216) == "高估复核区"
+    # 有界带集：现价高于最高带上沿 → 未落入（偏贵，尚未进入观察带）
+    bounded = [
+        {"name": "低估关注区", "low": 9.0, "high": 10.0, "kind": "UNDERVALUED"},
+        {"name": "偏高区", "low": 20.0, "high": 21.0, "kind": "OVERVALUED"},
+    ]
+    assert _price_position_sentence(22.0, valuation_zones=bounded) == "未落入（偏贵，尚未进入观察带）"
+    # 带间空隙（夹具人为留洞）：无法归带 → 如实「资料不足」，不发明第七句
+    assert _price_position_sentence(14.0, valuation_zones=bounded) == "资料不足"
+    # 仅现价缺失或无可判带 → 「资料不足」
+    assert _price_position_sentence(None, valuation_zones=ladder_600216) == "资料不足"
+    assert _price_position_sentence("资料不足", valuation_zones=ladder_600216) == "资料不足"
+    assert _price_position_sentence(12.95) == "资料不足"
 
 
 def test_price_digest_appends_suspension_suffix() -> None:

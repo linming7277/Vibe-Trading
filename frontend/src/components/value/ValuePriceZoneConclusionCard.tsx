@@ -39,9 +39,12 @@ function priceInZone(price: number, zone: ValuePriceZone): boolean {
   return zone.low <= price && price <= zone.high;
 }
 
-/** 现价落在哪条带里：六种固定落点句，与日报 _price_position_sentence 同一清单同一优先级。
- * 「未落入」= 带存在但现价不在其中（含全部在上方）；「带不完整」仅用于现价缺失或无可判带。 */
+/** 现价落点：优先直显后端正典六句 position_label（2026-09-09 约定，
+ * 「低于低估关注区」不得写成「未落入」）。后端无该字段时降级旧逻辑——
+ * 降级路径同样不把「现价低于合理价值带下限」写成「未落入」。 */
 export function describePricePosition(zones: ValuePriceZones | null): string {
+  const canonical = zones?.position_label?.trim();
+  if (canonical) return canonical;
   const price = zones?.current_price;
   if (price == null) return "带不完整，无法判断落点";
   const confluence = (zones?.confluence_zones ?? []).slice(0, 2);

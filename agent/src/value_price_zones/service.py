@@ -44,6 +44,64 @@ class ZoneConfig:
 
 DEFAULT_CONFIG = ZoneConfig()
 
+# 老板可见落点六句（产品约定 2026-09-09，逐字固定，不得自造）。
+# 「未落入」只准表示现价在全部观察/关注带上方（偏贵）；
+# 低于低估关注区下沿必须写「低于低估关注区」，不得写成「未落入」。
+POSITION_ABOVE_ALL = "未落入（偏贵，尚未进入观察带）"
+POSITION_IN_REVIEW = "高估复核区"
+POSITION_NEUTRAL = "中性"
+POSITION_IN_UNDERVALUED = "低估关注区"
+POSITION_UNDER_LOW = "低于低估关注区"
+POSITION_NO_DATA = "资料不足"
+
+_REVIEW_BAND_NAMES = ("偏高区", "明显偏高区")
+
+
+def price_position_label(current_price: Any,
+                         valuation_zones: list[dict[str, Any]] | None = None) -> str:
+    """按估值带阶梯给出六句正典落点。
+
+    `valuation_zones` 为 `_valuation_zones` 产出的有序带列表（None 边界=开放端）。
+    顺序判定：带内（复核/中性/低估）→ 高于全部有限上沿（未落入）→
+    低于全部下沿（低于低估关注区）→ 无可用区间（资料不足）。
+    """
+    try:
+        price = float(current_price)
+    except (TypeError, ValueError):
+        return POSITION_NO_DATA
+    bands = [zone for zone in (valuation_zones or [])
+             if zone.get("low") is not None or zone.get("high") is not None]
+    if not bands:
+        return POSITION_NO_DATA
+
+    def contains(zone: dict[str, Any]) -> bool:
+        low, high = zone.get("low"), zone.get("high")
+        if low is not None and price < float(low):
+            return False
+        if high is not None and price > float(high):
+            return False
+        return True
+
+    for zone in bands:
+        if contains(zone):
+            name = str(zone.get("name") or "")
+            if name in _REVIEW_BAND_NAMES:
+                return POSITION_IN_REVIEW
+            if name == "低估关注区":
+                return POSITION_IN_UNDERVALUED
+            if name == "合理区":
+                return POSITION_NEUTRAL
+            if name in ("深度低估区", "较高安全边际区"):
+                return POSITION_UNDER_LOW
+            return POSITION_NO_DATA  # 未知带名：宁可资料不足，不发明新句子
+    finite_highs = [float(zone["high"]) for zone in bands if zone.get("high") is not None]
+    finite_lows = [float(zone["low"]) for zone in bands if zone.get("low") is not None]
+    if finite_highs and price > max(finite_highs):
+        return POSITION_ABOVE_ALL
+    if finite_lows and price < min(finite_lows):
+        return POSITION_UNDER_LOW
+    return POSITION_NO_DATA
+
 
 def _number(value: Any) -> float | None:
     try:
@@ -418,7 +476,8 @@ class ValuePriceZoneService:
         groups: list[list[dict[str, Any]]] = []
         for candidate in sorted(candidates, key=lambda item: float(item["price"])):
             if not groups:
-                groups.append([candidate]); continue
+                groups.append([candidate])
+                continue
             center = sum(float(item["price"]) for item in groups[-1]) / len(groups[-1])
             if abs(float(candidate["price"]) - center) / center <= self.config.cluster_tolerance:
                 groups[-1].append(candidate)
@@ -487,6 +546,7 @@ class ValuePriceZoneService:
         return {
             "stock_code": symbol, "as_of": target.isoformat() if target else price_as_of,
             "price_as_of": price_as_of, "current_price": round(current_price, 2) if current_price else None,
+            "position_label": price_position_label(current_price, valuation_zones),
             "formula_version": FORMULA_VERSION, "valuation": valuation, "valuation_zones": valuation_zones,
             "support_zones": support_zones, "resistance_zones": resistance_zones,
             "confluence_zones": confluence, "upper_review_zones": upper,
