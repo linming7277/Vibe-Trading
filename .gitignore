@@ -74,6 +74,9 @@ data/backup/
 docs/*
 !docs/changes/
 !docs/changes/2026-09-09-mainline.md
+!docs/changes/2026-09-09-breadth-equity-universe.md
+!docs/changes/2026-09-09-outlook-breadth.md
+!docs/changes/2026-09-09-breadth-line-trim.md
 !docs/value-line-l3-cleanup-and-dynamic-pool-v1.md
 !docs/company-thesis-v1-step1-core-model.md
 !docs/company-thesis-v1-step2-evidence.md

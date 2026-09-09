@@ -41,6 +41,20 @@ _PLACEMENT_TITLE_LIMIT = 40
 _BJ_SUFFIX = ".BJ"
 _ST_MARK = "ST"
 
+# A 股股票白名单（市场后缀 + 代码前缀）：主板/创业板/科创板。
+# 单点过滤——指数（沪 000、深 399、880/881 板块）、基金
+# （沪 50/51/52/56/58、深 15/16）、北交所（43/83/87 等）按前缀天然排除。
+_EQUITY_PREFIXES = {
+    ".SH": ("600", "601", "603", "605", "688"),
+    ".SZ": ("000", "001", "002", "003", "300", "301"),
+}
+
+
+def _is_equity_code(code: str) -> bool:
+    suffix = code[-3:] if len(code) >= 3 else ""
+    prefixes = _EQUITY_PREFIXES.get(suffix)
+    return bool(prefixes) and code[:3] in prefixes
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -118,13 +132,21 @@ def day_tail_universe(as_of: str, *, tdx_home: Path | str | None = None,
             paths = []
         for path in paths:
             code = f"{path.stem[2:]}.{exchange.upper()}"
-            if code.endswith(_BJ_SUFFIX) or code[:1] in {"4", "8"}:
-                continue  # 北交所/三板未计入
+            if not _is_equity_code(code):
+                # 白名单外：指数（沪 000/深 399/880/881）、基金
+                # （沪 50/51/52/56/58、深 15/16）、北交所/三板——一律不计入
+                continue
             if code in st_codes:
                 continue  # 名称含 ST/*ST 未计入
-            bars = read_lday_tail(path, count=count)
-            if len(bars) >= 2 and bars[-1]["date"] == target_day and bars[-1]["volume"] > 0:
-                universe[code] = bars
+            # 多读 2 根余量：盘中 .day 可能已追加 P+1 的根，裁掉 >P 的根后
+            # 必须末根==P 日（否则该股对 P 日口径不可用），P 根零量排除（停牌）。
+            bars = read_lday_tail(path, count=count + 2)
+            bars = [bar for bar in bars if str(bar["date"]).replace("-", "") <= target_day.replace("-", "")]
+            if len(bars) < 2 or bars[-1]["date"] != target_day:
+                continue
+            if bars[-1]["volume"] <= 0:
+                continue
+            universe[code] = bars[-count:] if len(bars) >= count else bars
     return universe
 
 

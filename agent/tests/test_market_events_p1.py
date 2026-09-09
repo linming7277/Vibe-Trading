@@ -14,6 +14,7 @@ from src.investment_research_supervisor.daily_brief_service import merge_market_
 from src.value_strategy.market_events import (
     LIMIT_UP_EVENT_TYPE,
     PRIVATE_PLACEMENT_EVENT_TYPE,
+    day_tail_universe,
     ingest_market_events,
     list_market_event_lines,
     scan_limit_ups,
@@ -147,6 +148,21 @@ def test_2_gem_threshold(tmp_path: Path) -> None:
 
 
 # --- 3. ST、北交所、零成交 → 0 条 ---------------------------------------------------
+
+def test_equity_whitelist_boundary(tmp_path: Path) -> None:
+    """白名单（市场+前缀）：指数/基金/北交所不得进宇宙；沪深主板/创业/科创可进。"""
+    world = World(tmp_path)
+    excluded = ["158009.SZ", "510300.SH", "881441.SH", "000300.SH", "399001.SZ", "833001.SZ"]
+    included = ["600216.SH", "000001.SZ", "300759.SZ", "688981.SH"]
+    for code in excluded + included:
+        world.write_day(code, [(PREV_INT, 10.0, _AMOUNT), (AS_OF_INT, 10.5, _AMOUNT)])
+    universe = day_tail_universe(AS_OF, tdx_home=world.home, tdx_db_path=world.tdx_db,
+                                 count=2)
+    for code in excluded:
+        assert code not in universe, code
+    for code in included:
+        assert code in universe, code
+
 
 def test_3_st_bj_zero_amount_excluded(tmp_path: Path) -> None:
     world = World(tmp_path)
