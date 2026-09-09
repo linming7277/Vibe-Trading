@@ -1239,69 +1239,31 @@ class InvestmentResearchDailyBriefService:
         except Exception:
             pass
         try:
-            import sqlite3 as _sqlite3
+            from src.investment_research_supervisor.next_session_outlook import build_next_session_outlook
 
-            from src.macro_forecast.forecast_service import get_latest_macro_forecast
-            from src.config.paths import get_runtime_root as _root
-
-            latest = get_latest_macro_forecast(exclude_experiment_arm=True)
-            if latest and latest.get("status") in {"SHADOW", "OFFICIAL", "ABSTAINED", "DRAFT"}:
-                structured = latest.get("structured_payload") or {}
-                output = structured.get("model_output") or {}
-                # §十三/语义守则：优先采用语义修正视图的摘要/失效条件（不重跑模型）。
-                # 旧留档无内嵌 semantic → 读 forecast_semantic_validations 衍生报告。
-                semantic = structured.get("semantic")
-                if not semantic:
-                    try:
-                        import json as _json
-
-                        conn = _sqlite3.connect(f"file:{(_root() / 'research.db').as_posix()}?mode=ro", uri=True)
-                        try:
-                            row = conn.execute(
-                                "SELECT report_json FROM forecast_semantic_validations WHERE forecast_id=? ORDER BY created_at DESC LIMIT 1",
-                                (latest.get("id"),),
-                            ).fetchone()
-                        finally:
-                            conn.close()
-                        if row:
-                            semantic = _json.loads(row[0] or "{}")
-                    except Exception:
-                        semantic = None
-                semantic = semantic or {}
-                revised_summary = (semantic.get("market_summary") or {}).get("revised_summary")
-                market = dict(output.get("market") or {})
-                if revised_summary:
-                    market["summary"] = revised_summary
-                if semantic.get("invalidation", {}).get("kept") is not None:
-                    market["invalidation_conditions"] = semantic["invalidation"]["kept"]
-                revised_industries = {}
-                for audit in semantic.get("industries") or []:
-                    revised_industries[(audit.get("industry_id"), audit.get("side"))] = audit
-                entries = (structured.get("validation") or {}).get("industry_entries") or []
-                for entry in entries:
-                    audit = revised_industries.get((entry.get("industry_id"), entry.get("side")))
-                    if audit:
-                        entry["reason"] = audit.get("revised_reason") or entry.get("reason")
-                        entry["reason_basis"] = audit.get("reason_basis") or entry.get("reason_basis")
-                input_info = structured.get("input") or {}
-                next_outlook = {
-                    "available": True,
-                    "forecast_id": latest.get("id"),
-                    "status": latest.get("status"),
-                    "target_trade_date": input_info.get("target_trade_date"),
-                    "calendar_unverified": input_info.get("calendar_status") == "CALENDAR_UNVERIFIED_NEXT_SESSION",
-                    "abstained": bool(output.get("abstain")),
-                    "direction": market.get("direction"),
-                    "summary": market.get("summary"),
-                    "strong_industries": [{"name": e.get("display_name")} for e in entries if e.get("side") == "RELATIVE_STRONG"][:3],
-                    "weak_industries": [{"name": e.get("display_name")} for e in entries if e.get("side") == "RELATIVE_WEAK"][:3],
-                    "invalidation": [str(i) for i in (market.get("invalidation_conditions") or [])][:1],
-                    "data_gaps": list(input_info.get("gaps") or [])[:3],
-                }
-                if output.get("abstain"):
-                    next_outlook["abstain_reason"] = output.get("abstain_reason")
+            outlook = build_next_session_outlook(research_as_of)
+            debug = dict(outlook.get("debug") or {})
+            # 老板可见文案只走共享投影 text（无因子码）；模型原始摘要含
+            # M1/A1 等因子编号，仅保留在 debug 字段供排障。
+            next_outlook = {
+                "available": bool(outlook.get("available")),
+                "status": str(debug.get("forecast_status") or ""),
+                "target_trade_date": debug.get("target_trade_date"),
+                "direction": (outlook.get("tape") or {}).get("direction"),
+                "shadow": bool(outlook.get("shadow")),
+                "confidence": (outlook.get("tape") or {}).get("confidence"),
+                "summary": (outlook.get("tape") or {}).get("fact"),
+                "flow": outlook.get("flow"),
+                "sectors": {k: v for k, v in (outlook.get("sectors") or {}).items() if k != "missing"},
+                "text": outlook.get("text"),
+                "missing": outlook.get("missing") or [],
+                "debug": {
+                    "forecast_id": debug.get("forecast_id"),
+                    "raw_model_summary": debug.get("raw_model_summary"),
+                },
+            }
         except Exception:
-            pass
+            next_outlook = {"available": False, "reason": "前瞻投影生成失败"}
         return market_review, forecast_review, next_outlook
 
     @staticmethod
