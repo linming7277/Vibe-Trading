@@ -388,6 +388,17 @@ class ValueResearchScheduler:
                 logger.warning("macro line refresh failed (fail-soft)", exc_info=True)
                 stages["MACRO_LINE_READY"] = "FAILED"
 
+            # SW1 指数日线导入（下一交易日前瞻板块段数据源）：从本机通达信
+            # .day 读入 sw1_index_bars 小表。fail-soft：无盘/缺文件不影响 EOD。
+            try:
+                from src.tdx_data.day_file import ingest_sw1_index_bars
+
+                sw1_result = ingest_sw1_index_bars(as_of=as_of)
+                stages["SW1_INDEX_BARS_READY"] = "READY" if sw1_result.get("ok") else "PARTIAL"
+            except Exception:
+                logger.warning("sw1 index bars ingest failed (fail-soft)", exc_info=True)
+                stages["SW1_INDEX_BARS_READY"] = "FAILED"
+
             # Macro Forecast V28 review stage（§十九）：评价 target=今日 的预测。
             # 前置：今日收盘 K 线需已入库；行情不齐 → PENDING（fail-soft，不阻塞日报）。
             try:
