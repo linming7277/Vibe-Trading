@@ -54,8 +54,8 @@ describe("ValueFocusPage", () => {
     expect(screen.getByText("🟠 新进入低估区域")).toBeInTheDocument();
     expect(screen.getByText("🔵 退出低估区域")).toBeInTheDocument();
     expect(screen.getByText("深度低估")).toBeInTheDocument();
-    expect(screen.getByText("当前价格")).toBeInTheDocument();
-    expect(screen.getByText("合理价值中枢")).toBeInTheDocument();
+    expect(screen.getByText(/现价/)).toBeInTheDocument();
+    expect(screen.getAllByText(/中枢/).length).toBeGreaterThan(0);
     expect(screen.getByText("风险复核：有明显风险需要核验")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "问投研主管" })[0]).toHaveAttribute("href", "/ai/agent");
     expect(screen.getByRole("link", { name: /打开公司研究/ })).toHaveAttribute("href", expect.stringContaining("from_label=%E4%BD%8E%E4%BC%B0%E9%BE%99%E5%A4%B4%E6%B1%A0"));

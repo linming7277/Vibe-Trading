@@ -399,6 +399,17 @@ class ValueResearchScheduler:
                 logger.warning("sw1 index bars ingest failed (fail-soft)", exc_info=True)
                 stages["SW1_INDEX_BARS_READY"] = "FAILED"
 
+            # 市场事件 P1（涨停/定增）写入既有 value_strategy_state_events。
+            # fail-soft：失败事件段降级为空，绝不打断 EOD 下游。
+            try:
+                from src.value_strategy.market_events import ingest_market_events
+
+                market_events_result = ingest_market_events(as_of)
+                stages["MARKET_EVENTS_READY"] = str(market_events_result.get("status") or "FAILED")
+            except Exception:
+                logger.warning("market events ingest failed (fail-soft)", exc_info=True)
+                stages["MARKET_EVENTS_READY"] = "FAILED"
+
             # Macro Forecast V28 review stage（§十九）：评价 target=今日 的预测。
             # 前置：今日收盘 K 线需已入库；行情不齐 → PENDING（fail-soft，不阻塞日报）。
             try:

@@ -39,6 +39,18 @@ _PRICE_DIGEST_INCLUDED_STATUS = {"HIGH_ATTENTION", "ATTENTION", "VALUATION_REVIE
 _PRICE_DIGEST_DEMOTED_TO = {"WATCH", "WAIT"}
 
 
+def merge_market_event_lines(
+    price_lines: list[dict[str, Any]],
+    event_lines: list[dict[str, Any]],
+    *,
+    total_cap: int = _PRICE_DIGEST_MAX_LINES,
+    event_cap: int = 3,
+) -> list[dict[str, Any]]:
+    """价格条件行先占位，市场事件行最多 event_cap 条，合计不超过 total_cap。"""
+    remaining = max(0, total_cap - len(price_lines))
+    return [*price_lines, *event_lines[:min(event_cap, remaining)]][:total_cap]
+
+
 def _price_position_sentence(
     current_price: Any,
     *,
@@ -1103,6 +1115,15 @@ class InvestmentResearchDailyBriefService:
                 "reason_short": item["reason_short"],
                 "sentence": sentence + ("（停牌中，推断）" if item.get("suspension_status") == "SUSPENDED_INFERRED" else ""),
             })
+        # 市场事件（涨停/定增，P1）：价格条件先占位，事件最多再占 3 行，合计 ≤8。
+        # 源为空 → 不追加任何行，事件段整段省略。
+        try:
+            from src.value_strategy.market_events import list_market_event_lines
+
+            lines = merge_market_event_lines(
+                lines, list_market_event_lines(research_as_of, max_lines=3))
+        except Exception:  # noqa: BLE001 - 事件段降级为空，绝不阻塞日报
+            pass
         return {
             "as_of": research_as_of,
             "empty": not lines,

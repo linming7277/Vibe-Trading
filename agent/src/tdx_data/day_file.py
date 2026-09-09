@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 import sqlite3
 import struct
-from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +30,36 @@ def read_lday(path: str | Path) -> list[dict[str, Any]]:
     """读取一个 .day 文件；文件缺失/损坏返回空列表，不向调用方抛异常。"""
     try:
         raw = Path(path).read_bytes()
+    except OSError:
+        return []
+    out: list[dict[str, Any]] = []
+    for offset in range(0, len(raw) - _BAR.size + 1, _BAR.size):
+        date, o, h, low, close, amount, volume, _reserved = _BAR.unpack_from(raw, offset)
+        out.append({
+            "date": _iso(date), "open": o / 100, "high": h / 100,
+            "low": low / 100, "close": close / 100, "amount": float(amount),
+            "volume": int(volume),
+        })
+    return out
+
+
+def read_lday_tail(path: str | Path, count: int = 2) -> list[dict[str, Any]]:
+    """只读一个 .day 文件的最后 count 根（全市场扫描用，避免整文件读取）。
+
+    文件缺失/不足 count 根时返回实际可得根数；损坏返回空列表。
+    """
+    try:
+        size = Path(path).stat().st_size
+    except OSError:
+        return []
+    usable = size - (size % _BAR.size)
+    if usable <= 0:
+        return []
+    take = min(count, usable // _BAR.size)
+    try:
+        with Path(path).open("rb") as handle:
+            handle.seek(usable - _BAR.size * take)
+            raw = handle.read(_BAR.size * take)
     except OSError:
         return []
     out: list[dict[str, Any]] = []
