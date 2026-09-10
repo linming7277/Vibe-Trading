@@ -95,9 +95,9 @@ def _num(value: Any, suffix: str = "") -> str:
 # ---------------------------------------------------------------------------
 BOSS_SECTIONS: list[str] = [
     "投研主管结论", "公司与行业位置", "过去五年发生了什么", "最新季度边际变化",
-    "当前处于什么经营阶段", "当前最核心的经营矛盾", "盈利质量与财务风险",
+    "当前处于什么经营阶段", "当前最核心的经营矛盾", "盈利质量与财务风险", "财报里容易被忽略的信息",
     "主营业务与经营变化", "竞争优势是否成立", "资本投入与资金使用", "当前价格贵不贵",
-    "谨慎 / 基准 / 乐观三种路径", "为什么值得继续研究",
+    "谨慎 / 基准 / 乐观三种路径", "未来三年利润预估明细", "为什么值得继续研究",
     "接下来验证什么、什么情况说明判断错了", "最终研究判断",
 ]
 
@@ -658,6 +658,7 @@ class BossRenderer:
 def render_boss_report(sections: list[dict[str, Any]], *, stock_code: str, as_of: str) -> str:
     """Full boss-facing report: new 14-section order + Chinese mapping."""
     renderer = BossRenderer(sections, stock_code, as_of)
+    sections_by_type = {s["section_type"]: s for s in sections}
     builders = {
         "投研主管结论": renderer.section_conclusion_head,
         "公司与行业位置": renderer.section_position,
@@ -675,6 +676,14 @@ def render_boss_report(sections: list[dict[str, Any]], *, stock_code: str, as_of
         "接下来验证什么、什么情况说明判断错了": renderer.section_watchpoints,
         "最终研究判断": renderer.section_final_verdict,
     }
+    def _raw_section(section_type: str) -> str:
+        sec = (sections_by_type or {}).get(section_type) or {}
+        return str(sec.get("narrative_md") or "").strip() or "本节资料不足。"
+
+    builders.update({
+        "财报里容易被忽略的信息": lambda: _raw_section("hidden_signals"),
+        "未来三年利润预估明细": lambda: _raw_section("profit_forecast_detail"),
+    })
     parts = [f"投研主管深度研究报告 · {renderer.position.get('stock_name') or stock_code}（{stock_code}）",
              f"研究基准日 {as_of}。本报告由系统已保存研究结果整理，不含任何交易指令。", ""]
     for index, title in enumerate(BOSS_SECTIONS, 1):

@@ -865,6 +865,15 @@ class InvestmentResearchDailyBriefService:
             support = self._historical_support(code, research_as_of)
             if support_cache is not None:
                 support_cache[code] = dict(support)
+        if support.get("low") is None and support.get("high") is None:
+            zone_low, zone_high = item.get("support_zone_low"), item.get("support_zone_high")
+            if zone_low is not None or zone_high is not None:
+                support = {
+                    "status": "READY",
+                    "low": zone_low,
+                    "high": zone_high,
+                    "strength": support.get("strength"),
+                }
         return {
             "stock_code": code,
             "company_name": str(item.get("company_name") or code),
@@ -873,6 +882,8 @@ class InvestmentResearchDailyBriefService:
             "fair_value_low": item.get("fair_value_low"),
             "fair_value_mid": item.get("fair_value_mid"),
             "fair_value_high": item.get("fair_value_high"),
+            "support_zone_low": item.get("support_zone_low"),
+            "support_zone_high": item.get("support_zone_high"),
             "valuation_gap_percent": valuation_gap_percent,
             "valuation_caveat": self._valuation_caveat(valuation_gap_percent),
             "historical_support": support,

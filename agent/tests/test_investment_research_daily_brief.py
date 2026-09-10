@@ -277,12 +277,11 @@ def test_daily_brief_card_renders_value_observations_as_readable_summaries(tmp_p
     assert card["header"]["title"]["content"] == f"投研日报 · {AS_OF}"
     assert card["header"]["template"] == "indigo"
     assert "重点研究 1 家" in content
-    # V28 §十二/廿八：卡片 Focus 压缩为公司/行业/研究状态/一句重点（≤4 字段），
-    # 估值三档等详情移至公司页（narrative 完整版仍保留）。
     assert "**1. 公司SZ**　000002.SZ" in content
-    assert "·　重点研究" in content
-    assert "现价 **10.00**" not in content
-    assert "合理 11–13" not in content
+    assert "现价 **10.00**" in content
+    assert "合理价值 11 / 12 / 13" in content
+    assert "支撑 9–10" in content
+    assert "距中枢" in content
     assert not any(item["tag"] in {"column_set", "img"} for item in card["elements"])
     assert any(item["tag"] == "action" for item in card["elements"])
 

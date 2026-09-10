@@ -340,8 +340,27 @@ def _compact_investment_changes(payload: dict[str, Any]) -> list[dict[str, Any]]
     return rows
 
 
+def _support_range(item: dict[str, Any]) -> str:
+    support = dict(item.get("historical_support") or {})
+    low = support.get("low")
+    high = support.get("high")
+    if low is None and high is None:
+        low = item.get("support_zone_low")
+        high = item.get("support_zone_high")
+    return _range_text(low, high)
+
+
+def _valuation_text(item: dict[str, Any]) -> str:
+    low = _fmt_number(item.get("fair_value_low"))
+    mid = _fmt_number(item.get("fair_value_mid"))
+    high = _fmt_number(item.get("fair_value_high"))
+    if low == "—" and mid == "—" and high == "—":
+        return "—"
+    return f"{low} / {mid} / {high}"
+
+
 def _value_observation_table(brief: dict[str, Any], *, compact: bool = False) -> list[dict[str, Any]]:
-    """每家两行的紧凑摘要：一行身份与现价，一行估值与支撑。"""
+    """重点研究：公司身份 + 现价 / 合理价值（低中高）/ 支撑位。"""
     payload = dict(brief.get("brief_payload") or {})
     watchlist = list(payload.get("executive_watchlist") or [])
     if not watchlist:
@@ -351,31 +370,20 @@ def _value_observation_table(brief: dict[str, Any], *, compact: bool = False) ->
     for index, item in enumerate(watchlist, start=1):
         industry = _card_value(item.get("industry_name"))
         code = _card_value(item.get("stock_code"))
-        if compact:
-            # §十二/§廿八：老板端压缩——公司/行业/研究状态/一句重点（≤4 字段）；
-            # 合理价值三档等详情留公司页。变化标识由 research_status_label 承载。
-            focus_note = _short_text(
-                item.get("research_note") or item.get("focus_summary")
-                or item.get("valuation_summary") or "研究状态无变化", limit=44)
-            state = _card_value(item.get("research_status_label") or "重点研究")
-            elements.append({"tag": "markdown", "content":
-                f"**{index}. {_card_value(item.get('company_name'))}**　{code}"
-                + (f"　·　{industry}" if industry and industry != "—" else "")
-                + f"　·　{state}\n　{focus_note}"})
-            continue
-        support = dict(item.get("historical_support") or {})
-        support_text = _range_text(support.get("low"), support.get("high"))
         head = (
             f"**{index}. {_card_value(item.get('company_name'))}**　{code}"
             + (f"　·　{industry}" if industry and industry != "—" else "")
-            + f"　·　现价 **{_fmt_price(item.get('current_price'))}**"
         )
         detail = (
-            f"　合理 {_range_text(item.get('fair_value_low'), item.get('fair_value_high'))}"
-            f"　·　支撑 {support_text}"
-            f"　·　差距 **{_fmt_gap(item.get('valuation_gap_percent'))}**"
+            f"　现价 **{_fmt_price(item.get('current_price'))}**"
+            f"　·　合理价值 {_valuation_text(item)}"
+            f"　·　支撑 {_support_range(item)}"
+            f"　·　距中枢 **{_fmt_gap(item.get('valuation_gap_percent'))}**"
         )
-        elements.append({"tag": "markdown", "content": head + "\n" + detail})
+        if compact:
+            elements.append({"tag": "markdown", "content": head + "　" + detail.strip()})
+        else:
+            elements.append({"tag": "markdown", "content": head + "\n" + detail})
     return elements
 
 
@@ -544,7 +552,7 @@ def build_daily_brief_card(
     elements.extend([
         {"tag": "hr"},
         {"tag": "markdown", "content": f"**重点研究 · {len(list(payload.get('executive_watchlist') or []))} 家**　*研究结论，不构成买卖建议*"},
-        *_value_observation_table(brief, compact=True),
+        *_value_observation_table(brief),
     ])
     if bitable_url and include_bitable_link:
         elements.extend([

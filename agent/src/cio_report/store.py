@@ -25,6 +25,25 @@ class CioReportStore:
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._ensure_table()
 
+    def load_section_narrative(self, stock_code: str, section_title: str, chunk_hash: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT narrative FROM cio_section_narrative_cache "
+                "WHERE stock_code=? AND section_title=? AND chunk_hash=?",
+                (stock_code.upper(), section_title, chunk_hash),
+            ).fetchone()
+        return str(row[0]) if row else None
+
+    def save_section_narrative(self, stock_code: str, section_title: str, chunk_hash: str,
+                               narrative: str, model_version: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO cio_section_narrative_cache"
+                "(stock_code, section_title, chunk_hash, narrative, model_version, created_at) "
+                "VALUES(?,?,?,?,?,?)",
+                (stock_code.upper(), section_title, chunk_hash, narrative, model_version, _utc_now()),
+            )
+
     def _ensure_table(self) -> None:
         with self._lock, self._conn:
             self._conn.executescript(
@@ -52,6 +71,15 @@ class CioReportStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_cio_reports_lookup
                     ON company_cio_research_reports(market, stock_code, research_as_of DESC);
+                CREATE TABLE IF NOT EXISTS cio_section_narrative_cache (
+                    stock_code TEXT NOT NULL,
+                    section_title TEXT NOT NULL,
+                    chunk_hash TEXT NOT NULL,
+                    narrative TEXT NOT NULL,
+                    model_version TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(stock_code, section_title, chunk_hash)
+                );
                 CREATE TABLE IF NOT EXISTS company_cio_report_sections (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     report_id INTEGER NOT NULL REFERENCES company_cio_research_reports(id),

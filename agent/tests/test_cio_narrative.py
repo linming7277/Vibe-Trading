@@ -85,7 +85,7 @@ def test_report_uses_new_boss_section_order_and_titles() -> None:
     positions = [md.find(f"## {i}. {t}") for i, t in enumerate(BOSS_SECTIONS, 1)]
     assert all(p != -1 for p in positions)
     assert positions == sorted(positions)
-    assert "## 6. 当前最核心的经营矛盾" in md and "## 15. 最终研究判断" in md
+    assert "## 6. 当前最核心的经营矛盾" in md and "## 17. 最终研究判断" in md
 
 
 def test_no_backend_english_tokens_leak_into_boss_narrative() -> None:

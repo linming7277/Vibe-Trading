@@ -29,6 +29,8 @@ SECTION_TITLES: dict[str, str] = {
     "valuation": "09 当前估值",
     "normalized_earnings": "09b 正常化盈利参考",
     "scenarios": "10 财务情景预测",
+    "profit_forecast_detail": "10a 未来三年利润预估明细",
+    "hidden_signals": "05c 财报隐藏信息扫描",
     "cycle_profit_scenario": "10b 周期利润情景",
     "why_research": "11 为什么值得继续研究",
     "why_caution": "12 为什么需要谨慎",
@@ -815,6 +817,126 @@ class CioSectionBuilder:
             )
         return self._section("scenarios", payload, "\n".join(lines))
 
+    # -- 10a 未来三年利润预估明细 --------------------------------------------
+    def build_profit_forecast_detail(self) -> dict[str, Any]:
+        """三情景 × 三年 的完整利润预估表：营收、增速假设、净利率假设、净利、
+        及相对最新年度的累计变化，全部来自系统情景引擎，禁止新增数字。"""
+        financial = self._financial()
+        forecast = dict(financial.get("forecast") or {})
+        scenarios = dict(forecast.get("scenarios") or {})
+        if not scenarios:
+            return self._gap_section("profit_forecast_detail", "情景引擎未生成（LIMITED 或资料不足）")
+        annual = _annual_rows_with_fy_flows(list(financial.get("history") or []), self._fy_raw_rows())
+        base_profit = _f(annual[-1].get("net_profit")) if annual else None
+        base_revenue = _f(annual[-1].get("revenue")) if annual else None
+        base_year = str(annual[-1].get("report_date") or "")[:4] if annual else ""
+        table = [
+            "| 情景 | 年度 | 营收(亿) | 营收增速 | 净利率假设 | 净利(亿) | 净利较基年 |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        scenario_payload: dict[str, Any] = {}
+        for key in ("BEAR", "BASE", "BULL"):
+            sc = dict(scenarios.get(key) or {})
+            growth = list(sc.get("revenue_growth_assumptions") or [])
+            margins = list(sc.get("margin_assumptions") or [])
+            rows = [dict(r) for r in list(sc.get("forecast") or [])]
+            if not rows:
+                continue
+            scenario_payload[key] = sc
+            for i, r in enumerate(rows):
+                revenue, profit = _f(r.get("revenue")), _f(r.get("net_profit"))
+                g = _f(growth[i]) if i < len(growth) else None
+                m = _f(margins[i]) if i < len(margins) else None
+                delta = (profit / base_profit - 1) * 100 if profit is not None and base_profit else None
+                table.append(
+                    f"| {sc.get('label') or key} | {r.get('year')} | {_yi(revenue)} | "
+                    f"{'—' if g is None else f'{g:+.1f}%'} | {'—' if m is None else f'{m:.1f}%'} | "
+                    f"{_yi(profit)} | {'—' if delta is None else f'{delta:+.0f}%'} |"
+                )
+        notes = [str(n) for n in list(forecast.get("notes") or [])]
+        for sc in scenario_payload.values():
+            notes.extend(str(n) for n in list(sc.get("assumption_notes") or [])[:2])
+        lines = [
+            f"情景引擎状态：{forecast.get('status')}。基年 {base_year or '—'}：营收 {_yi(base_revenue)}、净利 {_yi(base_profit)}。",
+            *table,
+            "口径说明：" + ("；".join(notes[:4]) if notes else "引擎未附口径说明。"),
+            "三情景均为系统确定性推演（历史增速×净利率假设），不构成主观概率或收益承诺。",
+        ]
+        return self._section("profit_forecast_detail", {
+            "status": forecast.get("status"), "base_year": base_year,
+            "base_profit": base_profit, "base_revenue": base_revenue,
+            "scenarios": scenario_payload,
+        }, "\n".join(lines))
+
+    # -- 05c 财报隐藏信息扫描 ---------------------------------------------------
+    def build_hidden_signals(self) -> dict[str, Any]:
+        """从已存财务历史提取容易被忽略的信号：应收/存货异常、现金流与利润
+        背离、有息负债、股东人数异动、资本开支强度。只陈述事实与幅度，
+        不下结论（结论留给第 5/13 节）。"""
+        financial = self._financial()
+        annual = _annual_rows_with_fy_flows(list(financial.get("history") or []), self._fy_raw_rows())
+        if len(annual) < 2:
+            return self._gap_section("hidden_signals", "年度财务历史不足两年")
+        findings: list[dict[str, Any]] = []
+
+        def _pct_change(cur, prev):
+            if cur is None or prev in (None, 0):
+                return None
+            return (cur / prev - 1) * 100
+
+        latest, prev = annual[-1], annual[-2]
+        year = str(latest.get("report_date") or "")[:4]
+        # 1) 应收增速 vs 营收增速
+        ar_chg = _pct_change(_f(latest.get("accounts_receivable")), _f(prev.get("accounts_receivable")))
+        rev_chg = _pct_change(_f(latest.get("revenue")), _f(prev.get("revenue")))
+        if ar_chg is not None and rev_chg is not None and ar_chg - rev_chg > 15:
+            findings.append({"item": "应收账款增速显著快于营收", "detail":
+                f"{year}年报应收 {_yi(latest.get('accounts_receivable'))}（同比{ar_chg:+.0f}%），"
+                f"同期营收同比{rev_chg:+.0f}%，差额{(ar_chg - rev_chg):+.0f} 个百分点；收入质量需核验。"})
+        # 2) 存货异动
+        inv_chg = _pct_change(_f(latest.get("inventory")), _f(prev.get("inventory")))
+        if inv_chg is not None and inv_chg > 30:
+            findings.append({"item": "存货大幅增加", "detail":
+                f"{year}年报存货 {_yi(latest.get('inventory'))}（同比{inv_chg:+.0f}%）；若非备产扩产，需警惕跌价与滞销风险。"})
+        # 3) 现金流与利润背离（单年与两年）
+        ocf, profit = _f(latest.get("operating_cash_flow")), _f(latest.get("net_profit"))
+        if ocf is not None and profit and profit > 0:
+            if ocf < profit * 0.5:
+                findings.append({"item": "经营现金流明显低于净利润", "detail":
+                    f"{year}年报净利 {_yi(profit)} 而经营现金流 {_yi(ocf)}（为净利的 {ocf / profit * 100:.0f}%）；利润含金量需核验。"})
+            elif ocf > profit * 1.8:
+                findings.append({"item": "经营现金流显著高于净利润", "detail":
+                    f"{year}年报经营现金流 {_yi(ocf)} 为净利的 {ocf / profit * 100:.0f}%；常由折旧摊销或应付周期贡献，属偏正面信号。"})
+        # 4) 有息负债
+        ibr = _f(latest.get("interest_bearing_debt_ratio"))
+        if ibr is not None and ibr > 40:
+            findings.append({"item": "有息负债率偏高", "detail":
+                f"{year}年报有息负债占总负债 {ibr:.1f}%；财务费用弹性需纳入压力测试。"})
+        # 5) 股东人数异动
+        holders_now = [r for r in annual[-3:] if _f(r.get("shareholders"))]
+        if len(holders_now) >= 2 and all(_f(r.get("shareholders")) for r in holders_now[-2:]):
+            h_chg = _pct_change(_f(holders_now[-1].get("shareholders")), _f(holders_now[-2].get("shareholders")))
+            if h_chg is not None and abs(h_chg) > 20:
+                direction = "大幅增加（筹码趋于分散）" if h_chg > 0 else "大幅减少（筹码趋于集中）"
+                findings.append({"item": "股东人数" + direction, "detail":
+                    f"年报股东人数从 {_f(holders_now[-2].get('shareholders')):.0f} 变为 "
+                    f"{_f(holders_now[-1].get('shareholders')):.0f}（{h_chg:+.0f}%）。"})
+        # 6) 资本开支强度
+        capex, revenue = _f(latest.get("capex")), _f(latest.get("revenue"))
+        if capex is not None and revenue:
+            intensity = capex / revenue * 100
+            if intensity > 15:
+                findings.append({"item": "资本开支强度高", "detail":
+                    f"{year}年报资本开支 {_yi(capex)}，占营收 {intensity:.0f}%；在建产能的回报兑现是后续关键验证点。"})
+        if not findings:
+            narrative = f"{year} 年报各项扫描维度（应收/存货/现金流匹配/有息负债/股东人数/资本开支）均未见显著异常。"
+        else:
+            narrative = "\n".join(f"- **{f['item']}**：{f['detail']}" for f in findings)
+        return self._section("hidden_signals", {
+            "year": year, "findings": findings,
+            "scanned": ["应收vs营收", "存货", "现金流vs净利", "有息负债", "股东人数", "资本开支强度"],
+        }, narrative)
+
     # -- 11 为什么值得继续研究 -----------------------------------------------
     def build_why_research(self) -> dict[str, Any]:
         zones, risk, moat = self._zones(), self._risk(), self.build_moat()["structured_payload"]
@@ -1087,6 +1209,8 @@ _BUILDERS: dict[str, Callable[[CioSectionBuilder], dict[str, Any]]] = {
     "valuation": CioSectionBuilder.build_valuation,
     "normalized_earnings": CioSectionBuilder.build_normalized_earnings,
     "scenarios": CioSectionBuilder.build_scenarios,
+    "profit_forecast_detail": CioSectionBuilder.build_profit_forecast_detail,
+    "hidden_signals": CioSectionBuilder.build_hidden_signals,
     "cycle_profit_scenario": CioSectionBuilder.build_cycle_profit_scenario,
     "why_research": CioSectionBuilder.build_why_research,
     "why_caution": CioSectionBuilder.build_why_caution,

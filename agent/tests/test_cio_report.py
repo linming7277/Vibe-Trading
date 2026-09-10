@@ -59,7 +59,7 @@ def test_builder_degrades_per_section_instead_of_failing(tmp_path, monkeypatch) 
 
     monkeypatch.setattr(builder.CioSectionBuilder, "_financial", _boom)
     sections = build_all_sections("CN", "605108.SH", "2026-08-28")
-    assert len(sections) == len(SECTION_TITLES) == 17
+    assert len(sections) == len(SECTION_TITLES) == 19
     statuses = {s["section_type"]: s["structured_payload"].get("status") for s in sections}
     # financial-dependent sections degrade; independent ones still build
     assert statuses["financial_path"] == "MISSING"
@@ -324,7 +324,7 @@ def test_section_failure_never_leaks_exception_text(monkeypatch) -> None:
     monkeypatch.setitem(builder_mod._BUILDERS, "leader_quality", _boom)
     sections = build_all_sections("CN", "600460.SH", "2026-08-28")
     all_text = "\n".join(s["narrative_md"] for s in sections)
-    assert len(sections) == 17
+    assert len(sections) == 19
     assert "ValueError" not in all_text and "Traceback" not in all_text
     assert "数据处理暂不可用" in all_text
 

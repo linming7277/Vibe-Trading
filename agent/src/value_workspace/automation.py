@@ -548,6 +548,22 @@ class ValueResearchScheduler:
                 )
             stages["LOW_VALUE_NOTIFICATION_READY"] = str(notification.get("status") or "READY")
 
+            # CIO A/B 档报告维持（政策：A 档始终 READY，B 档缺才建，C 档按需）。
+            # 置于链尾且 fail-soft：综合端点抖动最多拖长收尾、绝不影响日报/
+            # 卡片/低估值通知的送达；公司数据未变化的龙头自动复用旧报告。
+            try:
+                from src.cio_report.service import get_cio_report_service
+
+                cio_result = get_cio_report_service().ensure_focus_tier_reports(as_of=as_of)
+                stages["CIO_FOCUS_TIER_READY"] = "READY"
+                stages["CIO_FOCUS_TIER_DETAIL"] = (
+                    f"A:{cio_result.get('built_a') or 0}建+{cio_result.get('reused_a') or 0}复用, "
+                    f"B:{cio_result.get('built_b') or 0}建"
+                )
+            except Exception:
+                logger.warning("cio focus tier ensure failed (fail-soft)", exc_info=True)
+                stages["CIO_FOCUS_TIER_READY"] = "FAILED"
+
             self._retry_counts.pop(as_of, None)
             store.update_automation(
                 last_run_id=pool["id"], last_status="completed", last_error=self._stage_summary(stages),

@@ -73,6 +73,41 @@ def read_lday_tail(path: str | Path, count: int = 2) -> list[dict[str, Any]]:
     return out
 
 
+# 扩展行情（ds/lday）bar：日期 u32，OHLC 各为 float32（未乘 100），
+# 成交额 float32，成交量 u32，保留 u32——与 A 股 int÷100 布局不同，勿混用。
+_DS_BAR = struct.Struct("<IfffffII")
+
+
+def read_ds_lday(path: str | Path, *, count: int | None = None) -> list[dict[str, Any]]:
+    """读取扩展行情 .day（ds/lday，f32 OHLC 布局）。
+
+    文件缺失/损坏 → []；`count` 限读末 N 根（None=全文件）。
+    校准样例：ds/lday/12#A_IXIC.day 末根 = 2026-09-09，收盘 ≈ 26253.34。
+    """
+    try:
+        size = Path(path).stat().st_size
+    except OSError:
+        return []
+    usable = size - size % _DS_BAR.size
+    if usable <= 0:
+        return []
+    start = 0 if count is None else max(0, usable - _DS_BAR.size * count)
+    try:
+        with Path(path).open("rb") as handle:
+            handle.seek(start)
+            raw = handle.read(usable - start)
+    except OSError:
+        return []
+    out: list[dict[str, Any]] = []
+    for offset in range(0, len(raw) - _DS_BAR.size + 1, _DS_BAR.size):
+        date_i, o, h, low, c, amount, volume, _reserved = _DS_BAR.unpack_from(raw, offset)
+        out.append({
+            "date": _iso(date_i), "open": o, "high": h, "low": low, "close": c,
+            "amount": float(amount), "volume": int(volume),
+        })
+    return out
+
+
 def load_sw1_index_names(store_path: str | Path | None = None) -> dict[str, str]:
     """申万一级 code→name（tdx_data.db 的 research_industry_hierarchy，level=1）。"""
     db = Path(store_path) if store_path else _default_store()

@@ -3,6 +3,7 @@ persist, and read (plan §12-§15)."""
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import time
@@ -18,7 +19,7 @@ from src.cio_report.store import CioReportStore
 
 logger = logging.getLogger(__name__)
 
-CIO_SYNTHESIS_PROMPT_VERSION = "cio-synthesis-v3"  # round1: latest quarter, evidence detail, verdict depth
+CIO_SYNTHESIS_PROMPT_VERSION = "cio-synthesis-v4-incremental"  # 分节增量：每节小请求+缓存，单节失败降级底稿
 # Narrative-layer version rides the report fingerprint so a template upgrade
 # re-renders persisted reports instead of being swallowed by idempotent reuse.
 NARRATIVE_TEMPLATE_VERSION = "boss-narrative-v3"  # round1: latest quarter, moat evidence, verdict depth
@@ -29,6 +30,7 @@ _TRADING_LANGUAGE = re.compile(r"买入|卖出|推荐|止盈|止损|仓位|加�
 # report.  synthesis_source persists these values; legacy rows (LLM/TEMPLATE)
 # are normalized at read time so there is only ONE field, not two.
 SYNTHESIS_LLM_COMPLETED = "LLM_COMPLETED"
+SYNTHESIS_LLM_PARTIAL = "LLM_PARTIAL"
 SYNTHESIS_TEMPLATE_FALLBACK = "TEMPLATE_FALLBACK"
 _LEGACY_SYNTHESIS = {"LLM": SYNTHESIS_LLM_COMPLETED, "TEMPLATE": SYNTHESIS_TEMPLATE_FALLBACK}
 
@@ -176,7 +178,15 @@ class CioReportService:
         model_name = ""
         for attempt in (1, 2):
             try:
-                narrative, model_name = self._synthesize(stock_code, as_of, sections)
+                result = self._synthesize(stock_code, as_of, sections)
+                if len(result) == 3:
+                    narrative, model_name, section_status = result
+                    logger.info(
+                        "CIO synthesis result=%s attempt=%s stock=%s as_of=%s model=%s",
+                        section_status or SYNTHESIS_LLM_COMPLETED, attempt, stock_code, as_of, model_name,
+                    )
+                    return narrative, model_name, section_status or SYNTHESIS_LLM_COMPLETED
+                narrative, model_name = result
                 logger.info(
                     "CIO synthesis result=LLM_COMPLETED attempt=%s stock=%s as_of=%s model=%s",
                     attempt, stock_code, as_of, model_name,
@@ -211,62 +221,121 @@ class CioReportService:
     # ------------------------------------------------------------------
     # the single synthesis LLM (plan §15.2)
     # ------------------------------------------------------------------
-    def _synthesize(self, stock_code: str, as_of: str, sections: list[dict[str, Any]]) -> tuple[str, str]:
+    def _split_boss_template(self, template_md: str) -> list[tuple[str, str]]:
+        """按 "## N. 标题" 把老板底稿切成 (标题, 底稿块) 序列。"""
+        pattern = re.compile(r"^## \d+\. (.+?)\s*$", re.M)
+        matches = list(pattern.finditer(template_md))
+        chunks: list[tuple[str, str]] = []
+        for index, match in enumerate(matches):
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(template_md)
+            chunks.append((match.group(1).strip(), template_md[match.start():end].strip()))
+        return chunks
+
+    def _invoke_section_polish(self, config: dict[str, Any], stock_code: str, as_of: str,
+                               title: str, chunk: str) -> str:
+        """单节润色：小请求（120–300 字），超时 300 秒，数字契约同整体综合。"""
         from src.research_tasks.service import ProviderModelRuntime
+
+        runtime = ProviderModelRuntime()
+        instruction = (
+            f"你是恒值投资投研主管。下面是报告《{title}》一节的确定性底稿。"
+            "任务：把底稿改写成面向老板的连贯中文叙述，正文 120-300 字；"
+            "所有数字、公司名、结论方向必须与底稿逐字一致，不得新增或改写任何数字与事实；"
+            "底稿中的 markdown 表格必须原样完整保留；"
+            "禁止英文状态词（如 GROWTH/FAIR/READY/HIGH）；"
+            "禁止买入、卖出、加仓、减仓、仓位、止盈、止损等交易表述。"
+            '输出必须是且仅是一个 JSON 对象：{"text":"<本节完整内容，含全部表格>"}'
+        )
+        payload = {
+            "stock_code": stock_code, "research_as_of": as_of,
+            "section_title": title, "draft": chunk,
+        }
+        kwargs: dict[str, Any] = {
+            "role": "research_lead", "phase": "CIO_SECTION_POLISH",
+            "model": str(config["model"]), "instruction": instruction, "payload": payload,
+            "timeout_seconds": 300,
+        }
+        if config.get("base_url") and hasattr(runtime, "invoke_with_connection"):
+            output = runtime.invoke_with_connection(
+                **kwargs, base_url=str(config["base_url"]), api_key=str(config.get("api_key") or ""))
+        else:
+            output = runtime.invoke(**kwargs, provider=str(config.get("provider") or "openai"))
+        text = str(dict(output).get("text") or "").strip()
+        if not text or len(text) < 40 or _TRADING_LANGUAGE.search(text):
+            raise ValueError("section polish failed safety validation")
+        dropped = [
+            line for line in chunk.splitlines()
+            if line.startswith("|") and "---" not in line and line not in text
+        ]
+        if dropped:
+            raise ValueError(f"section polish dropped {len(dropped)} table lines")
+        return text
+
+    def _synthesize(
+        self, stock_code: str, as_of: str, sections: list[dict[str, Any]], template_md: str = "",
+    ) -> tuple[str, str, str | None]:
+        """分节增量综合：每节独立小请求 + 叙述缓存 + 单节失败降级底稿。
+
+        相比整篇一次调用：单节 300 字级别的请求不会触发长文推理超时；
+        底稿未变化的节直接命中缓存零调用；任何一节失败只降级该节
+        （回退确定性底稿文本），整份报告始终可交付。
+        返回 (report_md, model_name, 状态)；全部节失败时抛错，由重试包装
+        降级为整篇确定性模板。
+        """
         from src.research_tasks.store import ResearchTaskStore
 
         config = ResearchTaskStore().get_runtime_config("research_lead")
         if not config.get("enabled") or not config.get("model"):
             raise RuntimeError("research_lead 模型未启用")
-        payload = {
-            "stock_code": stock_code, "research_as_of": as_of,
-            "sections": [
-                {"title": s["title"], "data": s["structured_payload"], "template": s["narrative_md"]}
-                for s in sections
-            ],
-            "boss_template": render_boss_report(sections, stock_code=stock_code, as_of=as_of),
-        }
-        instruction = (
-            "你是恒值投资的投研主管，把研究 section 的结构化数据整合成老板直接阅读的中文深度报告。"
-            f"必须使用这 14 个小节标题（顺序固定）：{'；'.join(f'{i}.{t}' for i, t in enumerate(BOSS_SECTIONS, 1))}。"
-            "写作契约："
-            "①全部中文表达，正文禁止出现英文后台状态词（如 GROWTH/FAIR/READY/LIMITED/HIGH/MEDIUM/BEAR 等），"
-            "枚举一律写成中文（如：收入持续增长、估值处于合理区间、当前数据不足以形成完整判断、谨慎/基准/乐观情景）；"
-            "L1/L2/L3 写成一级行业/二级行业/三级行业；PE/PB/ROE/OCF/Capex 写成市盈率/市净率/净资产收益率/经营现金流/资本开支。"
-            "②所有数字必须逐字来自 payload 或 boss_template，禁止新增事实、业务占比或行业判断。"
-            "③boss_template 是确定性底稿：你可以润色语言、加强连贯，但事实与结论方向不得改变，其核心矛盾、估值位置、风险归纳的框架必须保留。"
-            "④第3节要讲清 高点→下滑→低谷→修复 的路径；第4节按 收入/利润/毛利率/现金流 四维归纳阶段；"
-            "第5节一段话点出最核心经营矛盾；第10节必须回答价格在区间什么位置、偏离中值多少、市盈率是否因低利润失真、"
-            "市净率对照同行的位置、历史估值缺失限制什么、当前估值最大前提；"
-            "第6节先归纳'真正需要关注的是什么'再分 已确认风险/财务观察项/资料不足；"
-            "第11节只用谨慎/基准/乐观情景，禁止主观概率；第13节验证点分最重要/其次/长期；"
-            "第14节结论只能是 重点研究/继续观察/暂缓优先研究/资料不足 之一，并用一段话说明为什么、"
-            "最重要的正面因素、最大限制、什么变化会升级或降级。"
-            "⑤禁止买入、卖出、建仓、加仓、止损、止盈、仓位等一切交易表述。"
-            "输出 Markdown，总长 1800-3500 字；"
-            "输出必须是且仅是一个 JSON 对象，不要 markdown 代码块和任何额外文字："
-            '{"report_md":"<完整报告>"}。'
-        )
-        runtime = ProviderModelRuntime()
-        kwargs: dict[str, Any] = {
-            "role": "research_lead", "phase": "CIO_SYNTHESIS",
-            "model": str(config["model"]), "instruction": instruction, "payload": payload,
-        }
-        # 1800-3500 字的推理模型综合在默认 120s 超时下必然失败（历史上
-        # 22/34 份报告因此落到模板兜底）；综合专用放宽到 8 分钟。
-        if config.get("base_url") and hasattr(runtime, "invoke_with_connection"):
-            output = runtime.invoke_with_connection(
-                **kwargs, base_url=str(config["base_url"]), api_key=str(config.get("api_key") or ""),
-                timeout_seconds=480,
-            )
-        else:
-            output = runtime.invoke(**kwargs, provider=str(config.get("provider") or "openai"),
-                                    timeout_seconds=480)
-        report_md = str(dict(output).get("report_md") or "").strip()
-        if not report_md or _TRADING_LANGUAGE.search(report_md):
+        template = template_md or render_boss_report(
+            sections, stock_code=stock_code, as_of=as_of)
+        chunks = self._split_boss_template(template)
+        if not chunks:
+            raise RuntimeError("boss template has no sections to synthesize")
+        model_name = str(config["model"])
+        parts: list[str] = []
+        polished_count = failed_count = cached_count = 0
+        for title, chunk in chunks:
+            chunk_hash = hashlib.sha256((title + chr(10) + chunk).encode("utf-8")).hexdigest()[:24]
+            cached = self.store.load_section_narrative(stock_code, title, chunk_hash)
+            if cached:
+                parts.append(cached)
+                cached_count += 1
+                continue
+            polished = ""
+            for attempt in (1, 2):
+                try:
+                    polished = self._invoke_section_polish(config, stock_code, as_of, title, chunk)
+                    break
+                except Exception as exc:  # noqa: BLE001 - 单节失败降级，不拖垮整份
+                    if attempt == 1 and self._is_transient_synthesis_error(exc):
+                        logger.warning(
+                            "CIO section polish transient retry stock=%s title=%s exc=%s",
+                            stock_code, title, type(exc).__name__,
+                        )
+                        time.sleep(self._SYNTHESIS_RETRY_BACKOFF_S)
+                        continue
+                    logger.warning(
+                        "CIO section polish fallback-to-draft stock=%s title=%s exc=%s: %s",
+                        stock_code, title, type(exc).__name__, str(exc)[:200],
+                    )
+                    break
+            if polished:
+                self.store.save_section_narrative(stock_code, title, chunk_hash, polished, model_name)
+                parts.append(polished)
+                polished_count += 1
+            else:
+                parts.append(chunk)
+                failed_count += 1
+        report_md = (chr(10) * 2).join(parts).strip()
+        if polished_count == 0 and cached_count == 0:
+            raise RuntimeError("all section polish failed")
+        if failed_count:
+            model_name = f"{model_name}({failed_count}节降级底稿)"
+        if _TRADING_LANGUAGE.search(report_md):
             raise ValueError("CIO synthesis failed safety validation")
-        return report_md, str(config["model"])
-
+        status = SYNTHESIS_LLM_COMPLETED if not failed_count else SYNTHESIS_LLM_PARTIAL
+        return report_md, model_name, status
 
     def get_quick_brief(self, market: str, stock_code: str, *, as_of: str | None = None) -> dict[str, Any]:
         """Read-only Quick Brief projection of the persisted Full Report.

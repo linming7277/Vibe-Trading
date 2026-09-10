@@ -184,6 +184,10 @@ async def _run_startup_preflight() -> None:
     # quality-gated completed snapshot.
     start_data_refresh_scheduler()
     start_value_research_scheduler()
+    # 早盘宏观速览：工作日 08:00 Asia/Shanghai（独立卡片，不覆盖收盘日报）。
+    from src.investment_research_supervisor.morning_macro_brief import start_morning_macro_scheduler
+
+    start_morning_macro_scheduler()
     from src.config.accessor import get_env_config
 
     auto_start_channels = get_env_config().agent_tuning.vibe_trading_channels_auto_start

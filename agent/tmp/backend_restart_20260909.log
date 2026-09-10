@@ -1,0 +1,633 @@
+Not migrating D:\AI\hzstock\agent\runs\safe_run: C:\Users\Administrator\.vibe-trading\runs\safe_run already exists. Reconcile or delete the old copy manually.
+INFO:     Started server process [19948]
+INFO:     Waiting for application startup.
+Not migrating D:\AI\hzstock\agent\runs\safe_run: C:\Users\Administrator\.vibe-trading\runs\safe_run already exists. Reconcile or delete the old copy manually.
+No channels enabled
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8899 (Press CTRL+C to quit)
+[prod] Frontend served from D:\AI\hzstock\frontend\dist
+==================================================
+  恒值投资服务
+  API internal port: 8899 (use the frontend LAN address shown by the launcher)
+==================================================
+
+Preflight Check
+ OK   │ LLM (openrouter)   │ deepseek/deepseek-v4-pro via                      
+      │                    │ https://openrouter.ai |                           
+      │                    │ base=https://openrouter.ai timeout=120s retries=2 
+      │                    │ proxy=none                                        
+ OK   │ OKX API            │ reachable                                         
+ FAIL │ yfinance           │ YFRateLimitError: Too Many Requests. Rate         
+      │                    │ limited. Try after a while. (US/HK equity         
+      │                    │ backtest unavailable)                             
+ N/A  │ Tushare            │ TUSHARE_TOKEN not set (optional) (A-share data    
+      │                    │ unavailable)                                      
+ OK   │ akshare            │ installed                                         
+ OK   │ ccxt               │ installed                                         
+ OK   │ Content Filter     │ 5% (set via CONTENT_FILTER_WARNING_THRESHOLD)     
+      │ Threshold          │                                                   
+
+5/7 services ready
+
+INFO:     127.0.0.1:60156 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60394 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60396 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60395 - "GET /api/value/focus-selection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60397 - "GET /api/value/focus-selection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60398 - "GET /api/value/strategy-event-batches?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60400 - "GET /api/value/strategy-event-batches?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60403 - "GET /api/value/low-value-leaders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60405 - "GET /api/value/low-value-leader-events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60404 - "GET /api/value/macro-sector-projection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60408 - "GET /api/value/macro-sector-projection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60412 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60414 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60411 - "GET /api/value/focus-selection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60416 - "GET /api/value/focus-selection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60418 - "GET /api/value/strategy-event-batches?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60420 - "GET /api/value/strategy-event-batches?limit=10 HTTP/1.1" 200 OK
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  3.44it/s] 50%|█████     | 2/4 [00:01<00:01,  1.80it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.30it/s]100%|██████████| 4/4 [00:01<00:00,  2.15it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.78it/s] 50%|█████     | 2/4 [00:00<00:00,  2.47it/s] 75%|███████▌  | 3/4 [00:01<00:00,  1.65it/s]100%|██████████| 4/4 [00:01<00:00,  2.16it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:02,  1.42it/s] 50%|█████     | 2/4 [00:01<00:01,  1.98it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.60it/s]100%|██████████| 4/4 [00:01<00:00,  2.02it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  2.25it/s] 50%|█████     | 2/4 [00:00<00:00,  3.25it/s] 75%|███████▌  | 3/4 [00:00<00:00,  3.14it/s]100%|██████████| 4/4 [00:01<00:00,  2.19it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  2.70it/s] 50%|█████     | 2/4 [00:00<00:00,  3.62it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.03it/s]100%|██████████| 4/4 [00:01<00:00,  2.50it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:02,  1.31it/s] 50%|█████     | 2/4 [00:01<00:00,  2.04it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.15it/s]100%|██████████| 4/4 [00:01<00:00,  2.27it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  2.20it/s] 50%|█████     | 2/4 [00:01<00:01,  1.93it/s] 75%|███████▌  | 3/4 [00:01<00:00,  1.53it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  3.71it/s] 50%|█████     | 2/4 [00:00<00:00,  2.89it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.32it/s]100%|██████████| 4/4 [00:01<00:00,  2.37it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.85it/s] 50%|█████     | 2/4 [00:01<00:01,  1.70it/s] 75%|███████▌  | 3/4 [00:01<00:00,  1.97it/s]100%|██████████| 4/4 [00:01<00:00,  2.11it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  2.28it/s] 50%|█████     | 2/4 [00:01<00:01,  1.80it/s] 75%|███████▌  | 3/4 [00:01<00:00,  1.69it/s]100%|██████████| 4/4 [00:02<00:00,  1.66it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:02,  1.41it/s] 50%|█████     | 2/4 [00:01<00:01,  1.69it/s] 75%|███████▌  | 3/4 [00:01<00:00,  1.98it/s]100%|██████████| 4/4 [00:02<00:00,  2.18it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.84it/s] 50%|█████     | 2/4 [00:01<00:01,  1.69it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.50it/s]100%|██████████| 4/4 [00:01<00:00,  3.27it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  2.35it/s] 50%|█████     | 2/4 [00:00<00:00,  2.36it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.53it/s]100%|██████████| 4/4 [00:01<00:00,  3.21it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  2.04it/s] 50%|█████     | 2/4 [00:00<00:00,  2.47it/s] 75%|███████▌  | 3/4 [00:01<00:00,  1.85it/s]100%|██████████| 4/4 [00:01<00:00,  2.17it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:02,  1.49it/s] 50%|█████     | 2/4 [00:01<00:01,  1.93it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.45it/s]100%|██████████| 4/4 [00:01<00:00,  2.54it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  5.34it/s] 50%|█████     | 2/4 [00:00<00:00,  2.48it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.07it/s]100%|██████████| 4/4 [00:01<00:00,  2.17it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  4.31it/s] 50%|█████     | 2/4 [00:00<00:00,  2.74it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.19it/s]100%|██████████| 4/4 [00:01<00:00,  2.93it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.93it/s] 50%|█████     | 2/4 [00:00<00:00,  2.46it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.51it/s]100%|██████████| 4/4 [00:01<00:00,  2.58it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  2.21it/s] 50%|█████     | 2/4 [00:00<00:01,  1.98it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.16it/s]100%|██████████| 4/4 [00:01<00:00,  2.95it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  5.22it/s] 50%|█████     | 2/4 [00:01<00:01,  1.63it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.15it/s]100%|██████████| 4/4 [00:01<00:00,  2.17it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.78it/s] 50%|█████     | 2/4 [00:00<00:00,  2.41it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.59it/s]100%|██████████| 4/4 [00:01<00:00,  2.46it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  2.87it/s] 50%|█████     | 2/4 [00:00<00:00,  4.01it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.22it/s]100%|██████████| 4/4 [00:01<00:00,  2.50it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  6.75it/s] 50%|█████     | 2/4 [00:00<00:00,  4.26it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.04it/s]100%|██████████| 4/4 [00:01<00:00,  2.87it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.51it/s] 50%|█████     | 2/4 [00:01<00:01,  1.94it/s] 75%|███████▌  | 3/4 [00:01<00:00,  1.57it/s]100%|██████████| 4/4 [00:02<00:00,  2.11it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  3.24it/s] 50%|█████     | 2/4 [00:00<00:00,  2.27it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.21it/s]100%|██████████| 4/4 [00:02<00:00,  1.80it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  3.03it/s] 50%|█████     | 2/4 [00:01<00:01,  1.77it/s] 75%|███████▌  | 3/4 [00:01<00:00,  1.97it/s]100%|██████████| 4/4 [00:01<00:00,  2.66it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  2.67it/s] 50%|█████     | 2/4 [00:00<00:00,  2.27it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.45it/s]100%|██████████| 4/4 [00:01<00:00,  3.36it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  4.47it/s] 50%|█████     | 2/4 [00:00<00:00,  2.61it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.54it/s]100%|██████████| 4/4 [00:01<00:00,  2.20it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:02,  1.14it/s] 50%|█████     | 2/4 [00:01<00:00,  2.17it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.10it/s]100%|██████████| 4/4 [00:01<00:00,  2.16it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:02,  1.48it/s] 50%|█████     | 2/4 [00:00<00:00,  2.36it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.45it/s]100%|██████████| 4/4 [00:01<00:00,  2.61it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  2.21it/s] 50%|█████     | 2/4 [00:00<00:00,  3.06it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.93it/s]100%|██████████| 4/4 [00:01<00:00,  2.27it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.82it/s] 50%|█████     | 2/4 [00:00<00:00,  2.36it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.71it/s]100%|██████████| 4/4 [00:01<00:00,  2.15it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  3.36it/s] 50%|█████     | 2/4 [00:00<00:00,  2.56it/s] 75%|███████▌  | 3/4 [00:01<00:00,  1.83it/s]100%|██████████| 4/4 [00:01<00:00,  2.01it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.83it/s] 50%|█████     | 2/4 [00:01<00:01,  1.59it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.50it/s]100%|██████████| 4/4 [00:01<00:00,  3.17it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  5.03it/s] 50%|█████     | 2/4 [00:00<00:00,  4.12it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.51it/s]100%|██████████| 4/4 [00:01<00:00,  3.38it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.92it/s] 50%|█████     | 2/4 [00:00<00:00,  2.20it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.78it/s]100%|██████████| 4/4 [00:01<00:00,  3.41it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.82it/s] 50%|█████     | 2/4 [00:00<00:00,  2.63it/s] 75%|███████▌  | 3/4 [00:01<00:00,  3.12it/s]100%|██████████| 4/4 [00:01<00:00,  3.02it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.95it/s] 50%|█████     | 2/4 [00:00<00:00,  2.43it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.36it/s]100%|██████████| 4/4 [00:01<00:00,  2.70it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:02,  1.14it/s] 50%|█████     | 2/4 [00:01<00:01,  1.97it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.51it/s]100%|██████████| 4/4 [00:01<00:00,  2.47it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  3.47it/s] 50%|█████     | 2/4 [00:00<00:00,  2.61it/s] 75%|███████▌  | 3/4 [00:01<00:00,  1.91it/s]100%|██████████| 4/4 [00:01<00:00,  2.26it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  7.84it/s] 50%|█████     | 2/4 [00:00<00:00,  3.23it/s] 75%|███████▌  | 3/4 [00:00<00:00,  2.96it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  3.39it/s] 50%|█████     | 2/4 [00:00<00:00,  2.77it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.90it/s]100%|██████████| 4/4 [00:01<00:00,  3.84it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  5.50it/s] 50%|█████     | 2/4 [00:00<00:00,  3.99it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.54it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  3.11it/s] 50%|█████     | 2/4 [00:00<00:00,  3.32it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.44it/s]100%|██████████| 4/4 [00:01<00:00,  3.35it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.59it/s] 50%|█████     | 2/4 [00:01<00:01,  1.95it/s] 75%|███████▌  | 3/4 [00:01<00:00,  1.62it/s]100%|██████████| 4/4 [00:01<00:00,  2.35it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:01,  1.52it/s] 50%|█████     | 2/4 [00:01<00:01,  1.53it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.14it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  3.75it/s] 50%|█████     | 2/4 [00:00<00:00,  4.03it/s] 75%|███████▌  | 3/4 [00:01<00:00,  2.27it/s]100%|██████████| 4/4 [00:01<00:00,  2.60it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:00,  5.70it/s] 50%|█████     | 2/4 [00:00<00:00,  5.61it/s] 75%|███████▌  | 3/4 [00:00<00:00,  2.57it/s]100%|██████████| 4/4 [00:01<00:00,  2.32it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+TQ数据连接已关闭
+TQ数据接口初始化成功，使用路径: C:\zd_zyb\PYPlugins\user\hzstock_data_service_19948.py
+  0%|          | 0/4 [00:00<?, ?it/s] 25%|██▌       | 1/4 [00:00<00:02,  1.45it/s] 50%|█████     | 2/4 [00:00<00:00,  2.42it/s] 75%|███████▌  | 3/4 [00:01<00:00,  1.97it/s]100%|██████████| 4/4 [00:01<00:00,  2.50it/s]                                             macro forecast review failed (fail-soft)
+Traceback (most recent call last):
+  File "D:\AI\hzstock\agent\src\value_workspace\automation.py", line 444, in _run_latest_completed
+    persist_outcome(result)
+  File "D:\AI\hzstock\agent\src\macro_forecast\outcome.py", line 298, in persist_outcome
+    return store.save_outcome(evaluation["outcome"])
+                              ~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'outcome'
