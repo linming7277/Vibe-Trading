@@ -82,17 +82,20 @@ def _render() -> str:
 
 def test_report_uses_new_boss_section_order_and_titles() -> None:
     md = _render()
-    positions = [md.find(f"## {i}. {t}") for i, t in enumerate(BOSS_SECTIONS, 1)]
+    positions = [md.find(f"## {t}") for t in BOSS_SECTIONS]
     assert all(p != -1 for p in positions)
     assert positions == sorted(positions)
-    assert "## 6. 当前最核心的经营矛盾" in md and "## 17. 最终研究判断" in md
+    assert "## 14 CIO 最终研究结论" in md
+    # 19 节必须包含老板点名的两节
+    assert "## 10a 未来三年利润预估明细" in md
+    assert "## 05c 财报隐藏信息扫描" in md
 
 
 def test_no_backend_english_tokens_leak_into_boss_narrative() -> None:
     md = _render()
-    leaks = _BACKEND_TOKENS.findall(md)
+    leaks = [t for t in _BACKEND_TOKENS.findall(md) if t != "CIO"]  # CIO 是老板用语（CIO 报告），允许
     assert not leaks, leaks
-    assert "CIO" not in md
+    assert "买入" not in md and "止损" not in md
 
 
 def test_financial_path_narrative_tells_peak_decline_trough_recovery() -> None:
@@ -113,11 +116,13 @@ def test_operating_stage_is_multidimensional() -> None:
     assert "综合归纳" in md
 
 
-def test_core_conflict_paragraph_present_and_grounded() -> None:
+def test_core_conflict_content_grounded_in_new_structure() -> None:
     md = _render()
-    assert "当前最核心的经营矛盾" in md
-    assert "新增收入能否重新转化为足够高的利润和现金回报" in md
-    assert "收入持续增长" in md and "盈利能力相比历史高点大幅下降" in md
+    # 旧大纲的「当前最核心的经营矛盾」合并节已按 19 节结构移除；
+    # 其事实内容由 05 盈利质量与 13 核心逻辑验证点两节如实承载。
+    assert "## 05 盈利质量与财务风险" in md
+    assert "## 13 核心逻辑、证伪条件与验证点" in md
+    assert "经营现金流与净利润的匹配程度" in md  # 13 节验证点的事实锚仍在
 
 
 def test_valuation_answers_the_six_questions() -> None:

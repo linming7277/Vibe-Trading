@@ -20,7 +20,7 @@ from typing import Any
 from src.config.paths import get_runtime_root
 from src.macro_forecast.bars import ForecastBarStore
 from src.macro_forecast.bundle import ForecastBundleStore
-from src.macro_forecast.contracts import SHANGHAI, next_trading_day
+from src.macro_forecast.contracts import SHANGHAI
 from src.macro_forecast.engine import (
     ForecastEngine, MODEL_HARD_DEADLINE_SECONDS,
 )
@@ -172,8 +172,10 @@ def run_macro_forecast(
     """dry-run 只检查；shadow 真调用留档；official 须全部 Gate + 人工批准。"""
     research_db = research_db or (get_runtime_root() / "research.db")
     if target_date is None:
+        from src.macro_forecast.contracts import projected_next_trading_day
+
         days = trading_days if trading_days is not None else load_trading_days()
-        target_date = next_trading_day(datetime.now().strftime("%Y%m%d"), days) or ""
+        target_date = projected_next_trading_day(datetime.now().strftime("%Y%m%d"), days) or ""
         if not target_date:
             return {"status": "CALENDAR_UNAVAILABLE", "message": "日历未覆盖当前日之后的交易日"}
     target_date = str(target_date).replace("-", "")

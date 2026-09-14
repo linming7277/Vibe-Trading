@@ -312,6 +312,44 @@ def test_no_thesis_watchpoint_fallback_is_deterministic(monkeypatch) -> None:
     assert not _re.search(r"MA\d|止损|止盈|建仓|仓位", text)
 
 
+def test_get_report_tolerates_missing_profit_forecast_detail(tmp_path) -> None:
+    """旧/BLOCK_ONLY 报告缺 10a 节：读取必须 200 语义返回，绝不内部错误。"""
+    store = CioReportStore(tmp_path / "research.db")
+    svc = CioReportService(store=store)
+
+    def sec(section_type: str, body: str) -> dict:
+        return {"section_type": section_type, "title": SECTION_TITLES[section_type],
+                "input_fingerprint": f"{section_type}-old", "freshness_status": "REFRESHED",
+                "structured_payload": {"note": body}, "narrative_md": body, "source_refs": []}
+
+    store.save_report(
+        market="CN", stock_code="601886.SH", research_as_of="2026-09-10",
+        overall_freshness="READY", input_fingerprint="old-17",
+        module_hashes={}, sections=[sec("valuation", "估值旧"), sec("financial_path", "财务旧")],
+        narrative_report_md="旧模板叙述", synthesis_source="TEMPLATE_FALLBACK",
+        formula_version="test", prompt_version="test", model_version="",
+        previous_report_id=None,
+    )
+    report = svc.get_report("CN", "601886.SH", as_of="2026-09-11")
+    assert report is not None and report.get("status") == "READY"
+    types = {s["section_type"] for s in report["sections"]}
+    assert "profit_forecast_detail" not in types  # 缺节如实缺省，不补造
+    assert "valuation" in types
+    # 有该节的报告原样返回
+    store.save_report(
+        market="CN", stock_code="601886.SH", research_as_of="2026-09-11",
+        overall_freshness="READY", input_fingerprint="new-19",
+        module_hashes={}, sections=[sec("valuation", "估值新"), sec("profit_forecast_detail", "利润预估新")],
+        narrative_report_md="新叙述", synthesis_source="LLM_COMPLETED",
+        formula_version="test", prompt_version="test", model_version="glm-5.3",
+        previous_report_id=int(report["id"]),
+    )
+    report2 = svc.get_report("CN", "601886.SH", as_of="2026-09-11")
+    types2 = {s["section_type"] for s in report2["sections"]}
+    assert "profit_forecast_detail" in types2
+    assert report2["synthesis_status"] == "LLM_COMPLETED"
+
+
 def test_section_failure_never_leaks_exception_text(monkeypatch) -> None:
     """Fix §2.5: a broken section degrades to a friendly gap, no stack traces."""
     import src.cio_report.builder as builder_mod

@@ -21,6 +21,7 @@ import { CapitalAllocationFactsPanel } from "@/components/value/CapitalAllocatio
 import { confidenceLabel, entryStatusLabel, exitStatusLabel, metricLabel, thesisStatusLabel } from "@/components/value/SourceReferenceCard";
 import { LazyDetails } from "@/components/value/LazyDetails";
 import { ValuePriceZoneConclusionCard } from "@/components/value/ValuePriceZoneConclusionCard";
+import { CioReportAsOfCard } from "@/components/value/CioReportAsOfCard";
 import { ownerAuthority, ownerStatus } from "@/lib/ownerLanguage";
 
 const TABS = ["总览", "为什么是龙头", "经营与财务", "估值", "风险与待验证", "核心逻辑", "更多研究"] as const;
@@ -229,7 +230,7 @@ function OperationsFinancialTab({ stockCode, asOf }: { stockCode: string; asOf?:
 }
 
 function ValuationTab({ stockCode }: { stockCode: string }) {
-  return <div className="space-y-4"><section className="rounded-xl border border-primary/25 bg-card p-5"><div className="text-xs font-medium text-primary">估值与当前关注条件</div><h2 className="mt-1 text-lg font-semibold">先看价值位置，再看需要复核的情况</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">当前价格、合理价值与历史估值位置用于研究判断；不显示复杂评分，也不产生交易指令。</p></section><ValuePriceZoneConclusionCard stockCode={stockCode} /><LazyDetails className="rounded-xl border bg-card" summary="查看入场研究原始档（计算明细）"><div className="border-t p-5"><EntryResearchCard stockCode={stockCode} /></div></LazyDetails><LazyDetails className="rounded-xl border bg-card" summary="查看复核压力原始档（计算明细）"><div className="border-t p-5"><ExitResearchCard stockCode={stockCode} /></div></LazyDetails></div>;
+  return <div className="space-y-4"><section className="rounded-xl border border-primary/25 bg-card p-5"><div className="text-xs font-medium text-primary">估值与当前关注条件</div><h2 className="mt-1 text-lg font-semibold">先看价值位置，再看需要复核的情况</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">当前价格、合理价值与历史估值位置用于研究判断；不显示复杂评分，也不产生交易指令。</p></section><ValuePriceZoneConclusionCard stockCode={stockCode} /><CioReportAsOfCard stockCode={stockCode} /><LazyDetails className="rounded-xl border bg-card" summary="查看入场研究原始档（计算明细）"><div className="border-t p-5"><EntryResearchCard stockCode={stockCode} /></div></LazyDetails><LazyDetails className="rounded-xl border bg-card" summary="查看复核压力原始档（计算明细）"><div className="border-t p-5"><ExitResearchCard stockCode={stockCode} /></div></LazyDetails></div>;
 }
 
 function RiskAndValidationTab({ stockCode, asOf }: { stockCode: string; asOf?: string }) {

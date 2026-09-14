@@ -896,6 +896,16 @@ export interface ValuePriceZones {
 }
 
 export interface HistoricalValuationCoverage { first_date: string | null; last_date: string | null; pe_count: number; pb_count: number; dividend_yield_count: number; coverage_status: string; minimum_reliable_observations: number; }
+
+/** CIO 报告读取摘要（2026-09-14）：price_as_of=PRICE 块数据日，narrative_as_of=全文存档日。 */
+export interface CioReportSummary {
+  stock_code?: string;
+  research_as_of?: string | null;
+  price_as_of?: string | null;
+  narrative_as_of?: string | null;
+  status?: string;
+  [key: string]: unknown;
+}
 export interface HistoricalValuationMetric { status: string; count: number; current: number | null; percentile: number | null; cheapness_percentile: number | null; state?: string; direction: string; plain: string; winsorized?: { low_quantile: number; high_quantile: number; low: number; high: number }; }
 export interface HistoricalValuationHistory { stock_code: string; as_of: string | null; current: Record<string, unknown> | null; historical_percentiles: { pe_ttm: HistoricalValuationMetric; pb_mrq: HistoricalValuationMetric; dividend_yield: HistoricalValuationMetric }; historical_valuation_status: string; cheapness_percentile: number | null; coverage: HistoricalValuationCoverage; series_summary: { observations: number; source_type: string; price_source_id: string; outlier_rule: string }; }
 export interface EntryResearchZone { label: string; low: number | null; high: number | null; kind: string; strength?: string | null; }
@@ -1274,6 +1284,8 @@ export const api = {
     request<MoatResearch>(`/api/value/companies/${encodeURIComponent(stockCode)}/moat-research?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
   getCompanyPriceZones: (stockCode: string, asOf?: string) =>
     request<ValuePriceZones>(`/api/value/companies/${encodeURIComponent(stockCode)}/price-zones?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getCioReport: (stockCode: string, asOf?: string) =>
+    request<CioReportSummary>(`/api/research/cio/${encodeURIComponent(stockCode)}${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
   getCompanyEntryResearch: (stockCode: string, asOf?: string) =>
     request<EntryResearch>(`/api/value/companies/${encodeURIComponent(stockCode)}/entry-research?market=CN${asOf ? `&as_of=${encodeURIComponent(asOf)}` : ""}`),
   getCompanyExitResearch: (stockCode: string, asOf?: string) =>

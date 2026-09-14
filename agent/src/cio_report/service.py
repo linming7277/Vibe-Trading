@@ -43,9 +43,28 @@ class CioReportService:
     # read
     # ------------------------------------------------------------------
     def get_report(self, market: str, stock_code: str, *, as_of: str | None = None) -> dict[str, Any] | None:
-        report = self.store.latest_report(market, stock_code.upper(), as_of=as_of)
+        market, code = market.upper(), stock_code.upper()
+        # 读路径 PRICE 块补刷（2026-09-14）：仅「最新」读取且行情收盘快照就绪时
+        # 执行——确定性 refresh，指纹变了才写，绝不触发 LLM/analyze/全文重建。
+        # TDX 未就绪或显式历史 as_of → 直接读存档，不写库。
+        report = self.store.latest_report(market, code, as_of=as_of)
         if report is None:
+            # 读取路径绝不创建：没有报告就是没有（quick-brief §12 不静默生成）
             return None
+        # 读路径 PRICE 块补刷（2026-09-14）：仅「已存报告」且行情收盘快照就绪时
+        # 原地更新——确定性 refresh，指纹变了才写，绝不触发 LLM/analyze/全文重建，
+        # 也绝不为无报告的公司凭空建报告（quick-brief §12）。
+        if not as_of:
+            resolved_as_of = self._default_research_as_of()
+            if resolved_as_of:
+                try:
+                    self.refresh_cio_block(market, code, "PRICE", as_of=resolved_as_of)
+                except Exception:  # noqa: BLE001 - 读路径 fail-soft，旧报告照常返回
+                    logger.warning("read-path PRICE refresh failed for %s", code, exc_info=True)
+            else:
+                logger.warning(
+                    "qualified close snapshot unavailable; serving archived CIO report for %s", code)
+            report = self.store.latest_report(market, code, as_of=as_of) or report
         # The section table has no title column; the section_type→title
         # registry restores it deterministically at read time (fix §8) —
         # no schema migration needed.
@@ -54,7 +73,14 @@ class CioReportService:
             section["title"] = SECTION_TITLES.get(str(section.get("section_type") or ""),
                                                   str(section.get("section_type") or ""))
             sections.append(section)
-        report["sections"] = sorted(sections, key=lambda s: list(SECTION_TITLES).index(s["section_type"]))
+        # 未知 section_type（旧/异构报告）排在末尾，绝不因排序抛内部错误
+        section_order = {t: i for i, t in enumerate(SECTION_TITLES)}
+        report["sections"] = sorted(
+            sections, key=lambda s: section_order.get(str(s.get("section_type") or ""), 999))
+        valuation = next((s for s in report["sections"] if s.get("section_type") == "valuation"), None)
+        val_payload = (valuation or {}).get("structured_payload") or {}
+        report["price_as_of"] = (str(val_payload.get("close_as_of") or val_payload.get("as_of") or "")[:10]) or None
+        report["narrative_as_of"] = str(report.get("created_at") or "")[:10] or None
         return self._with_delivery_status(report)
 
     @staticmethod
@@ -70,10 +96,14 @@ class CioReportService:
     # build / refresh
     # ------------------------------------------------------------------
     @staticmethod
-    def _default_research_as_of() -> str:
+    def _default_research_as_of() -> str | None:
         """Routing fix §6: every request shares research_as_of = the latest
         qualified market close, never the calendar today (a bare "today" has
-        no close snapshot and yields degraded reports)."""
+        no close snapshot and yields degraded reports).
+
+        TDX 收盘快照未就绪时返回 **None**：调用方必须拒绝生成，禁止回退到
+        宏观序列日（08-19 事故根因——fallback 曾把批量报告冻结在过期基准日）。
+        """
         try:
             from src.tdx_data import get_tdx_service
 
@@ -81,11 +111,12 @@ class CioReportService:
             market_date = str((snapshot or {}).get("market_date") or "")[:10]
             if market_date:
                 return market_date
-        except Exception:  # noqa: BLE001 - fall back to the date resolver
+        except Exception:  # noqa: BLE001 - treat any resolver failure as "not ready"
             pass
-        from src.research_freshness import get_research_freshness_service
-
-        return get_research_freshness_service()._resolve_as_of(None)
+        logger.warning(
+            "qualified close snapshot unavailable; refusing default research_as_of "
+            "(no CIO generation without an explicit as_of)")
+        return None
 
     def build_report(self, market: str, stock_code: str, *, as_of: str | None = None,
                      force_synthesis: bool = False) -> dict[str, Any]:
@@ -97,7 +128,12 @@ class CioReportService:
         from src.research_freshness import get_research_freshness_service
 
         market, code = market.upper(), stock_code.upper()
-        research_as_of = str(as_of or self._default_research_as_of())[:10]
+        resolved_as_of = str(as_of) if as_of else self._default_research_as_of()
+        if not resolved_as_of:
+            # 行情收盘快照未就绪且未显式给 as_of：拒绝生成，绝不落过期基准日。
+            return {"status": "RESEARCH_DATE_UNAVAILABLE", "stock_code": code,
+                    "message": "行情收盘快照未就绪，无法确定研究基准日；已拒绝生成（禁止宏观序列日兜底）"}
+        research_as_of = resolved_as_of[:10]
         freshness = get_research_freshness_service().classify(market, code, research_as_of)
         module_status = {m["module"]: m["status"] for m in freshness["modules"]}
 
@@ -223,7 +259,7 @@ class CioReportService:
     # ------------------------------------------------------------------
     def _split_boss_template(self, template_md: str) -> list[tuple[str, str]]:
         """按 "## N. 标题" 把老板底稿切成 (标题, 底稿块) 序列。"""
-        pattern = re.compile(r"^## \d+\. (.+?)\s*$", re.M)
+        pattern = re.compile(r"^## (.+?)\s*$", re.M)
         matches = list(pattern.finditer(template_md))
         chunks: list[tuple[str, str]] = []
         for index, match in enumerate(matches):
@@ -384,6 +420,145 @@ class CioReportService:
         }
 
     # ------------------------------------------------------------------
+    # Block-level refresh by data freshness (phase 1: PRICE only).
+    # Deterministic section rebuild — never runs business research or the
+    # full-report synthesis LLM (规格 §产品：价格变动不得触发全文 LLM).
+    # ------------------------------------------------------------------
+    def refresh_cio_block(self, market: str, stock_code: str, block_id: str,
+                          *, as_of: str | None = None) -> dict[str, Any]:
+        from src.cio_report.blocks import (
+            CIO_BLOCK_CONTRACT, MISSING_SECTIONS_NOTE, block_fingerprint,
+            price_block_inputs, stored_block_fingerprint,
+        )
+        from src.cio_report.builder import SECTION_TITLES, CioSectionBuilder, template_report_markdown
+
+        contract = CIO_BLOCK_CONTRACT.get(str(block_id or "").upper())
+        block_id = str(block_id or "").upper()
+        if not contract or contract.get("phase") != 1:
+            return {"status": "NOT_ENABLED", "block_id": block_id,
+                    "phase": (contract or {}).get("phase")}
+        market, code = market.upper(), stock_code.upper()
+        resolved_as_of = str(as_of) if as_of else self._default_research_as_of()
+        if not resolved_as_of:
+            return {"status": "RESEARCH_DATE_UNAVAILABLE", "block_id": block_id, "code": code,
+                    "message": "行情收盘快照未就绪；PRICE 块刷新需要显式 as_of 或就绪的收盘快照"}
+        research_as_of = resolved_as_of[:10]
+
+        builder = CioSectionBuilder(market, code, research_as_of)
+        zones = builder._zones()
+        if not zones:
+            return {"status": "NO_PRICE_DATA", "block_id": block_id, "code": code}
+        inputs = price_block_inputs(zones, code=code)
+        fingerprint = block_fingerprint(code, inputs, block_id=block_id)
+
+        previous = self.store.latest_report(market, code, as_of=None)
+        prev_sections = list((previous or {}).get("sections") or [])
+        if prev_sections:
+            target = next((s for s in prev_sections
+                           if s.get("section_type") in contract["section_types"]), None)
+            if stored_block_fingerprint(target, block_id) == fingerprint:
+                return {"status": "REUSED", "block_id": block_id, "code": code,
+                        "fingerprint": fingerprint, "report_id": (previous or {}).get("id")}
+
+        new_section = builder.build_valuation()
+        payload = dict(new_section.get("structured_payload") or {})
+        payload.update({
+            "position_label": inputs["position_label"],
+            "zone_low": inputs["zone_low"], "zone_high": inputs["zone_high"],
+            "close_as_of": inputs["close_as_of"],
+            "block_fingerprints": {block_id: fingerprint},
+        })
+        new_section["structured_payload"] = payload
+        new_section["freshness_status"] = "REFRESHED"
+
+        module_hashes = {contract["hash_column"]: fingerprint}
+        if not previous:
+            sections = [new_section] + [
+                {"section_type": st, "title": SECTION_TITLES[st], "freshness_status": "MISSING",
+                 "input_fingerprint": "", "structured_payload": {},
+                 "narrative_md": MISSING_SECTIONS_NOTE, "source_refs": []}
+                for st in SECTION_TITLES if st not in contract["section_types"]
+            ]
+            narrative = template_report_markdown(sections, stock_code=code, as_of=research_as_of)
+            synthesis_source, model_name = "BLOCK_ONLY_TEMPLATE", ""
+            overall_freshness = "PARTIAL"
+            previous_id = None
+        else:
+            sections = [
+                new_section if s.get("section_type") in contract["section_types"] else s
+                for s in prev_sections
+            ]
+            for column, block in (("financial_hash", "FINANCIAL"), ("business_hash", "BUSINESS"),
+                                  ("risk_hash", "RISK"), ("thesis_hash", "THESIS"),
+                                  ("leader_hash", "LEADER"), ("moat_hash", "MOAT"),
+                                  ("capital_allocation", "CAPITAL_ALLOCATION"), ("focus_hash", "FOCUS")):
+                module_hashes[column] = (previous or {}).get(column)
+            narrative = str(previous.get("narrative_report_md") or "")
+            synthesis_source = str(previous.get("synthesis_source") or "")
+            model_name = str(previous.get("model_version") or "")
+            overall_freshness = str(previous.get("overall_freshness") or "PARTIAL")
+            previous_id = (previous or {}).get("id")
+
+        report_fingerprint = "|".join(
+            [NARRATIVE_TEMPLATE_VERSION]
+            + [f"{s['section_type']}:{s.get('input_fingerprint') or ''}" for s in sections]
+        )
+        saved = self.store.save_report(
+            market=market, stock_code=code, research_as_of=research_as_of,
+            overall_freshness=overall_freshness,
+            input_fingerprint=report_fingerprint,
+            module_hashes=module_hashes, sections=sections,
+            narrative_report_md=narrative, synthesis_source=synthesis_source,
+            formula_version=CIO_REPORT_FORMULA_VERSION,
+            prompt_version=CIO_SYNTHESIS_PROMPT_VERSION, model_version=model_name,
+            previous_report_id=previous_id,
+        )
+        # save_report 的同指纹幂等分支会跳过节写回——若存档节里块指纹仍未登记
+        # （例如节曾被就地覆盖），就地补写一次，保证契约字段自愈。
+        saved_sections = saved.get("sections") or []
+        saved_target = next((s for s in saved_sections
+                             if s.get("section_type") in contract["section_types"]), None)
+        if stored_block_fingerprint(saved_target, block_id) != fingerprint:
+            self.store.update_report_section(int(saved["id"]), new_section)
+            self.store.set_module_hash(int(saved["id"]), contract["hash_column"], fingerprint)
+            saved = self.store.latest_report(market, code, as_of=research_as_of) or saved
+        return {"status": "REFRESHED", "block_id": block_id, "code": code,
+                "fingerprint": fingerprint, "report_id": saved.get("id"),
+                "previous_report_id": previous_id}
+
+    def refresh_cio_price_blocks(self, *, as_of: str | None = None,
+                                 universe: str = "leader_pool") -> dict[str, Any]:
+        """按数据新鲜度批量刷新龙头池的 PRICE 块（fail-soft，逐只隔离）。"""
+        from src.cio_report.blocks import leader_pool_codes
+
+        if universe != "leader_pool":
+            return {"status": "UNKNOWN_UNIVERSE", "universe": universe}
+        resolved_as_of = str(as_of) if as_of else self._default_research_as_of()
+        if not resolved_as_of:
+            return {"status": "RESEARCH_DATE_UNAVAILABLE", "universe": universe, "count": 0,
+                    "built": 0, "reused": 0, "failed": 0,
+                    "message": "行情收盘快照未就绪；PRICE 批量刷新需要显式 as_of 或就绪的收盘快照"}
+        codes = leader_pool_codes()
+        built = reused = failed = 0
+        for code in codes:
+            try:
+                result = self.refresh_cio_block("CN", code, "PRICE", as_of=resolved_as_of)
+            except Exception as exc:  # noqa: BLE001 - per-stock isolation
+                logger.warning("price block refresh failed for %s: %s: %s",
+                               code, type(exc).__name__, exc)
+                failed += 1
+                continue
+            status = str(result.get("status") or "")
+            if status == "REFRESHED":
+                built += 1
+            elif status == "REUSED":
+                reused += 1
+            else:
+                failed += 1
+        return {"status": "COMPLETED", "universe": universe, "count": len(codes),
+                "built": built, "reused": reused, "failed": failed}
+
+    # ------------------------------------------------------------------
     # Focus A/B/C resource policy (plan §11, Sprint 4)
     # ------------------------------------------------------------------
     def ensure_focus_tier_reports(self, *, as_of: str | None = None) -> dict[str, Any]:
@@ -395,7 +570,12 @@ class CioReportService:
         """
         from src.focus_selection import get_focus_selection_service
 
-        research_as_of = str(as_of or self._default_research_as_of())[:10]
+        research_as_of = str(as_of or self._default_research_as_of() or "")[:10]
+        if not research_as_of:
+            return {"status": "RESEARCH_DATE_UNAVAILABLE", "research_as_of": "",
+                    "tier_a": 0, "tier_b": 0, "built_a": 0, "built_b": 0, "reused_a": 0,
+                    "policy": "A=always READY; B=build when missing; C=on demand only",
+                    "message": "行情收盘快照未就绪，无法确定研究基准日；已拒绝批量生成"}
         try:
             focus = get_focus_selection_service().get_focus_selection(as_of=research_as_of) or {}
         except Exception:  # noqa: BLE001 - tier policy must not crash callers

@@ -112,10 +112,10 @@ def prepare_input_bundle(
     """
     days = trading_days if trading_days is not None else load_trading_days()
     if target_date is None:
-        from src.macro_forecast.contracts import next_trading_day
+        from src.macro_forecast.contracts import projected_next_trading_day
 
         today = datetime.now().strftime("%Y%m%d")
-        target_date = next_trading_day(today, days) or ""
+        target_date = projected_next_trading_day(today, days) or ""
         if not target_date:
             return {"status": "CALENDAR_UNAVAILABLE", "message": "日历未覆盖当前日之后的交易日，无法确定 T"}
     timeline = build_timeline(target_date, days)
@@ -174,6 +174,10 @@ def prepare_input_bundle(
             cross_market_available=False,
             cross_market_context=cross_market_context,
         )
+        # 目标日晚于日历最后已知交易日：目标日来自惯例投影（跳周末、未验证
+        # 法定节假日），如实进 gaps（§4.3 不冒充已确认交易日）。
+        if timeline.calendar_status == CALENDAR_UNVERIFIED_NEXT_SESSION:
+            payload["gaps"] = sorted(set(payload.get("gaps") or []) | {"CALENDAR_HOLIDAY_UNVERIFIED"})
         result: dict[str, Any] = {
             "status": "BUILT",
             "payload": payload,

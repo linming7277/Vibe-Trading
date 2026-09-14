@@ -188,6 +188,10 @@ async def _run_startup_preflight() -> None:
     from src.investment_research_supervisor.morning_macro_brief import start_morning_macro_scheduler
 
     start_morning_macro_scheduler()
+    # CIO 分块后台（PRICE/FINANCIAL 确定性刷新）：env HZ_CIO_BLOCK_WORKER=on 才启动，默认 off。
+    from src.cio_report.block_worker import start_cio_block_worker
+
+    start_cio_block_worker()
     from src.config.accessor import get_env_config
 
     auto_start_channels = get_env_config().agent_tuning.vibe_trading_channels_auto_start

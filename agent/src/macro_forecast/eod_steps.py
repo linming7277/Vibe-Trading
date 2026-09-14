@@ -48,8 +48,8 @@ def refresh_forecast_bars(*, end_date: str | None = None) -> dict[str, Any]:
 
 
 def resolve_next_target(*, today: str | None = None) -> str:
-    """TDX 实时日历解析下一交易日（离线日历滞后时的权威路径）。"""
-    from src.macro_forecast.contracts import next_trading_day
+    """TDX 实时日历解析下一交易日；日历只到已实现日时按惯例投影未来候选。"""
+    from src.macro_forecast.contracts import projected_next_trading_day
     from src.macro_forecast.forecast_service import load_trading_days
     from src.tdx_data.client import TdxClient
 
@@ -59,7 +59,7 @@ def resolve_next_target(*, today: str | None = None) -> str:
         days = load_trading_days(tdx_client=client, today=anchor)
     finally:
         client.close()
-    return next_trading_day(anchor, days) or ""
+    return projected_next_trading_day(anchor, days) or ""
 
 
 def build_next_bundle(*, target_date: str | None = None) -> dict[str, Any]:

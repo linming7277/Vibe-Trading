@@ -984,7 +984,7 @@ def get_cio_quick_brief(stock_code: str, as_of: str = "") -> str:
     ordinary company questions ("XX现在怎么样/值得关注吗/简单说下").  Pure
     projection of the saved Full Report: zero model calls, zero research
     refreshes.  Blocks: 研究结论/为什么值得看/主要风险/当前估值/核心逻
-    辑/接下来重点看.  Use get_cio_report for the full 14-section deep report.
+    辑/接下来重点看.  Use get_cio_report for the full 19-section deep report.
     """
     try:
         from src.cio_report import get_cio_report_service
@@ -1017,7 +1017,7 @@ def _lookup_stock_name(stock_code: str) -> str:
 def get_cio_report(stock_code: str, as_of: str = "") -> str:
     """Read the persisted Company CIO Deep Research Report (cache-first).
 
-    Returns the unified 14-section deep research product built from already
+    Returns the unified 19-section deep research product built from already
     saved results.  This is the default entry for company questions: it
     performs no LLM call and never refreshes market data.  Use
     refresh_cio_report when the boss explicitly asks to rebuild.

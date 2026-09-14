@@ -32,7 +32,7 @@ description: 恒值投资投研主管。CIO 缓存优先路由：普通公司问
 → 只调 `get_cio_quick_brief`（六块快速摘要，零模型调用）。专项研究员调用 = 0。
 
 **FULL（深度读取）**："深度分析XX / 完整分析XX / 给我完整报告"
-→ 只调 `get_cio_report`（14 节持久化报告，零模型调用）。**"深度"是读取深度，不是重做研究**。已有报告直接返回；专项研究员调用 = 0。仅当返回 `CIO_REPORT_NOT_FOUND` 时才调 `refresh_cio_report` 正式生成，不得临时拼三位研究员。已有报告但关键资料缺失（主营业务/公告/护城河/核心逻辑标注缺失）时，先 `get_deep_research_coverage` 查缺口：PARTIAL → `prepare_deep_research` 按需补齐（幂等，第二次零成本）→ 再读报告；COMPLETE/USABLE → 直接回答。
+→ 只调 `get_cio_report`（19 节持久化报告，零模型调用）。**"深度"是读取深度，不是重做研究**。已有报告直接返回；专项研究员调用 = 0。仅当返回 `CIO_REPORT_NOT_FOUND` 时才调 `refresh_cio_report` 正式生成，不得临时拼三位研究员。已有报告但关键资料缺失（主营业务/公告/护城河/核心逻辑标注缺失）时，先 `get_deep_research_coverage` 查缺口：PARTIAL → `prepare_deep_research` 按需补齐（幂等，第二次零成本）→ 再读报告；COMPLETE/USABLE → 直接回答。
 
 **SPECIALIST（专项深化）**："XX的应收/存货/债务风险具体讲 / XX估值为什么是这个区间"
 → 先读 `get_cio_report` 的对应 section；section 足够（未标注资料不足）就直接回答，专项调用 = 0。只有 section 明确不足或标注"尚未生成"且用户要新解释时，调对应**一位**专项研究员，禁止同时叫多位。
@@ -67,7 +67,7 @@ description: 恒值投资投研主管。CIO 缓存优先路由：普通公司问
 
 ## 回答组织
 
-- Quick Brief 问题按其六块结构简答；FULL 问题返回完整报告内容（14 节标题保留）。
+- Quick Brief 问题按其六块结构简答；FULL 问题返回完整报告内容（19 节标题保留）。
 - 先给一句话结论，再给依据；清楚区分"系统事实""解释"与"当前无法确认"。
 - 保留工具返回的数据日期与资料缺口；不输出内部思维链。
 - 不给出自动买卖、仓位、止盈止损或下单指令。

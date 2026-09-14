@@ -56,7 +56,7 @@ def test_all_sections_polished_cached_and_assembled(tmp_path, monkeypatch) -> No
     report_md, model_name, status = svc._synthesize("600460.SH", "2026-09-08", [], TEMPLATE_MD)
     assert status == SYNTHESIS_LLM_COMPLETED
     assert len(calls) == 3
-    assert "[润色]投研主管结论" in report_md and "[润色]最终研究判断" in report_md
+    assert "[润色]1. 投研主管结论" in report_md and "[润色]3. 最终研究判断" in report_md
     assert "| 2025 | 10亿 |" in report_md  # 表格原样保留
     import sqlite3
 
@@ -74,7 +74,7 @@ def test_all_sections_polished_cached_and_assembled(tmp_path, monkeypatch) -> No
 def test_partial_failure_degrades_only_that_section(tmp_path, monkeypatch) -> None:
     def handler(payload):
         title, draft = payload["section_title"], payload["draft"]
-        if title == "过去五年发生了什么":
+        if title.endswith("过去五年发生了什么"):
             raise ValueError("section polish failed safety validation")
         return {"text": f"[润色]{title} {draft}"}
 
@@ -83,7 +83,7 @@ def test_partial_failure_degrades_only_that_section(tmp_path, monkeypatch) -> No
     report_md, model_name, status = svc._synthesize("600460.SH", "2026-09-08", [], TEMPLATE_MD)
     assert status == SYNTHESIS_LLM_PARTIAL
     assert "节降级底稿" in model_name
-    assert "[润色]投研主管结论" in report_md
+    assert "[润色]1. 投研主管结论" in report_md
     assert "五年底稿：收入持续增长。" in report_md  # 失败节回退确定性底稿
     assert "| 2025 | 10亿 |" in report_md
 
@@ -105,7 +105,7 @@ def test_all_failed_raises_and_wrapper_falls_back_to_template(tmp_path, monkeypa
 def test_table_drop_falls_back_to_draft(tmp_path, monkeypatch) -> None:
     def handler(payload):
         title, draft = payload["section_title"], payload["draft"]
-        if title == "过去五年发生了什么":
+        if title.endswith("过去五年发生了什么"):
             # 丢掉表格行（但长度足够，触发表格守卫而非长度守卫）
             filler = "本节叙述：" + "收入逐年变化。" * 8
             return {"text": f"[润色]{title} {filler}{draft.splitlines()[0]}"}
@@ -121,7 +121,7 @@ def test_table_drop_falls_back_to_draft(tmp_path, monkeypatch) -> None:
 def test_trading_language_falls_back_to_draft(tmp_path, monkeypatch) -> None:
     def handler(payload):
         title, draft = payload["section_title"], payload["draft"]
-        if title == "最终研究判断":
+        if title.endswith("最终研究判断"):
             filler = "建议买入并加仓。" + "趋势判断。" * 10
             return {"text": f"[润色]{title} {filler}{draft}"}
         return {"text": f"[润色]{title} {draft}"}

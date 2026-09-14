@@ -22,8 +22,85 @@ class CioReportStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._ensure_table()
+
+    def enqueue_block_job(self, code: str, block_id: str, trigger: str,
+                          as_of: str, fingerprint: str) -> str:
+        """同一 (code, block_id, fingerprint) 已 QUEUED/SUCCESS → 不重复入队。"""
+        with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT status FROM cio_block_jobs WHERE code=? AND block_id=? AND fingerprint=? "
+                "AND status IN ('QUEUED','SUCCESS') ORDER BY job_id DESC LIMIT 1",
+                (code.upper(), block_id, fingerprint),
+            ).fetchone()
+            if row:
+                return "DUPLICATE"
+            stamp = _utc_now()
+            self._conn.execute(
+                "INSERT INTO cio_block_jobs(code, block_id, trigger, as_of, fingerprint, status, created_at, updated_at) "
+                "VALUES(?,?,?,?,?,'QUEUED',?,?)",
+                (code.upper(), block_id, trigger, as_of, fingerprint, stamp, stamp))
+        return "QUEUED"
+
+    def latest_block_fingerprint(self, code: str, block_id: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT fingerprint FROM cio_block_jobs WHERE code=? AND block_id=? "
+                "AND status IN ('QUEUED','SUCCESS') ORDER BY job_id DESC LIMIT 1",
+                (code.upper(), block_id),
+            ).fetchone()
+        return str(row[0]) if row else None
+
+    def queued_block_jobs(self, limit: int = 20) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM cio_block_jobs WHERE status='QUEUED' ORDER BY job_id LIMIT ?",
+                (max(1, int(limit)),),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def finish_block_job(self, job_id: int, status: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE cio_block_jobs SET status=?, updated_at=? WHERE job_id=?",
+                (status, _utc_now(), job_id))
+
+    def update_report_section(self, report_id: int, section: dict[str, Any], *,
+                              keep_narrative: bool = False) -> None:
+        """原地替换指定节。keep_narrative=True（FINANCIAL 块）时只更新数字
+        structured_payload、保留旧叙述并标 STALE；PRICE 块连叙述一起换新。"""
+        stamp = _utc_now()
+        payload_json = json.dumps(section.get("structured_payload") or {}, ensure_ascii=False, sort_keys=True)
+        fingerprint = str(section.get("input_fingerprint") or "")
+        freshness = str(section.get("freshness_status") or "REFRESHED")
+        with self._lock, self._conn:
+            existing = self._conn.execute(
+                "SELECT narrative_md FROM company_cio_report_sections WHERE report_id=? AND section_type=?",
+                (report_id, section["section_type"]),
+            ).fetchone()
+            if existing is None:
+                self._conn.execute(
+                    "INSERT INTO company_cio_report_sections(report_id, section_type, input_fingerprint, "
+                    "freshness_status, structured_payload_json, narrative_md, source_refs_json, created_at, updated_at) "
+                    "VALUES(?,?,?,?,?,?,?,?,?)",
+                    (report_id, section["section_type"], fingerprint, freshness, payload_json,
+                     str(section.get("narrative_md") or ""), "[]", stamp, stamp))
+                return
+            narrative = str(existing[0] or "") if keep_narrative else str(section.get("narrative_md") or "")
+            self._conn.execute(
+                "UPDATE company_cio_report_sections SET structured_payload_json=?, narrative_md=?, "
+                "input_fingerprint=?, freshness_status=?, updated_at=? WHERE report_id=? AND section_type=?",
+                (payload_json, narrative, fingerprint, freshness, stamp, report_id, section["section_type"]))
+
+    def get_report_sections(self, report_id: int) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM company_cio_report_sections WHERE report_id=? ORDER BY section_type",
+                (report_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def load_section_narrative(self, stock_code: str, section_title: str, chunk_hash: str) -> str | None:
         with self._lock:
@@ -71,6 +148,19 @@ class CioReportStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_cio_reports_lookup
                     ON company_cio_research_reports(market, stock_code, research_as_of DESC);
+                CREATE TABLE IF NOT EXISTS cio_block_jobs (
+                    job_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code TEXT NOT NULL,
+                    block_id TEXT NOT NULL,
+                    trigger TEXT NOT NULL,
+                    as_of TEXT NOT NULL,
+                    fingerprint TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'QUEUED',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_cio_block_jobs_lookup
+                    ON cio_block_jobs(code, block_id, status);
                 CREATE TABLE IF NOT EXISTS cio_section_narrative_cache (
                     stock_code TEXT NOT NULL,
                     section_title TEXT NOT NULL,
@@ -202,6 +292,21 @@ class CioReportStore:
                 )
         report = self.latest_report(market, stock_code, as_of=research_as_of) or {}
         return {**report, "idempotent_reuse": False}
+
+    _HASH_COLUMNS = frozenset({
+        "financial_hash", "business_hash", "valuation_hash", "risk_hash",
+        "leader_hash", "moat_hash", "capital_hash", "thesis_hash", "focus_hash",
+    })
+
+    def set_module_hash(self, report_id: int, hash_column: str, value: str | None) -> None:
+        """Write one module hash column (block-refresh bookkeeping)."""
+        if hash_column not in self._HASH_COLUMNS:
+            raise ValueError(f"unknown module hash column: {hash_column}")
+        with self._lock, self._conn:
+            self._conn.execute(
+                f"UPDATE company_cio_research_reports SET {hash_column}=?, updated_at=? WHERE id=?",
+                (value, _utc_now(), report_id),
+            )
 
     def close(self) -> None:
         with self._lock:

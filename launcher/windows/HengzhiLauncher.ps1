@@ -1,5 +1,5 @@
-﻿param(
-    [ValidateSet("gui", "console", "start", "stop", "restart", "status", "smoke", "print-url", "install-shortcut")]
+﻿﻿param(
+    [ValidateSet("gui", "console", "start", "stop", "restart", "status", "smoke", "print-url", "install-shortcut", "log")]
     [string]$Action = "console",
     [switch]$AutoStart
 )
@@ -30,6 +30,28 @@ $script:LanHost = if ([string]::IsNullOrWhiteSpace($env:HENGZHI_HOSTNAME)) { "12
 $script:FrontendUrl = "http://$($script:LanHost):5899/value"
 $script:LanAddress = Get-PreferredLanAddress
 $script:LanFrontendUrl = if ($script:LanAddress) { "http://$($script:LanAddress):5899/value" } else { "未检测到可用局域网 IPv4 地址" }
+
+function Get-RecentAccessEntries {
+    <# 后端 access log 尾部解析：返回最近 N 条 {ip, method, path, status}（新→旧）。#>
+    param([int]$Count = 8)
+    $result = @()
+    try {
+        $log = Join-Path $script:LogRoot "backend.log"
+        if (-not (Test-Path -LiteralPath $log)) { return $result }
+        $pattern = 'INFO:\s+(\S+:\d+)\s+-\s+"(\S+)\s+(\S+)[^"]*"\s+(\d{3})'
+        $raw = Get-Content -LiteralPath $log -Tail 120 -Encoding UTF8 -ErrorAction SilentlyContinue
+        foreach ($line in $raw) {
+            if ($line -match $pattern) {
+                $ip = $matches[1] -replace ':\d+$', ''
+                if ($ip -eq "127.0.0.1" -or $ip -eq "::1") { $ip = "$ip（本机）" }
+                $result += @{ ip = $ip; method = $matches[2]; path = $matches[3]; status = $matches[4] }
+            }
+        }
+    }
+    catch {}
+    if ($result.Count -gt $Count) { $result = $result[(-$Count)..-1] }
+    return $result
+}
 
 function Ensure-LocalProxyBypass {
     <#
@@ -465,8 +487,23 @@ function Show-ConsoleWindow {
             $lines.Add("     暂无记录；打开工作台后会自动记录。")
         }
         $lines.Add("")
+        $access = Get-RecentAccessEntries -Count 8
+        if ($access.Count) {
+            $lines.Add("   实时访问（最近 {0} 条，滚动窗口按 V）" -f $access.Count)
+            foreach ($entry in $access) {
+                $color = if ($entry.status -like "2*") { "92" } elseif ($entry.status -like "3*") { "96" }
+                         elseif ($entry.status -like "4*") { "93" } else { "91" }
+                $left = "     " + $entry.ip + "  " + $entry.method + " " + $entry.path
+                $pad = [Math]::Max(2, 62 - $left.Length)
+                $lines.Add($left + (" " * $pad) + "$esc[${color}m" + $entry.status + "$esc[0m")
+            }
+        }
+        else {
+            $lines.Add("   实时访问：（暂无，打开工作台后显示）")
+        }
+        $lines.Add("")
         $lines.Add("$esc[90m  ──────────────────────────────────────────────────────────$esc[0m")
-        $lines.Add("   $esc[97m[S]启动  [T]停止  [R]重启  [O]打开工作台  [L]日志目录  [Q]退出监视$esc[0m")
+        $lines.Add("   $esc[97m[S]启动  [T]停止  [R]重启  [O]打开工作台  [V]实时访问日志  [L]日志目录  [Q]退出监视$esc[0m")
         $lines.Add("$esc[90m   直接关闭本窗口不会停止服务。$esc[0m")
 
         if ($vt) {
@@ -491,7 +528,7 @@ function Show-ConsoleWindow {
             foreach ($line in $lines) { Write-Host $line }
         }
 
-        $deadline = (Get-Date).AddSeconds(2)
+        $deadline = (Get-Date).AddMinutes(30)  # 画面自动刷新间隔：30 分钟（按键仍即时响应）
         while ((Get-Date) -lt $deadline) {
             try {
                 if (-not [Console]::KeyAvailable) {
@@ -510,6 +547,7 @@ function Show-ConsoleWindow {
                 "T" { try { Invoke-All "stop" } catch { Show-ConsoleError $_.Exception.Message }; $handled = $true }
                 "R" { try { Invoke-All "restart" } catch { Show-ConsoleError $_.Exception.Message }; $handled = $true }
                 "O" { Start-Process $script:FrontendUrl }
+                "V" { Start-Process powershell.exe -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $PSScriptRoot "Show-AccessLog.ps1")) }
                 "L" { Start-Process explorer.exe -ArgumentList ('"' + $script:LogRoot + '"') }
                 "Q" {
                     if ($vt) { try { [Console]::Out.Write("$esc[?25h$esc[0m") } catch {} }
@@ -528,6 +566,10 @@ function Show-ConsoleError([string]$Message) {
 }
 
 if ($Action -eq "install-shortcut") { Install-DesktopShortcut; exit 0 }
+if ($Action -eq "log") {
+    Start-Process powershell.exe -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $PSScriptRoot "Show-AccessLog.ps1"))
+    exit 0
+}
 if ($Action -eq "print-url") { Write-Output $script:FrontendUrl; exit 0 }
 if ($Action -eq "smoke") {
     & (Join-Path $PSScriptRoot "Smoke-Hengzhi-Stack.ps1") -StartIfNeeded

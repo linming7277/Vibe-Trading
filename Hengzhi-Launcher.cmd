@@ -15,6 +15,10 @@ if not exist "%LAUNCHER%" (
 )
 
 rem Default: black console service monitor with auto-start.
+if /I "%~1"=="log" (
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%LAUNCHER%" -Action log
+  exit /b 0
+)
 if /I "%~1"=="gui" (
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%LAUNCHER%" -Action gui -AutoStart
   if errorlevel 1 (

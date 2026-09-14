@@ -16,7 +16,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -121,6 +121,58 @@ def next_trading_day(day: object, days: list[str]) -> str | None:
         if item > key:
             return item
     return None
+
+
+def project_future_trading_days(
+    days: list[str],
+    *,
+    after: object,
+    holidays: Any = (),
+    horizon_days: int = 10,
+) -> list[str]:
+    """本地/源日历不含未来日时，按 A 股惯例向后推候选交易日（纯函数）。
+
+    基准 = 日历内最后已知交易日；窗口为其后 `horizon_days` 个自然日；
+    只跳周六日与 `holidays`，**不验证法定节假日**（调用方须标注
+    CALENDAR_HOLIDAY_UNVERIFIED）。结果严格晚于 `after`，绝不包含当天。
+    """
+    normalized = _sorted_days(days)
+    anchor = _norm_day(after)
+    if not normalized or not anchor:
+        return []
+    last_known = normalized[-1]
+    try:
+        cursor = datetime.strptime(last_known, "%Y%m%d").date()
+        floor = datetime.strptime(anchor, "%Y%m%d").date()
+    except ValueError:
+        return []
+    excluded = {_norm_day(item) for item in (holidays or ())}
+    projected: list[str] = []
+    for offset in range(1, horizon_days + 1):
+        candidate = cursor + timedelta(days=offset)
+        if candidate.weekday() >= 5:  # 周六日
+            continue
+        key = candidate.strftime("%Y%m%d")
+        if key in excluded or candidate <= floor:
+            continue
+        projected.append(key)
+    return projected
+
+
+def projected_next_trading_day(
+    day: object,
+    days: list[str],
+    *,
+    holidays: Any = (),
+    horizon_days: int = 10,
+) -> str | None:
+    """先查日历内严格下一交易日；日历不含未来日时回退惯例投影。"""
+    confirmed = next_trading_day(day, days)
+    if confirmed:
+        return confirmed
+    projected = project_future_trading_days(days, after=day, holidays=holidays,
+                                             horizon_days=horizon_days)
+    return projected[0] if projected else None
 
 
 def previous_trading_day(day: object, days: list[str]) -> str | None:

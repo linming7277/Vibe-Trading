@@ -1,4 +1,4 @@
-"""Deterministic 14-section CIO report builder (plan §14).
+"""Deterministic 19-section CIO report builder (plan §14).
 
 Every section is built 100% from persisted read-only research results; the
 narrative here is template text (the "70%" layer).  The single synthesis LLM

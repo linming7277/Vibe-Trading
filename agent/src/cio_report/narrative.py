@@ -1,7 +1,7 @@
 """Boss-facing Chinese narrative layer for the CIO Full Report (V2).
 
 纯展示层：后台枚举、数据库字段、研究算法一律不动；这里只做中文映射、
-14 节老板端重组（新标题/新顺序）、跨 section 确定性综合（核心矛盾、多维
+19 节老板端输出（SECTION_TITLES 正式名单逐节）、跨 section 确定性综合（核心矛盾、多维
 经营阶段、路径叙事、估值六问、风险逻辑、验证点分级、裁决段）与飞书友
 好双表格。所有句子只从已有 section payload 归纳，不生成新事实。
 """
@@ -91,15 +91,12 @@ def _num(value: Any, suffix: str = "") -> str:
 
 
 # ---------------------------------------------------------------------------
-# 老板端 14 节新结构（§二）：展示顺序 → (标题, 组装器)
+# 老板端输出顺序 = CIO 19 节正式名单（SECTION_TITLES）
 # ---------------------------------------------------------------------------
-BOSS_SECTIONS: list[str] = [
-    "投研主管结论", "公司与行业位置", "过去五年发生了什么", "最新季度边际变化",
-    "当前处于什么经营阶段", "当前最核心的经营矛盾", "盈利质量与财务风险", "财报里容易被忽略的信息",
-    "主营业务与经营变化", "竞争优势是否成立", "资本投入与资金使用", "当前价格贵不贵",
-    "谨慎 / 基准 / 乐观三种路径", "未来三年利润预估明细", "为什么值得继续研究",
-    "接下来验证什么、什么情况说明判断错了", "最终研究判断",
-]
+from src.cio_report.builder import SECTION_TITLES as _CIO_SECTION_ORDER
+
+# 老板版输出顺序 = CIO 19 节正式名单（SECTION_TITLES 顺序），不再是大纲合并视图
+BOSS_SECTIONS: list[str] = [title for title in _CIO_SECTION_ORDER.values()]
 
 
 def _sec(sections: dict[str, dict[str, Any]], key: str) -> dict[str, Any]:
@@ -656,39 +653,37 @@ class BossRenderer:
 
 
 def render_boss_report(sections: list[dict[str, Any]], *, stock_code: str, as_of: str) -> str:
-    """Full boss-facing report: new 14-section order + Chinese mapping."""
+    """Full boss-facing report: CIO 19 节正式名单逐节输出（原文，不合并改写）。"""
     renderer = BossRenderer(sections, stock_code, as_of)
     sections_by_type = {s["section_type"]: s for s in sections}
-    builders = {
-        "投研主管结论": renderer.section_conclusion_head,
-        "公司与行业位置": renderer.section_position,
-        "过去五年发生了什么": renderer.section_financial_path,
-        "最新季度边际变化": renderer.section_latest_quarter,
-        "当前处于什么经营阶段": renderer.section_stage,
-        "当前最核心的经营矛盾": renderer.section_core_conflict,
-        "盈利质量与财务风险": renderer.section_risk,
-        "主营业务与经营变化": renderer.section_business,
-        "竞争优势是否成立": renderer.section_moat,
-        "资本投入与资金使用": renderer.section_capital,
-        "当前价格贵不贵": renderer.section_valuation,
-        "谨慎 / 基准 / 乐观三种路径": renderer.section_scenarios,
-        "为什么值得继续研究": renderer.section_why_research,
-        "接下来验证什么、什么情况说明判断错了": renderer.section_watchpoints,
-        "最终研究判断": renderer.section_final_verdict,
-    }
+
     def _raw_section(section_type: str) -> str:
         sec = (sections_by_type or {}).get(section_type) or {}
         return str(sec.get("narrative_md") or "").strip() or "本节资料不足。"
 
-    builders.update({
-        "财报里容易被忽略的信息": lambda: _raw_section("hidden_signals"),
-        "未来三年利润预估明细": lambda: _raw_section("profit_forecast_detail"),
-    })
+    # 19 节正式名单逐节渲染：有节输出原文（BossRenderer 组合或确定性叙述），
+    # 缺节输出「本节资料不足」。禁止合并改写成旧大纲。
+    section_renderers = {
+        "company_position": renderer.section_position,
+        "financial_path": renderer.section_financial_path,
+        "latest_quarter": renderer.section_latest_quarter,
+        "operating_stage": renderer.section_stage,
+        "quality_risk": renderer.section_risk,
+        "business_structure": renderer.section_business,
+        "moat": renderer.section_moat,
+        "capital_allocation": renderer.section_capital,
+        "valuation": renderer.section_valuation,
+        "scenarios": renderer.section_scenarios,
+        "why_research": renderer.section_why_research,
+        "thesis_watchpoints": renderer.section_watchpoints,
+        "cio_conclusion": renderer.section_final_verdict,
+    }
     parts = [f"投研主管深度研究报告 · {renderer.position.get('stock_name') or stock_code}（{stock_code}）",
              f"研究基准日 {as_of}。本报告由系统已保存研究结果整理，不含任何交易指令。", ""]
-    for index, title in enumerate(BOSS_SECTIONS, 1):
-        parts.append(f"## {index}. {title}")
-        parts.append(boss_text(builders[title]()))
+    for index, (section_type, title) in enumerate(_CIO_SECTION_ORDER.items(), 1):
+        parts.append(f"## {title}")
+        render = section_renderers.get(section_type)
+        parts.append(boss_text(render() if render else _raw_section(section_type)))
         parts.append("")
     return "\n".join(parts).strip()
 

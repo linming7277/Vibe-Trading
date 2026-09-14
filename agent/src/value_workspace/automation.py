@@ -299,6 +299,23 @@ class ValueResearchScheduler:
                                                 message=f"financial prepare incomplete: {research['failed']} failed")
                 stages["FINANCIAL_READY"] = "READY"
 
+            # CIO FINANCIAL 块按报告期新鲜度刷新（确定性，零 LLM）：财务增量
+            # 就绪后对龙头池同步 enqueue+立即消费；期次未变 → 全部复用零写入。
+            # fail-soft：失败不阻断 EOD 任何后续阶段。
+            try:
+                from src.cio_report.block_worker import refresh_financial_blocks
+
+                fin_blocks = refresh_financial_blocks(as_of=as_of)
+                if fin_blocks.get("status") == "COMPLETED":
+                    stages["CIO_FINANCIAL_BLOCKS_READY"] = (
+                        f"{fin_blocks.get('processed', 0)}处理/{fin_blocks.get('queued', 0)}队"
+                        f"/{fin_blocks.get('universe', 0)}只")
+                else:
+                    stages["CIO_FINANCIAL_BLOCKS_READY"] = str(fin_blocks.get("status") or "FAILED")
+            except Exception:
+                logger.warning("cio financial block refresh failed (fail-soft)", exc_info=True)
+                stages["CIO_FINANCIAL_BLOCKS_READY"] = "FAILED"
+
             from src.low_value_leader_notifications import get_low_value_leader_notification_service
             notification_service = get_low_value_leader_notification_service()
             notification_service.prepare_activation()
@@ -398,6 +415,30 @@ class ValueResearchScheduler:
             except Exception:
                 logger.warning("sw1 index bars ingest failed (fail-soft)", exc_info=True)
                 stages["SW1_INDEX_BARS_READY"] = "FAILED"
+
+            # 历史估值序列回填（行业龙头页"历史估值快照·数据截至"的数据源）：
+            # 不回填则序列永远停在最后一次人工回填日（曾停在 09-07 三天）。
+            # fail-soft：回填失败不影响 EOD 任何送达。
+            try:
+                from src.historical_valuation.service import HistoricalValuationService
+
+                series_result = HistoricalValuationService().backfill_current_l3_pool(
+                    as_of=as_of, batch_size=50, throttle_seconds=0.1)
+                stages["VALUATION_SERIES_READY"] = str(series_result.get("status") or "UNKNOWN")
+            except Exception:
+                logger.warning("valuation series backfill failed (fail-soft)", exc_info=True)
+                stages["VALUATION_SERIES_READY"] = "FAILED"
+
+            # CIO 分块队列触发（V1：PRICE/FINANCIAL）：行情与财务指纹变化才入队，
+            # 由 CioBlockWorker 后台确定性消费（零 LLM）。fail-soft 不阻塞 EOD。
+            try:
+                from src.cio_report.block_worker import enqueue_eod_block_jobs
+
+                block_result = enqueue_eod_block_jobs(as_of=as_of)
+                stages["CIO_BLOCK_JOBS_QUEUED"] = str(block_result.get("queued") or 0)
+            except Exception:
+                logger.warning("cio block enqueue failed (fail-soft)", exc_info=True)
+                stages["CIO_BLOCK_JOBS_QUEUED"] = "FAILED"
 
             # 市场事件 P1（涨停/定增）写入既有 value_strategy_state_events。
             # fail-soft：失败事件段降级为空，绝不打断 EOD 下游。
@@ -547,6 +588,21 @@ class ValueResearchScheduler:
                     message="low-value Feishu notification failed",
                 )
             stages["LOW_VALUE_NOTIFICATION_READY"] = str(notification.get("status") or "READY")
+
+            # CIO PRICE 块按新鲜度刷新（第一期）：行情/价格区 READY 后、
+            # Focus A 全文任务前。纯确定性重建，不跑业务研究/全文 LLM。
+            # fail-soft：失败不阻断 EOD 任何后续阶段。
+            try:
+                from src.cio_report.service import get_cio_report_service
+
+                price_blocks = get_cio_report_service().refresh_cio_price_blocks(as_of=as_of)
+                stages["CIO_PRICE_BLOCKS_READY"] = (
+                    f"{price_blocks.get('built') or 0}刷+{price_blocks.get('reused') or 0}复用"
+                    f"/{price_blocks.get('count') or 0}"
+                )
+            except Exception:
+                logger.warning("cio price block refresh failed (fail-soft)", exc_info=True)
+                stages["CIO_PRICE_BLOCKS_READY"] = "FAILED"
 
             # CIO A/B 档报告维持（政策：A 档始终 READY，B 档缺才建，C 档按需）。
             # 置于链尾且 fail-soft：综合端点抖动最多拖长收尾、绝不影响日报/

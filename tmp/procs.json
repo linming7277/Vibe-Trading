@@ -1,0 +1,154 @@
+[
+    {
+        "ProcessId":  24424,
+        "CommandLine":  "C:\\Users\\Administrator\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe -m hermes_cli.main --profile hzstockfinancial gateway run"
+    },
+    {
+        "ProcessId":  41620,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\"  -m hermes_cli.main --profile hzstockfinancial gateway run"
+    },
+    {
+        "ProcessId":  35244,
+        "CommandLine":  "D:\\AI\\hzstock\\.venv\\Scripts\\python.exe D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  31232,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  6408,
+        "CommandLine":  "C:\\Users\\Administrator\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe -m hermes_cli.main --profile hzstockrisk gateway run"
+    },
+    {
+        "ProcessId":  32440,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\"  -m hermes_cli.main --profile hzstockrisk gateway run"
+    },
+    {
+        "ProcessId":  22160,
+        "CommandLine":  "D:\\AI\\hzstock\\.venv\\Scripts\\python.exe D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  9544,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  30988,
+        "CommandLine":  "C:\\Users\\Administrator\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe -m hermes_cli.main --profile hzstockvaluation gateway run"
+    },
+    {
+        "ProcessId":  24556,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\"  -m hermes_cli.main --profile hzstockvaluation gateway run"
+    },
+    {
+        "ProcessId":  40824,
+        "CommandLine":  "D:\\AI\\hzstock\\.venv\\Scripts\\python.exe D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  39852,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  27624,
+        "CommandLine":  "C:\\Users\\Administrator\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe -m hermes_cli.main --profile hzstockmacro gateway run"
+    },
+    {
+        "ProcessId":  2944,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\"  -m hermes_cli.main --profile hzstockmacro gateway run"
+    },
+    {
+        "ProcessId":  22468,
+        "CommandLine":  "D:\\AI\\hzstock\\.venv\\Scripts\\python.exe D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  41952,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  41720,
+        "CommandLine":  "C:\\Users\\Administrator\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe -m hermes_cli.main --profile hzstocksupervisor gateway run"
+    },
+    {
+        "ProcessId":  16108,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\"  -m hermes_cli.main --profile hzstocksupervisor gateway run"
+    },
+    {
+        "ProcessId":  21272,
+        "CommandLine":  "D:\\AI\\hzstock\\.venv\\Scripts\\python.exe D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  24384,
+        "CommandLine":  "D:\\AI\\hzstock\\.venv\\Scripts\\python.exe D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  12420,
+        "CommandLine":  "D:\\AI\\hzstock\\.venv\\Scripts\\python.exe D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  32476,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  28256,
+        "CommandLine":  "D:\\AI\\hzstock\\.venv\\Scripts\\python.exe D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  19324,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  22684,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  39352,
+        "CommandLine":  "D:\\AI\\hzstock\\.venv\\Scripts\\python.exe D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  17908,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  35068,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" D:\\AI\\hzstock\\agent\\mcp_server.py"
+    },
+    {
+        "ProcessId":  18576,
+        "CommandLine":  "\"D:\\AI\\hzstock\\.venv\\Scripts\\python.exe\"  \"D:\\AI\\hzstock\\.venv\\Scripts\\vibe-trading.exe\" serve --port 8899"
+    },
+    {
+        "ProcessId":  16064,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" \"D:\\AI\\hzstock\\.venv\\Scripts\\vibe-trading.exe\" serve --port 8899"
+    },
+    {
+        "ProcessId":  37932,
+        "CommandLine":  "D:\\AI\\money-system\\backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+    },
+    {
+        "ProcessId":  37080,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+    },
+    {
+        "ProcessId":  35144,
+        "CommandLine":  "D:\\AI\\money-system\\backend\\.venv\\Scripts\\python.exe D:\\AI\\money-system\\scripts\\codex_task_scheduler.py"
+    },
+    {
+        "ProcessId":  30088,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" D:\\AI\\money-system\\scripts\\codex_task_scheduler.py"
+    },
+    {
+        "ProcessId":  36088,
+        "CommandLine":  "D:\\AI\\hzstock\\.venv\\Scripts\\python.exe D:/AI/hzstock/tmp/rebrush_cio_sections.py"
+    },
+    {
+        "ProcessId":  30828,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" D:/AI/hzstock/tmp/rebrush_cio_sections.py"
+    },
+    {
+        "ProcessId":  300,
+        "CommandLine":  "D:\\AI\\hzstock\\.venv\\Scripts\\python.exe -m pytest tests/test_morning_macro_brief.py tests/test_outlook_breadth_p2.py tests/test_sw1_index_bars.py tests/test_investment_research_daily_brief.py -q"
+    },
+    {
+        "ProcessId":  38968,
+        "CommandLine":  "\"C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe\" -m pytest tests/test_morning_macro_brief.py tests/test_outlook_breadth_p2.py tests/test_sw1_index_bars.py tests/test_investment_research_daily_brief.py -q"
+    }
+]

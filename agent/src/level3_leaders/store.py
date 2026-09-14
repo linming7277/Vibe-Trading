@@ -484,10 +484,20 @@ class Level3LeaderStore:
     def update_automation(self, **fields: Any) -> dict[str, Any]:
         allowed = {"enabled", "next_run_at", "last_run_id", "last_status", "last_error", "lock_owner", "lock_until"}
         values = {key: int(value) if key == "enabled" else value for key, value in fields.items() if key in allowed}
-        values["updated_at"] = _now()
         with self._lock, self._conn:
+            current = self._conn.execute(
+                "SELECT * FROM value_research_automation WHERE id='default'").fetchone()
+            if current is not None:
+                changed = {
+                    key: value for key, value in values.items()
+                    if str(current[key] if key in current.keys() else "") != str(value if value is not None else "")
+                }
+                if not changed:
+                    return self.get_automation()
+            values["updated_at"] = _now()
+            set_clause = ",".join(f"{key}=?" for key in values)
             self._conn.execute(
-                f"UPDATE value_research_automation SET {','.join(f'{key}=?' for key in values)} WHERE id='default'",
+                f"UPDATE value_research_automation SET {set_clause} WHERE id='default'",
                 tuple(values.values()),
             )
         return self.get_automation()

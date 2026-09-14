@@ -18,6 +18,9 @@ from .value_data_store import ValueDataStore, now
 
 NBS_URL = "https://www.stats.gov.cn/sj/zxfb/"
 PBOC_URL = "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+PBOC_SOCIAL_FINANCING_FLOW_DIR = (
+    "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570885/index.html"
+)
 CFETS_URL = "https://www.shibor.org/"
 
 # function, date column, output column, id, axis, higher axis score, unit,
@@ -91,6 +94,8 @@ class MacroDataService:
         frames: dict[str, Any] = {}
         records: list[dict[str, Any]] = []
         for function_name, date_column, value_column, series_id, axis, higher_good, unit, source, url, daily_release in SERIES_SPECS:
+            if series_id == "social_financing_increment":
+                continue  # 社融走 PBC 免费表专用链路（央行表优先，akshare 兜底）
             try:
                 if function_name not in frames:
                     frames[function_name] = getattr(ak, function_name)()
@@ -121,35 +126,155 @@ class MacroDataService:
         return records
 
     @staticmethod
-    def _fetch_pboc_social_financing() -> list[dict[str, Any]]:
-        """Read the PBOC social-financing series through its licensed mirror."""
-        import os
+    def _page_date_from_url(url: str) -> str:
+        """attachDir/YYYY/MM/<8位日期戳>...htm → 该表的发布日期。"""
+        match = re.search(r"attachDir/(20\d{2})/(\d{2})/(\d{8})", url or "")
+        if not match:
+            return ""
+        stamp = match.group(3)
+        return f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}"
 
-        token = os.getenv("TUSHARE_TOKEN", "").strip()
-        if not token or token == "your-tushare-token":
-            return [{"error": "TUSHARE_TOKEN is required for the PBOC social-financing mirror", "series_id": "social_financing_increment", "axis": "credit", "source": "PBOC"}]
+    @staticmethod
+    def _fetch_pbc_social_financing_flow() -> list[dict[str, Any]]:
+        """人民银行《社会融资规模增量统计表》免费主源。
+
+        目录页/表页各有两种形态：普通表格（th 表头）与 Excel 导出裸表格
+        （月列+数值列）。目录页是 JS 壳时，用静态脚本内嵌的旧表与已知样例
+        URL 中路径日期最新的一份。解析不出、疑似存量表/万亿元口径、HTTP
+        失败一律空列表：不编数、不阻断其它宏观序列。空单元格（未来月份）
+        丢弃，绝不写 0。
+        """
+        import io as _io
+
+        import pandas as _pd
+
+        base = "https://www.pbc.gov.cn"
+        headers = {"User-Agent": "Mozilla/5.0 hzstock-value-research", "Referer": base}
+        known_htm = "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/08/2026081417010772070.htm"
+        candidates: dict[str, str] = {}
         try:
-            import tushare as ts
+            with direct_domestic_http_client(timeout=15, headers=headers) as client:
+                directory = client.get(PBOC_SOCIAL_FINANCING_FLOW_DIR)
+                directory.raise_for_status()
+                for link in re.findall(r"/diaochatongjisi/attachDir/[^\"'<>\\s]+\\.htm", directory.text):
+                    candidates[link] = PBOC_SOCIAL_FINANCING_FLOW_DIR
+                anchor = re.search(
+                    r'<a[^>]+href="([^"]+attachDir[^"]+\\.htm[^"]*)"[^>]*>\\s*社会融资规模增量统计表',
+                    directory.text)
+                if anchor:
+                    from urllib.parse import urljoin as _urljoin
 
-            frame = ts.pro_api(token).sf_month(start_m="201901", end_m=date.today().strftime("%Y%m"))
+                    candidates[_urljoin(base + "/", anchor.group(1))] = PBOC_SOCIAL_FINANCING_FLOW_DIR
+                candidates.setdefault(known_htm, PBOC_SOCIAL_FINANCING_FLOW_DIR)
+                pages: list[tuple[str, str]] = []
+                for url in sorted(candidates, reverse=True):  # 路径日期新者优先
+                    page = client.get(url)
+                    page.raise_for_status()
+                    pages.append((url, page.text))
+        except Exception:  # noqa: BLE001 - 抓取失败按缺数降级
+            return []
+        for htm_url, table_html in pages:
+            compact = re.sub(r"\s+", "", table_html)
+            if "存量统计表" in compact or "万亿元" in compact or "社会融资规模存量" in compact:
+                continue
+            records: list[tuple[str, int, str]] = []
+            # 变体 A：普通表格，th 表头含“社会融资规模增量”
+            try:
+                for frame in _pd.read_html(_io.StringIO(table_html)):
+                    columns = [re.sub(r"\s+", "", str(c)) for c in list(frame.columns)]
+                    value_col = next((i for i, c in enumerate(columns) if "社会融资规模增量" in c), None)
+                    if value_col is None:
+                        continue
+                    for row in frame.to_dict("records"):
+                        cells = list(row.values())
+                        if value_col >= len(cells):
+                            continue
+                        month_match = re.fullmatch(r"(20\d{2})\.(\d{1,2})", str(cells[0]).strip())
+                        raw_value = str(cells[value_col]).strip().replace(",", "").replace(" ", "")
+                        if month_match and raw_value:
+                            records.append((month_match.group(1), int(month_match.group(2)), raw_value))
+            except Exception:  # noqa: BLE001 - 转 Excel 变体扫描
+                records = []
+            # 变体 B：Excel 导出裸表格——扫描“月单元格 → 下一个数值单元格”
+            if not records:
+                for match in re.finditer(r">(20\d{2}\.\d{1,2})<", table_html):
+                    tail = table_html[match.end(): match.end() + 400]
+                    value_match = re.search(r"<td[^>]*>([^<]*)</td>", tail)
+                    if not value_match:
+                        continue
+                    raw_value = value_match.group(1).strip().replace(",", "")
+                    if raw_value:
+                        year, month = match.group(1).split(".")
+                        records.append((year, int(month), raw_value))
+            if not records:
+                continue
             fetched_at = now()
-            records = []
-            for raw in frame.to_dict("records"):
-                month, value = str(raw.get("month") or ""), _finite(raw.get("inc_month"))
-                if not re.fullmatch(r"20\d{2}(0[1-9]|1[0-2])", month) or value is None:
+            out: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            for year, month, raw_value in records:
+                observation = f"{year}-{int(month):02d}-01"
+                if observation in seen:
                     continue
-                observation = f"{month[:4]}-{month[4:]}-01"
-                records.append({
+                seen.add(observation)
+                value = _finite(raw_value)
+                if value is None:
+                    continue
+                vintage = hashlib.sha256(
+                    f"pbc-sf-flow:{observation}:{value}:{fetched_at[:10]}".encode()).hexdigest()[:16]
+                out.append({
                     "series_id": "social_financing_increment", "axis": "credit", "higher_good": True,
-                    "observation_date": observation, "release_date": fetched_at[:10],
-                    "vintage_id": hashlib.sha256(f"sf:{month}:{value}:{fetched_at[:10]}".encode()).hexdigest()[:16],
-                    "value": value, "unit": "CNY 100m", "source": "PBOC",
-                    "source_url": PBOC_URL, "release_status": "first_observed_only", "fetched_at": fetched_at,
-                    "metadata": {"adapter": "Tushare sf_month", "source_of_record": "PBOC"},
+                    "observation_date": observation,
+                    "release_date": (MacroDataService._page_date_from_url(htm_url)
+                                     or fetched_at[:10]),
+                    "vintage_id": vintage, "value": value, "unit": "亿元", "source": "PBOC",
+                    "source_url": htm_url, "release_status": "first_observed_only",
+                    "fetched_at": fetched_at,
+                    "metadata": {"adapter": "PBC htm table",
+                                 "page_date": MacroDataService._page_date_from_url(htm_url)},
                 })
-            return records or [{"error": "PBOC social-financing mirror returned no rows", "series_id": "social_financing_increment", "axis": "credit", "source": "PBOC"}]
+            if out:
+                return sorted(out, key=lambda item: item["observation_date"])
+        return []
+
+    @staticmethod
+    def _fetch_akshare_social_financing() -> list[dict[str, Any]]:
+        """兜底：akshare 商务部端点（历史上常被 SSL 拒绝，仅当央行表不可得时尝试）。"""
+        import akshare as ak
+
+        fetched_at = now()
+        try:
+            frame = ak.macro_china_shrzgm()
         except Exception as exc:
-            return [{"error": str(exc), "series_id": "social_financing_increment", "axis": "credit", "source": "PBOC"}]
+            return [{"error": f"{type(exc).__name__}: {exc}", "series_id": "social_financing_increment",
+                     "axis": "credit", "source": "AKShare"}]
+        records: list[dict[str, Any]] = []
+        for raw in frame.to_dict("records"):
+            observation = _observation_date(raw.get("月份"))
+            value = _finite(raw.get("社会融资规模增量"))
+            if not observation or value is None:
+                continue
+            records.append({
+                "series_id": "social_financing_increment", "axis": "credit", "higher_good": True,
+                "observation_date": observation, "release_date": fetched_at[:10],
+                "vintage_id": hashlib.sha256(f"ak-sf:{observation}:{value}".encode()).hexdigest()[:16],
+                "value": value, "unit": "亿元", "source": "AKShare",
+                "source_url": "data.mofcom.gov.cn", "release_status": "first_observed_only",
+                "fetched_at": fetched_at, "metadata": {"adapter": "AKShare shrzgm"},
+            })
+        return records or [{"error": "AKShare shrzgm returned no rows", "series_id": "social_financing_increment",
+                            "axis": "credit", "source": "AKShare"}]
+
+    @staticmethod
+    def _fetch_pboc_social_financing() -> list[dict[str, Any]]:
+        """社融增量主链：人民银行《增量统计表》免费表优先；akshare 仅兜底。
+
+        Tushare 不再作为必须（付费 token）；两条路都不可得时返回 error row，
+        由 refresh 如实记为 errors，不影响其它宏观序列。
+        """
+        records = MacroDataService._fetch_pbc_social_financing_flow()
+        if records:
+            return records
+        return MacroDataService._fetch_akshare_social_financing()
 
     @staticmethod
     def _fetch_cfets_usd_cny() -> list[dict[str, Any]]:
