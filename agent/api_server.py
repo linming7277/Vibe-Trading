@@ -185,9 +185,12 @@ async def _run_startup_preflight() -> None:
     start_data_refresh_scheduler()
     start_value_research_scheduler()
     # 早盘宏观速览：工作日 08:00 Asia/Shanghai（独立卡片，不覆盖收盘日报）。
-    from src.investment_research_supervisor.morning_macro_brief import start_morning_macro_scheduler
+    from src.investment_research_supervisor.morning_macro_brief import (
+        start_morning_flash_scheduler, start_morning_macro_scheduler)
 
     start_morning_macro_scheduler()
+    # 早盘快讯收集器：同一开关（on 时 15:05→次日 08:00 每 ≥10 分钟拉快讯入缓存表）。
+    start_morning_flash_scheduler()
     # CIO 分块后台（PRICE/FINANCIAL 确定性刷新）：env HZ_CIO_BLOCK_WORKER=on 才启动，默认 off。
     from src.cio_report.block_worker import start_cio_block_worker
 

@@ -180,3 +180,22 @@ def test_worker_module_never_imports_chatllm() -> None:
 
 
 from src.cio_report.builder import CioSectionBuilder as CioSectionBuilderShim  # noqa: E402
+
+
+def test_financial_fingerprints_iterates_after_close(tmp_path, monkeypatch) -> None:
+    """关连接后遍历的是已物化列表，不再抛 ProgrammingError（2026-09-15 回归）。"""
+    import sqlite3
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("VIBE_TRADING_HOME", str(home))
+    conn = sqlite3.connect(str(home / "research.db"))
+    conn.execute("CREATE TABLE company_financial_analysis_snapshots "
+                 "(stock_code TEXT, historical_cutoff TEXT, updated_at TEXT)")
+    conn.execute("INSERT INTO company_financial_analysis_snapshots VALUES "
+                 "('003012.SZ', '2026-06-30', '2026-08-20T00:00:00')")
+    conn.commit()
+    conn.close()
+
+    fp = block_worker_module.financial_fingerprints(["003012.SZ"])
+    assert fp == {"003012.SZ": "2026-06-30@2026-08-20T00:00:00"}

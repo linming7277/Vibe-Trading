@@ -39,11 +39,10 @@ def pool_universe() -> set[str]:
             "SELECT id FROM l3_leader_pool_runs ORDER BY created_at DESC LIMIT 1").fetchone()
         if not pool:
             return set()
-        return {
-            str(r[0]).upper() for r in conn.execute(
-                "SELECT stock_code FROM l3_leader_pool_members WHERE pool_id=? "
-                "AND lifecycle_status IN ('NEW','ACTIVE','REENTERED')", (pool[0],))
-        }
+        member_rows = conn.execute(
+            "SELECT stock_code FROM l3_leader_pool_members WHERE pool_id=? "
+            "AND lifecycle_status IN ('NEW','ACTIVE','REENTERED')", (pool[0],)).fetchall()
+        return {str(r[0]).upper() for r in member_rows}
     finally:
         conn.close()
 
@@ -75,8 +74,11 @@ def financial_fingerprints(codes: list[str]) -> dict[str, str]:
         os.environ.get("VIBE_TRADING_HOME", r"C:\Users\Administrator\.vibe-trading"), "research.db"))
     conn.row_factory = sqlite3.Row
     try:
+        # 必须先 fetchall 再关连接：cursor 惰性加载，close 后迭代会抛
+        # sqlite3.ProgrammingError（2026-09-15 修复）。
         rows = conn.execute(
-            "SELECT stock_code, historical_cutoff, updated_at FROM company_financial_analysis_snapshots")
+            "SELECT stock_code, historical_cutoff, updated_at FROM company_financial_analysis_snapshots"
+        ).fetchall()
     finally:
         conn.close()
     wanted = {c.upper() for c in codes}
