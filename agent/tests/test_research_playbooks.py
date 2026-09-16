@@ -30,13 +30,7 @@ from src.scheduled_research.playbooks import (
 )
 from src.scheduled_research.store import ScheduledResearchJobStore
 
-EXPECTED_SLUGS = {
-    "a-share-money-flow",
-    "earnings-season-tracker",
-    "institutional-holdings-diff",
-    "portfolio-checkup",
-    "premarket-brief",
-}
+EXPECTED_SLUGS = {"weekly-company-review"}
 
 # 2026-08-04T12:00:00Z, fixed so first-fire assertions never depend on the clock.
 NOW_MS = 1785585600000
@@ -87,16 +81,16 @@ class TestBundledCatalogue:
         assert module.__file__ is not None
         assert Path(module.__file__).name == "playbooks.py"
 
-    def test_ships_the_expected_five(self) -> None:
+    def test_ships_the_expected_catalogue(self) -> None:
         assert {p.slug for p in list_playbooks()} == EXPECTED_SLUGS
 
     def test_sorted_by_slug(self) -> None:
         slugs = [p.slug for p in list_playbooks()]
         assert slugs == sorted(slugs)
 
-    def test_covers_more_than_us_markets(self) -> None:
+    def test_covers_the_home_market(self) -> None:
         markets = {m for p in list_playbooks() for m in p.markets}
-        assert "cn" in markets and "global" in markets
+        assert "cn" in markets
 
     @pytest.mark.parametrize("slug", sorted(EXPECTED_SLUGS))
     def test_suggested_schedule_is_valid(self, slug: str) -> None:
@@ -246,7 +240,7 @@ class TestLoader:
 
 class TestLookup:
     def test_unknown_slug_lists_available(self) -> None:
-        with pytest.raises(PlaybookNotFoundError, match="premarket-brief"):
+        with pytest.raises(PlaybookNotFoundError, match="weekly-company-review"):
             get_playbook("does-not-exist")
 
     @pytest.mark.parametrize("slug", ["../models", "a/b", "Upper", "", "a b"])
@@ -259,11 +253,11 @@ class TestLookup:
         assert playbook_dirs()[0] == tmp_path
 
     def test_user_file_shadows_bundled_slug(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _write(tmp_path, "premarket-brief", _MINIMAL)
+        _write(tmp_path, "weekly-company-review", _MINIMAL)
         monkeypatch.setenv("VIBE_TRADING_PLAYBOOK_DIR", str(tmp_path))
-        assert get_playbook("premarket-brief").name == "Minimal"
+        assert get_playbook("weekly-company-review").name == "Minimal"
         catalogue = {p.slug: p.name for p in list_playbooks()}
-        assert catalogue["premarket-brief"] == "Minimal"
+        assert catalogue["weekly-company-review"] == "Minimal"
         assert set(catalogue) == EXPECTED_SLUGS  # override, not addition
 
     def test_missing_directory_is_not_an_error(self, tmp_path: Path) -> None:
@@ -337,57 +331,57 @@ class TestRender:
 
 class TestToJob:
     def test_defaults_to_the_suggested_cadence(self) -> None:
-        playbook = get_playbook("premarket-brief")
+        playbook = get_playbook("weekly-company-review")
         job = playbook.to_job(now_ms=NOW_MS)
         assert job.schedule == playbook.suggested_schedule
         assert job.timezone == playbook.suggested_timezone
-        assert job.id.startswith("playbook-premarket-brief-")
+        assert job.id.startswith("playbook-weekly-company-review-")
         assert job.created_at == NOW_MS
 
     def test_first_fire_matches_the_cron_evaluator(self) -> None:
-        playbook = get_playbook("a-share-money-flow")
+        playbook = get_playbook("weekly-company-review")
         job = playbook.to_job(now_ms=NOW_MS)
         assert job.next_run_at == next_due(
             playbook.suggested_schedule, NOW_MS, playbook.suggested_timezone
         )
 
     def test_interval_schedule_fires_immediately(self) -> None:
-        job = get_playbook("premarket-brief").to_job(schedule="3600000", now_ms=NOW_MS)
+        job = get_playbook("weekly-company-review").to_job(schedule="3600000", now_ms=NOW_MS)
         assert job.schedule == "3600000"
         assert job.next_run_at == NOW_MS
 
     def test_explicit_none_timezone_means_utc_and_immediate_first_fire(self) -> None:
-        job = get_playbook("premarket-brief").to_job(timezone=None, now_ms=NOW_MS)
+        job = get_playbook("weekly-company-review").to_job(timezone=None, now_ms=NOW_MS)
         assert job.timezone is None
         assert job.next_run_at == NOW_MS
 
     def test_explicit_next_run_at_wins(self) -> None:
-        job = get_playbook("premarket-brief").to_job(next_run_at=42, now_ms=NOW_MS)
+        job = get_playbook("weekly-company-review").to_job(next_run_at=42, now_ms=NOW_MS)
         assert job.next_run_at == 42
 
     def test_rejects_a_malformed_schedule_override(self) -> None:
         with pytest.raises(ValueError, match="cron"):
-            get_playbook("premarket-brief").to_job(schedule="not a schedule")
+            get_playbook("weekly-company-review").to_job(schedule="not a schedule")
 
     def test_rejects_an_unresolvable_timezone_override(self) -> None:
         with pytest.raises(ValueError, match="not a recognized IANA timezone"):
-            get_playbook("premarket-brief").to_job(timezone="Mars/Olympus")
+            get_playbook("weekly-company-review").to_job(timezone="Mars/Olympus")
 
     def test_prompt_is_the_rendered_body(self) -> None:
-        playbook = get_playbook("portfolio-checkup")
-        variables = {"holdings": "600519.SH 100; AAPL 50"}
+        playbook = get_playbook("weekly-company-review")
+        variables = {"companies": "600519.SH; 000001.SZ"}
         job = playbook.to_job(variables=variables, now_ms=NOW_MS)
         assert job.prompt == playbook.render(variables)
-        assert "600519.SH 100; AAPL 50" in job.prompt
+        assert "600519.SH; 000001.SZ" in job.prompt
 
     def test_config_records_provenance_but_never_overwrites_the_caller(self) -> None:
-        assert build_job("premarket-brief", now_ms=NOW_MS).config == {"playbook": "premarket-brief"}
-        job = build_job("premarket-brief", now_ms=NOW_MS, config={"playbook": "mine", "model": "x"})
+        assert build_job("weekly-company-review", now_ms=NOW_MS).config == {"playbook": "weekly-company-review"}
+        job = build_job("weekly-company-review", now_ms=NOW_MS, config={"playbook": "mine", "model": "x"})
         assert job.config == {"playbook": "mine", "model": "x"}
 
     def test_caller_config_is_copied_not_aliased(self) -> None:
         supplied: dict = {}
-        build_job("premarket-brief", now_ms=NOW_MS, config=supplied)
+        build_job("weekly-company-review", now_ms=NOW_MS, config=supplied)
         assert supplied == {}
 
     @pytest.mark.parametrize("slug", sorted(EXPECTED_SLUGS))
@@ -409,15 +403,15 @@ class TestToJob:
 
 class TestToDict:
     def test_omits_the_body_by_default(self) -> None:
-        data = get_playbook("premarket-brief").to_dict()
+        data = get_playbook("weekly-company-review").to_dict()
         assert "body" not in data
-        assert data["slug"] == "premarket-brief"
+        assert data["slug"] == "weekly-company-review"
         assert isinstance(data["data_capabilities"], list)
         assert isinstance(data["markets"], list)
-        assert data["variables"]["home_market"]
+        assert data["variables"]["companies"]
 
     def test_includes_the_body_on_request(self) -> None:
-        assert get_playbook("premarket-brief").to_dict(include_body=True)["body"]
+        assert get_playbook("weekly-company-review").to_dict(include_body=True)["body"]
 
     def test_every_bundled_record_is_json_serializable(self) -> None:
         import json

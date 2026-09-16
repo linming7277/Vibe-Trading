@@ -191,6 +191,10 @@ async def _run_startup_preflight() -> None:
     start_morning_macro_scheduler()
     # 早盘快讯收集器：同一开关（on 时 15:05→次日 08:00 每 ≥10 分钟拉快讯入缓存表）。
     start_morning_flash_scheduler()
+    # 宏观序列日度前向刷新：工作日 07:35（08:00 宏观快照前），源隔离 fail-soft。
+    from src.macro_data.scheduler import start_macro_series_refresh_scheduler
+
+    start_macro_series_refresh_scheduler()
     # CIO 分块后台（PRICE/FINANCIAL 确定性刷新）：env HZ_CIO_BLOCK_WORKER=on 才启动，默认 off。
     from src.cio_report.block_worker import start_cio_block_worker
 
@@ -221,9 +225,11 @@ async def _stop_scheduled_research_on_shutdown() -> None:
         finally:
             from src.value_workspace.automation import stop_value_research_scheduler
             from src.tdx_data.automation import stop_data_refresh_scheduler
+            from src.macro_data.scheduler import stop_macro_series_refresh_scheduler
 
             stop_value_research_scheduler()
             stop_data_refresh_scheduler()
+            stop_macro_series_refresh_scheduler()
 
 
 @asynccontextmanager

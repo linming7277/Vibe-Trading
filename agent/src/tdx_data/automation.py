@@ -60,6 +60,11 @@ def due_profiles(current: datetime) -> list[str]:
         return ["reference_daily"]
     if clock == time(20, 30):
         return ["history_nightly"]
+    if clock == time(21, 30):
+        # After history_nightly (20:30) and Monday fundamental_weekly (20:45)
+        # have released the bridge, and long after the 16:45 value-line EOD
+        # chain; the full-market professional-finance sweep takes ~40 minutes.
+        return ["financial_nightly"]
     if local.weekday() == 0 and clock == time(20, 45):
         return ["fundamental_weekly"]
     return []

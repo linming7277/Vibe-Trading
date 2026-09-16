@@ -1527,7 +1527,44 @@ export const api = {
     request<PaperOrder>(`/paper/accounts/${encodeURIComponent(id)}/orders`, { method: "POST", body: JSON.stringify(body) }),
   getMacroSectorProjection: (asOf?: string) =>
     request<MacroSectorProjection>(`/api/value/macro-sector-projection${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
+  getMacroOverview: () => request<MacroOverview>(`/api/value/macro-overview`),
 };
+
+export interface MacroOverviewSeries {
+  series_id: string;
+  label: string;
+  unit: string;
+  frequency: string;
+  value: number | null;
+  observation_date: string | null;
+  captured_at: string | null;
+  status: string;
+  lag_days: number | null;
+  prev_value: number | null;
+  prev_observation_date: string | null;
+  change: number | null;
+  sparkline: Array<{ date: string; value: number }>;
+}
+
+export interface MacroOverviewForecast {
+  target_trade_date: string;
+  run_mode: string;
+  status: string;
+  direction: string | null;
+  direction_cn: string | null;
+  narrative_md: string;
+  published_at: string | null;
+  created_at: string;
+}
+
+export interface MacroOverview {
+  generated_at: string;
+  series: MacroOverviewSeries[];
+  domestic_series: MacroOverviewSeries[];
+  axes_trend: Record<string, { score: number; state: string; prev?: { score: number; state: string } | null }>;
+  forecast: MacroOverviewForecast | null;
+  projection: MacroSectorProjection;
+}
 
 export interface MacroSectorProjection {
   as_of: string;

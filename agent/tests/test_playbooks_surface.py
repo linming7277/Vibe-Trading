@@ -23,7 +23,7 @@ patching the route module's singleton (REST).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any, List
 
 import pytest
 from fastapi.testclient import TestClient
@@ -34,17 +34,11 @@ from src.api import scheduled_routes
 from src.scheduled_research.playbooks import get_playbook, list_playbooks
 from src.scheduled_research.store import ScheduledResearchJobStore
 
-BUNDLED_SLUGS = {
-    "a-share-money-flow",
-    "earnings-season-tracker",
-    "institutional-holdings-diff",
-    "portfolio-checkup",
-    "premarket-brief",
-}
+BUNDLED_SLUGS = {"weekly-company-review"}
 
 # A template with declared variables and a timezone-carrying cron cadence, so
 # the variable-substitution and first-fire branches both get exercised.
-SAMPLE = "premarket-brief"
+SAMPLE = "weekly-company-review"
 
 
 class _Ctx:
@@ -208,13 +202,13 @@ class TestRestCreate:
     def test_create_substitutes_declared_variables(self, client: TestClient) -> None:
         response = client.post(
             f"/scheduled-runs/playbooks/{SAMPLE}",
-            json={"id": "tokyo-brief", "variables": {"home_market": "Japan equities"}},
+            json={"id": "tokyo-brief", "variables": {"companies": "600519.SH, 000001.SZ"}},
         )
 
         assert response.status_code == 201
         prompt = response.json()["prompt"]
-        assert "Japan equities" in prompt
-        assert prompt == get_playbook(SAMPLE).render({"home_market": "Japan equities"})
+        assert "600519.SH, 000001.SZ" in prompt
+        assert prompt == get_playbook(SAMPLE).render({"companies": "600519.SH, 000001.SZ"})
 
     def test_create_rejects_undeclared_variable(
         self, client: TestClient, rest_store: ScheduledResearchJobStore
@@ -302,7 +296,7 @@ class TestRestCreate:
         assert response.status_code == 201
         body = response.json()
         assert body["timezone"] == get_playbook(SAMPLE).suggested_timezone
-        # A weekday 08:30 cadence never fires at creation time.
+        # A Saturday-morning cadence never fires at creation time.
         assert body["next_run_at"] > after
 
     def test_created_job_is_visible_through_the_plain_list_endpoint(
@@ -424,7 +418,7 @@ class TestCliSubcommand:
 
         out = capsys.readouterr().out
         assert code == 0
-        assert "Pre-market brief" in out
+        assert "Weekly Company Review" in out
         assert "Data gaps" in out
 
     def test_show_json_renders_variable_overrides(
@@ -433,13 +427,13 @@ class TestCliSubcommand:
         import json
 
         code = _run_cli(
-            ["playbook", "show", SAMPLE, "--json", "--var", "home_market=Korea equities"]
+            ["playbook", "show", SAMPLE, "--json", "--var", "companies=600519.SH, 000001.SZ"]
         )
 
         payload = json.loads(capsys.readouterr().out)
         assert code == 0
         assert payload["body"] == get_playbook(SAMPLE).render(
-            {"home_market": "Korea equities"}
+            {"companies": "600519.SH, 000001.SZ"}
         )
 
     def test_show_unknown_slug_fails(
@@ -476,7 +470,7 @@ class TestCliSubcommand:
                 "--schedule",
                 "3600000",
                 "--var",
-                "watchlist=AAPL, MSFT",
+                "companies=600519.SH, 000001.SZ",
             ]
         )
         capsys.readouterr()
@@ -485,7 +479,7 @@ class TestCliSubcommand:
         job = cli_store.get("hourly-brief")
         assert job is not None
         assert job.schedule == "3600000"
-        assert "AAPL, MSFT" in job.prompt
+        assert "600519.SH, 000001.SZ" in job.prompt
 
     def test_create_utc_flag_drops_the_suggested_timezone(
         self, cli_store: ScheduledResearchJobStore, capsys: pytest.CaptureFixture[str]
@@ -534,7 +528,7 @@ class TestCliSubcommand:
 
         out = capsys.readouterr().out
         assert code == 1
-        assert "premarket-brief" in out
+        assert "weekly-company-review" in out
         assert cli_store.list_jobs() == []
 
     def test_dry_run_stores_nothing(
@@ -602,7 +596,7 @@ class TestSlashCommand:
 
         out = capsys.readouterr().out
         assert code == 0
-        assert "Pre-market Brief" in out
+        assert "Weekly Company Review" in out
         assert "Data gaps" in out
 
     def test_run_queues_the_body_verbatim(
@@ -620,10 +614,10 @@ class TestSlashCommand:
     def test_run_accepts_unquoted_multi_word_variables(self) -> None:
         ctx = _Ctx()
 
-        research_playbook.run(ctx, "run", SAMPLE, "home_market=US", "equities")
+        research_playbook.run(ctx, "run", SAMPLE, "companies=600519.SH,", "000001.SZ")
 
         assert ctx.pending_prompt == get_playbook(SAMPLE).render(
-            {"home_market": "US equities"}
+            {"companies": "600519.SH, 000001.SZ"}
         )
 
     def test_run_without_a_queueable_context_prints_the_prompt(
@@ -669,7 +663,7 @@ class TestSlashCommand:
         out = capsys.readouterr().out
         assert code == 0
         assert ctx.pending_prompt is None
-        assert "premarket-brief" in out
+        assert "weekly-company-review" in out
 
     def test_missing_slug_is_answered_with_usage(
         self, capsys: pytest.CaptureFixture[str]
@@ -742,7 +736,7 @@ def test_all_three_surfaces_produce_the_same_prompt(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """REST, CLI and slash must schedule byte-identical instruction text."""
-    variables = {"home_market": "Hong Kong equities"}
+    variables = {"companies": "600519.SH 000001.SZ"}
 
     rest_prompt = client.post(
         f"/scheduled-runs/playbooks/{SAMPLE}",
@@ -750,12 +744,12 @@ def test_all_three_surfaces_produce_the_same_prompt(
     ).json()["prompt"]
 
     _run_cli(
-        ["playbook", "create", SAMPLE, "--id", "cross-cli", "--var", "home_market=Hong Kong equities"]
+        ["playbook", "create", SAMPLE, "--id", "cross-cli", "--var", "companies=600519.SH 000001.SZ"]
     )
     cli_job = cli_store.get("cross-cli")
 
     ctx = _Ctx()
-    research_playbook.run(ctx, "run", SAMPLE, "home_market=Hong", "Kong", "equities")
+    research_playbook.run(ctx, "run", SAMPLE, "companies=600519.SH", "000001.SZ")
     capsys.readouterr()
 
     assert cli_job is not None

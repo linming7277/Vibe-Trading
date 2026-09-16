@@ -545,8 +545,12 @@ def _filter_news(items):
             continue
         if _CALENDAR_ONLY_RE.search(title):
             continue
-        if _CALENDAR_PREFIX_RE.search(title) and not any(k in title for k in _EVENT_HINT_KWS):
-            continue
+        # 早报类前缀：去前缀后仍很短（<8 字）且无事件词 → 纯日历占位，丢；
+        # 有实质内容的早报（如「早报：标普500创阶段新低」）保留。
+        if _CALENDAR_PREFIX_RE.search(title):
+            body = _BULLET_PREFIX_RE.sub("", title).strip()
+            if len(body) < 8 and not any(k in title for k in _EVENT_HINT_KWS):
+                continue
         normalized = _normalize_title(title)
         topics = _title_topics(title)
         hit = None
@@ -566,10 +570,20 @@ def _filter_news(items):
     return out
 
 
+def _rank_stamp(item):
+    """跨天排序戳：优先完整 published_at（含日期），回落 HH:MM/date。"""
+    pub = str(item.get("published_at") or "")
+    if len(pub) >= 16:
+        return pub[:16]
+    return str(item.get("time") or item.get("date") or "")
+
+
 def _rank_and_cap(items, cap):
-    """组内排序：优先词（政策/监管/数据/外盘商品）在前，时间新在前，截 cap。"""
-    timed = sorted(items, key=lambda i: str(i.get("time") or i.get("date") or ""), reverse=True)
-    return sorted(timed, key=lambda i: 0 if _has_priority(str(i.get("title") or "")) else 1)[:cap]
+    """组内排序：按完整时间戳跨天降序（时间新在前），截 cap。
+    「优先词」只用于筛选保留与丢弃取舍，不做排序前置——窗口跨两天时
+    优先词前置会把昨天下午的高优条排到今天早上之前（时间倒挂）。"""
+    timed = sorted(items, key=lambda i: _rank_stamp(i), reverse=True)
+    return timed[:cap]
 
 
 def _split_and_cap(combined):

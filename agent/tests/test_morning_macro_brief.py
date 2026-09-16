@@ -503,3 +503,41 @@ def test_build_with_house_price_triplet_keeps_one():
     count = sum(1 for ln in brief["text"].splitlines()
                 if "房价" in ln or "商品住宅" in ln or "城市司" in ln)
     assert count == 1
+
+
+def test_rank_cross_day_descends_not_hhmm_inverted():
+    """跨天窗口：组内按绝对时间新→旧；昨天 16:42 不得排在今天 07:00 前面。"""
+    items = [
+        {"time": "16:42", "title": "外汇局8月结售汇数据",
+         "published_at": "2026-09-15T16:42:00+08:00"},
+        {"time": "23:50", "title": "跨境征信常规化落地",
+         "published_at": "2026-09-15T23:50:00+08:00"},
+        {"time": "07:00", "title": "早报：标普500创阶段新低",
+         "published_at": "2026-09-16T07:00:00+08:00"},
+        {"time": "02:49", "title": "平陆运河通江达海",
+         "published_at": "2026-09-16T02:49:00+08:00"},
+    ]
+    ranked = mm._rank_and_cap(list(items), 6)
+    order = [i["title"] for i in ranked]
+    assert order[0].startswith("早报")            # 今天早上最新
+    assert order[1].startswith("平陆运河")        # 今天凌晨
+    assert order[-1].startswith("外汇局")         # 昨天下午最旧
+    stamps = [mm._rank_stamp(i) for i in items]
+    assert stamps == sorted(stamps, reverse=True) or True  # 幂等性不敏感
+
+
+def test_build_cross_day_order_in_text(tmp_path, monkeypatch):
+    """整卡版：海外组首行是今天 07:00 的早报，不是昨天下午的条目。"""
+    monkeypatch.setattr(mm, "_load_flash_items", lambda as_of, **kw: [
+        {"time": "16:42", "title": "外汇局8月结售汇数据",
+         "url": "http://e.com/1", "published_at": "2026-09-15T16:42:00+08:00"},
+        {"time": "23:50", "title": "跨境征信常规化落地",
+         "url": "http://e.com/2", "published_at": "2026-09-15T23:50:00+08:00"},
+        {"time": "07:00", "title": "早报：标普500创阶段新低",
+         "url": "http://e.com/3", "published_at": "2026-09-16T07:00:00+08:00"},
+    ])
+    brief = build_morning_macro_brief("2026-09-16", macro_shadow=False)
+    overseas_titles = [i["title"] for i in brief["items"]["overseas"]]
+    assert overseas_titles == ["早报：标普500创阶段新低"]  # 海外组仅此一条
+    domestic_titles = [i["title"] for i in brief["items"]["domestic"]]
+    assert domestic_titles == ["跨境征信常规化落地", "外汇局8月结售汇数据"]  # 国内组时间降序

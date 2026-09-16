@@ -303,6 +303,26 @@ class FinancialHistoryService:
             "field_map": {code: field.__dict__ for code, field in FIELD_MAP.items()},
         }
 
+    def cached_raw_version(self) -> str:
+        """raw_version stamped on the most recently written cached row.
+
+        Reads the cache itself rather than module_state metadata: the value-line
+        manual refresh and the tdx nightly collector both write this dataset,
+        and the rows are the ground truth of what is actually cached.
+        """
+        row = self.store._conn.execute(
+            "SELECT payload_json FROM records WHERE dataset=? ORDER BY updated_at DESC LIMIT 1",
+            (FINANCIAL_HISTORY_DATASET,),
+        ).fetchone()
+        if not row:
+            return ""
+        try:
+            import json as _json
+
+            return str((_json.loads(row[0]) or {}).get("raw_version") or "")
+        except (TypeError, ValueError):
+            return ""
+
     def collect(
         self,
         symbols: list[str],

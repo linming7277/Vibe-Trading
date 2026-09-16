@@ -14,6 +14,7 @@ from typing import Any
 
 from .client import TdxClient
 from .close_snapshot import close_snapshot_provenance_error
+from .financial_history import FinancialHistoryService
 from .store import TdxDataStore, utc_now
 
 
@@ -26,6 +27,7 @@ MODULES: dict[str, dict[str, str]] = {
     "formula": {"label": "公式选股", "description": "指标、条件选股、专家系统和K线形态公式"},
     "history": {"label": "历史行情", "description": "本地K线可用性、交易日和重点指数历史"},
     "fundamental": {"label": "财务估值", "description": "全A股基础财务、扩展估值和业务信息"},
+    "financial_history": {"label": "专业财务历史", "description": "全A股按公告日的点在时（PIT）专业财务，2019年至今"},
 }
 
 # ``all`` remains an explicit, manual recovery path.  Scheduled work uses only
@@ -37,6 +39,7 @@ REFRESH_PROFILES: dict[str, tuple[str, ...]] = {
     "reference_daily": ("index", "sector", "fund"),
     "fundamental_weekly": ("fundamental",),
     "history_nightly": ("history",),
+    "financial_nightly": ("financial_history",),
     "all": tuple(MODULES),
 }
 
@@ -46,6 +49,7 @@ PROFILE_META: dict[str, dict[str, str]] = {
     "reference_daily": {"label": "日度参考数据", "description": "指数、板块、基金与新股参考数据"},
     "fundamental_weekly": {"label": "基础财务周更新", "description": "全市场基础财务与估值，非每日任务"},
     "history_nightly": {"label": "历史夜间检查", "description": "交易日与本地历史文件可用性检查"},
+    "financial_nightly": {"label": "专业财务夜更", "description": "工作日 21:30 全市场专业财务采集；包未变化时自动跳过"},
     "all": {"label": "全部数据（人工）", "description": "人工应急入口，不由自动调度器调用"},
 }
 
@@ -58,6 +62,7 @@ MODULE_DATASETS: dict[str, tuple[str, ...]] = {
     "formula": ("formulas",),
     "history": ("trading_dates", "history_availability"),
     "fundamental": ("fundamentals",),
+    "financial_history": ("financial_history",),
 }
 
 SPECIAL_RANKS = (
@@ -86,6 +91,11 @@ RANK_SORT_FIELDS = {
 QUOTE_BATCH_SIZE = 1_000
 MIN_QUOTE_COVERAGE = 0.90
 MIN_FUNDAMENTAL_COVERAGE = 0.90
+# A scheduled professional-finance re-collect may be skipped only while the
+# vendor package fingerprint matches the cached raw_version AND the last
+# success is recent.  The floor bounds worst-case staleness if the fingerprint
+# ever misses a vendor-side data change.
+FINANCIAL_RECOLLECT_MAX_AGE = timedelta(days=7)
 
 # These are deliberately small, well-known symbols.  They let us prove the
 # local TDX entitlement and the wire format before building a full HK/US
@@ -175,6 +185,7 @@ class TdxDataService:
             "formula": self._collect_formula,
             "history": self._collect_history,
             "fundamental": self._collect_fundamental,
+            "financial_history": self._collect_financial_history,
         }
 
     def status(self) -> dict[str, Any]:
@@ -612,6 +623,9 @@ class TdxDataService:
         if module == "fundamental":
             value = metadata.get("coverage_pct")
             return float(value) / 100 if value is not None else None
+        if module == "financial_history":
+            value = metadata.get("coverage")
+            return float(value) if value is not None else None
         return 1.0
 
     @staticmethod
@@ -890,6 +904,69 @@ class TdxDataService:
             },
             "message": f"{len(records):,} 只股票财务估值（覆盖 {len(records) / total:.1%}）" if total else "无A股证券",
         }
+
+    @staticmethod
+    def _financial_skip_recollect(
+        *,
+        package_raw_version: str,
+        cached_raw_version: str,
+        last_success_at: str | None,
+        now: datetime,
+    ) -> bool:
+        """Skip a scheduled re-collect only with provable package-cache equality.
+
+        Professional finance rows change only when the TDX package is
+        re-downloaded, so an unchanged fingerprint means a re-collect would
+        reproduce the cached rows.  Any doubt — missing fingerprint, changed
+        package, no successful state, or a cache older than
+        ``FINANCIAL_RECOLLECT_MAX_AGE`` — collects again.
+        """
+        if not package_raw_version or package_raw_version != cached_raw_version:
+            return False
+        try:
+            last = datetime.fromisoformat(str(last_success_at))
+        except (TypeError, ValueError):
+            return False
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        return now - last <= FINANCIAL_RECOLLECT_MAX_AGE
+
+    def _collect_financial_history(self, progress: Callable[[int, int, str], None]) -> dict[str, Any]:
+        """Full-market point-in-time professional finance from the vendor API.
+
+        Runs inside the refresh snapshot, so ``FinancialHistoryService``'s
+        atomic replacement stays invisible until ``publish_snapshot`` promotes
+        it.  The nightly profile owns this collector — intraday profiles never
+        touch it — while a manual module update always collects.
+        """
+        service = FinancialHistoryService(self.store, self.client)
+        package = service.package_status()
+        if package["status"] != "ready":
+            raise RuntimeError("needs_professional_finance")
+        state = next((item for item in self.store.module_states() if item["module"] == "financial_history"), {})
+        if self._financial_skip_recollect(
+            package_raw_version=str(package.get("raw_version") or ""),
+            cached_raw_version=service.cached_raw_version(),
+            last_success_at=state.get("last_success_at"),
+            now=datetime.now(timezone.utc),
+        ):
+            cached = self.store.count("financial_history")
+            return {
+                "item_count": cached,
+                "total": cached,
+                "message": "专业财务包未变化，沿用上次成功缓存",
+                "metadata": {"skipped": "package_unchanged", "raw_version": package.get("raw_version")},
+            }
+        securities = self.store.list_records("securities", limit=10_000)["items"]
+        symbols = [str(row["key"]) for row in securities]
+        if not symbols:
+            symbols = [
+                str(row.get("Code")) for row in (self.client.call("get_stock_list", "5", list_type=1) or [])
+                if row.get("Code")
+            ]
+        result = service.collect(symbols, progress=progress)
+        result.setdefault("metadata", {})["coverage"] = result.get("coverage")
+        return result
 
     def refresh_security(self, symbol: str) -> dict[str, Any]:
         code = symbol.strip().upper()

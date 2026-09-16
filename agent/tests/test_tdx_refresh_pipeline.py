@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from src.tdx_data import automation
 from src.tdx_data.automation import DataRefreshScheduler, due_profiles
-from src.tdx_data.service import TdxDataService
+from src.tdx_data.financial_history import package_fingerprint
+from src.tdx_data.service import REFRESH_PROFILES, TdxDataService
 from src.tdx_data.store import TdxDataStore
 
 
@@ -152,3 +153,149 @@ def test_scheduler_has_bounded_profiles_and_respects_pause(tmp_path: Path, monke
     store.update_refresh_automation("CN", enabled=True)
     scheduler.tick(datetime(2026, 8, 19, 16, 0, tzinfo=zone))
     assert started == ["market_close"]
+
+
+def test_financial_nightly_owns_a_bounded_profile_slot() -> None:
+    assert REFRESH_PROFILES["financial_nightly"] == ("financial_history",)
+    assert "financial_history" in REFRESH_PROFILES["all"]
+
+
+def test_due_profiles_schedule_financial_nightly_after_the_night_jobs() -> None:
+    zone = ZoneInfo("Asia/Shanghai")
+    monday = datetime(2026, 9, 14, 21, 30, tzinfo=zone)
+    assert due_profiles(monday) == ["financial_nightly"]
+    # The earlier evening slots stay untouched.
+    assert due_profiles(datetime(2026, 9, 14, 20, 30, tzinfo=zone)) == ["history_nightly"]
+    assert due_profiles(datetime(2026, 9, 14, 20, 45, tzinfo=zone)) == ["fundamental_weekly"]
+    # Weekends never collect.
+    assert due_profiles(datetime(2026, 9, 19, 21, 30, tzinfo=zone)) == []
+
+
+def test_scheduler_starts_financial_nightly_at_its_slot(tmp_path: Path, monkeypatch) -> None:
+    zone = ZoneInfo("Asia/Shanghai")
+    store = TdxDataStore(tmp_path / "tdx.db")
+    store.update_refresh_automation("CN", enabled=True)
+    started: list[str] = []
+
+    class Service:
+        def start_update(self, profile: str) -> None:
+            started.append(profile)
+
+    monkeypatch.setattr(automation, "get_tdx_service", lambda: Service())
+    DataRefreshScheduler(store=store).tick(datetime(2026, 9, 14, 21, 30, tzinfo=zone))
+    assert started == ["financial_nightly"]
+    # A completed run suppresses the same slot rerun on the same day.
+    store.create_refresh_run(
+        "run-fin", profile="financial_nightly", market="CN", market_date="2026-09-14",
+        snapshot_id="cn-20260914-fin", modules=("financial_history",),
+    )
+    store.update_refresh_run("run-fin", status="completed", completed_at="2026-09-14T13:40:00+00:00")
+    started.clear()
+    DataRefreshScheduler(store=store).tick(datetime(2026, 9, 14, 21, 31, tzinfo=zone))
+    assert started == []
+
+
+def test_financial_skip_recollect_gate() -> None:
+    now = datetime(2026, 9, 15, 13, 30, tzinfo=timezone.utc)
+    recent = (now - timedelta(hours=12)).isoformat()
+    stale = (now - timedelta(days=8)).isoformat()
+    # Package matches the cached raw_version and the success is recent: skip.
+    assert TdxDataService._financial_skip_recollect(
+        package_raw_version="fp1", cached_raw_version="fp1", last_success_at=recent, now=now,
+    )
+    # Changed package: collect.
+    assert not TdxDataService._financial_skip_recollect(
+        package_raw_version="fp2", cached_raw_version="fp1", last_success_at=recent, now=now,
+    )
+    # Missing fingerprint or no prior success: collect.
+    assert not TdxDataService._financial_skip_recollect(
+        package_raw_version="", cached_raw_version="fp1", last_success_at=recent, now=now,
+    )
+    assert not TdxDataService._financial_skip_recollect(
+        package_raw_version="fp1", cached_raw_version="fp1", last_success_at=None, now=now,
+    )
+    # Cache older than the forced floor: collect even with an equal fingerprint.
+    assert not TdxDataService._financial_skip_recollect(
+        package_raw_version="fp1", cached_raw_version="fp1", last_success_at=stale, now=now,
+    )
+
+
+def _seed_financial_package(tmp_path: Path) -> str:
+    cw_dir = tmp_path / "vipdoc" / "cw"
+    cw_dir.mkdir(parents=True, exist_ok=True)
+    package_file = cw_dir / "gpcw20250630.dat"
+    package_file.write_bytes(b"\0" * 2048)
+    return package_fingerprint(cw_dir)[0]
+
+
+class _FakeFinancialService:
+    """Stands in for FinancialHistoryService; collect() must never run on skip."""
+
+    instance_args: tuple = ()
+    collect_args: list = []
+
+    def __init__(self, store, client) -> None:
+        _FakeFinancialService.instance_args = (store, client)
+
+    def package_status(self) -> dict:
+        return {"status": "ready", "raw_version": _FakeFinancialService.package_raw}
+
+    def cached_raw_version(self) -> str:
+        return _FakeFinancialService.cached_raw
+
+    def collect(self, symbols, *, progress=None, **_):
+        _FakeFinancialService.collect_args.append(list(symbols))
+        if progress:
+            progress(len(symbols), len(symbols), "专业财务")
+        return {
+            "status": "ready", "item_count": len(symbols) * 10, "symbols": len(symbols),
+            "total_symbols": len(symbols), "coverage": 0.99, "raw_version": _FakeFinancialService.package_raw,
+        }
+
+
+def test_financial_collector_skips_when_package_matches_cache(tmp_path: Path, monkeypatch) -> None:
+    fingerprint = _seed_financial_package(tmp_path)
+    store = TdxDataStore(tmp_path / "tdx.db")
+    store.set_module_state(
+        "financial_history", status="ready",
+        last_success_at="2026-09-15T01:30:00+00:00", metadata_json={},
+    )
+    service = TdxDataService(store=store, client=object.__new__(TdxClientStub))
+    monkeypatch.setattr("src.tdx_data.service.FinancialHistoryService", _FakeFinancialService)
+    _FakeFinancialService.package_raw = fingerprint
+    _FakeFinancialService.cached_raw = fingerprint
+    _FakeFinancialService.collect_args = []
+
+    result = service._collect_financial_history(lambda *_: None)
+
+    assert result["metadata"]["skipped"] == "package_unchanged"
+    assert result["item_count"] == 0
+    assert _FakeFinancialService.collect_args == []
+
+
+def test_financial_collector_collects_changed_package_over_seeded_securities(tmp_path: Path, monkeypatch) -> None:
+    fingerprint = _seed_financial_package(tmp_path)
+    store = TdxDataStore(tmp_path / "tdx.db")
+    store.replace_dataset("securities", [
+        {"key": "600519.SH", "name": "贵州茅台", "payload": {"Code": "600519.SH"}},
+        {"key": "000001.SZ", "name": "平安银行", "payload": {"Code": "000001.SZ"}},
+    ])
+    service = TdxDataService(store=store, client=object.__new__(TdxClientStub))
+    monkeypatch.setattr("src.tdx_data.service.FinancialHistoryService", _FakeFinancialService)
+    _FakeFinancialService.package_raw = fingerprint
+    _FakeFinancialService.cached_raw = "previous-fingerprint"
+
+    result = service._collect_financial_history(lambda *_: None)
+
+    assert sorted(_FakeFinancialService.collect_args[0]) == ["000001.SZ", "600519.SH"]
+    assert result["metadata"]["coverage"] == 0.99
+    assert TdxDataService._module_coverage("financial_history", result) == 0.99
+
+
+class TdxClientStub:
+    """The collector must reach the vendor bridge only after the skip gate."""
+
+    home: str = ""
+
+    def call(self, *_args, **_kwargs):
+        raise AssertionError("client bridge must not be used in these paths")
