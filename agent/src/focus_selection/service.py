@@ -254,6 +254,7 @@ class FocusSelectionService:
         return {
             "stock_code": code,
             "company_name": str(item.get("company_name") or code),
+            "entered_at": _day(item.get("entered_at")),
             "industry_code": str(item.get("industry_code") or ""),
             "industry_name": str(item.get("industry_name") or "资料不足"),
             "leader_rank": int(item.get("leader_rank") or 0),

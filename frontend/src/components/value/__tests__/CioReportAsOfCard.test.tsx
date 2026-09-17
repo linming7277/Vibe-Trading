@@ -50,3 +50,6 @@ describe("CioReportAsOfCard", () => {
     }
   });
 });
+
+
+# 抽屉组件与接线覆盖见 AskSupervisorDrawer 相关用例（vitest 组件级）

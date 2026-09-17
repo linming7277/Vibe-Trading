@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AlertCircle, Clock3, Database, Loader2 } from "lucide-react";
+import { AlertCircle, Clock3, Compass, Database, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MarketCode, SourceStatus } from "@/lib/api";
 import { useWorkspaceMarket } from "@/hooks/useWorkspaceMarket";
@@ -74,4 +74,27 @@ export function EmptyState({ title, body }: { title: string; body?: string }) {
 
 export function formatNumber(value: unknown, digits = 2) {
   return typeof value === "number" ? new Intl.NumberFormat("zh-CN", { maximumFractionDigits: digits }).format(value) : String(value ?? "—");
+}
+
+export interface PageTocItem {
+  id: string;
+  label: string;
+}
+
+/** 吸附式页面目录：点条目平滑滚动到对应区块；区块用 id + scroll-mt-16 标注。 */
+export function PageToc({ items }: { items: PageTocItem[] }) {
+  if (!items.length) return null;
+  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  return (
+    <nav aria-label="页面目录" className="sticky top-0 z-20 -mx-1 mb-4 flex items-center gap-2 overflow-x-auto rounded-xl border-2 border-primary/40 bg-card/95 px-3 py-2 shadow-md backdrop-blur">
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
+        <Compass className="h-3.5 w-3.5" />本页目录
+      </span>
+      {items.map((item) => (
+        <button key={item.id} onClick={() => jump(item.id)} className="shrink-0 rounded-full border border-primary/25 bg-primary/5 px-3.5 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground">
+          {item.label}
+        </button>
+      ))}
+    </nav>
+  );
 }

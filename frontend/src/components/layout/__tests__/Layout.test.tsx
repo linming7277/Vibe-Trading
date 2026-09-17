@@ -53,7 +53,7 @@ describe("双策略 Layout", () => {
     ["市场行情", "/market/overview"],
     ["价值投资", "/value"],
     ["情绪交易", "/emotion/temperature"],
-    ["宏观", "/global"],
+    ["宏观环境", "/global"],
     ["模拟验证", "/simulation/accounts"],
     ["AI 研究", "/ai/agent"],
   ])("uses the expected default route for %s", (label, href) => {
@@ -66,7 +66,7 @@ describe("双策略 Layout", () => {
     ["/market/sectors", "市场行情", "市场行情二级导航", "板块行情"],
     ["/value", "价值投资", "价值投资二级导航", "机会与风险"],
     ["/emotion/swing", "情绪交易", "情绪交易二级导航", "波段候选"],
-    ["/global", "宏观", "宏观二级导航", "宏观总览"],
+    ["/global", "宏观环境", "宏观环境二级导航", "宏观总览"],
     ["/simulation/compare", "模拟验证", "模拟验证二级导航", "归因对比"],
     ["/ai/reports", "AI 研究", "AI 研究二级导航", "研究报告"],
   ])("maps %s to its primary and secondary navigation", (path, primaryLabel, secondaryLabel, tabLabel) => {

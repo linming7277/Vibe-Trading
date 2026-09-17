@@ -5,6 +5,8 @@ import { api, type FinancialAnalysisSnapshot, type LeaderFormulaContract, type L
 import { CompanyResearchModalDetails } from "@/components/value/CompanyResearchModalDetails";
 import { LeaderCompanyQuickView } from "@/components/value/LeaderCompanyQuickView";
 import { leaderValuationStatusLabel, LeaderValuationStatusBadge, type LeaderValuationStatus } from "@/components/value/LeaderValuationStatus";
+import { PageToc } from "@/components/workspace/WorkspaceUI";
+import { AskSupervisorDrawer } from "@/components/value/AskSupervisorDrawer";
 
 type CatalogMeta = { level1: number; level2: number; level3: number };
 type LeaderValuationSnapshot = {
@@ -341,6 +343,7 @@ export function ValueLeaderPoolPage() {
   const selectedLevel2Name = level2Rows.find((row) => row.code === level2Filter)?.name;
   const hasFilters = Boolean(level1Filter || level2Filter || level3Query || query || valuationStatusFilter);
 
+  const [supervisorOpen, setSupervisorOpen] = useState(false);
   return <div className="w-full space-y-4 p-3 md:p-4">
     <header className="flex flex-col justify-between gap-4 rounded-xl border border-border bg-card px-5 py-4 lg:flex-row lg:items-center">
       <div>
@@ -348,14 +351,19 @@ export function ValueLeaderPoolPage() {
       </div>
       <div className="flex items-center gap-2"><div className="flex divide-x divide-border rounded-lg border border-border text-center text-sm"><div className="px-4 py-2"><strong className="block tabular-nums">{catalogMeta.level1 || "—"}</strong><span className="text-xs text-muted-foreground">一级行业</span></div><div className="px-4 py-2"><strong className="block tabular-nums">{catalogMeta.level2 || "—"}</strong><span className="text-xs text-muted-foreground">二级行业</span></div><div className="px-4 py-2"><strong className="block tabular-nums">{catalogMeta.level3 || "—"}</strong><span className="text-xs text-muted-foreground">三级/末级行业</span></div></div><button type="button" onClick={() => void loadSnapshot({ force: true, background: Boolean(leaderSnapshotCache) })} disabled={loading || refreshing} className="inline-flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />{refreshing ? "更新中" : "刷新"}</button></div>
     </header>
+    <PageToc items={[
+      { id: "sec-howto", label: "筛选说明" },
+      { id: "sec-list", label: "行业候选列表" },
+      { id: "sec-glossary", label: "指标词典" },
+    ]} />
 
     {error && <div role="alert" className="rounded-md border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>}
 
-    <section className="rounded-xl border border-primary/20 bg-primary/[0.025] px-4 py-3">
+    <section id="sec-howto" className="rounded-xl border border-primary/20 bg-primary/[0.025] px-4 py-3 scroll-mt-16">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="flex min-w-0 items-start gap-2"><HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div className="min-w-0"><h2 className="text-sm font-semibold">这页怎样选出候选公司</h2><div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs"><span className="rounded bg-background px-2 py-1">1 基础资格校验</span><ChevronRight className="h-3 w-3 text-muted-foreground" /><span className="rounded bg-background px-2 py-1">2 同行业规模比较</span><ChevronRight className="h-3 w-3 text-muted-foreground" /><span className="rounded bg-background px-2 py-1">3 每行业规模前2入龙头池</span><ChevronRight className="h-3 w-3 text-muted-foreground" /><span className="rounded bg-background px-2 py-1">4 质量分仅供展示与后续低估筛选</span></div></div></div><Link to="/value/methodology" className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-background px-3 py-2 text-xs font-medium text-primary hover:bg-primary/5">查看详细筛选说明 <ArrowRight className="h-3.5 w-3.5" /></Link></div>
     </section>
 
-    <section className="rounded-xl border border-border bg-card">
+    <section id="sec-list" className="rounded-xl border border-border bg-card scroll-mt-16">
       <div className="grid gap-2 border-b border-border p-3 lg:grid-cols-[auto_minmax(220px,1fr)_repeat(4,minmax(150px,1fr))] lg:items-center">
         <div className="flex shrink-0 items-center gap-2 px-1 text-sm font-semibold"><SlidersHorizontal className="h-4 w-4 text-primary" />行业候选列表</div>
         <label className="flex min-w-0 items-center rounded-md border border-border bg-background px-2"><Search className="h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索行业或行业代码" className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none" /></label>
@@ -371,9 +379,10 @@ export function ValueLeaderPoolPage() {
       {loading ? <div className="flex h-80 items-center justify-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />加载三级行业量化候选…</div> : snapshotStatus === "not_built" ? <div className="p-12 text-center"><p className="text-sm text-muted-foreground">尚未生成三级行业 Leader 快照，请先运行全量构建脚本。</p></div> : visibleIndustries.length === 0 ? <div className="p-12 text-center text-sm text-muted-foreground">{valuationStatusFilter && !valuationSnapshotReady ? "历史估值快照尚未完成，暂不显示不完整筛选结果。" : "没有匹配的三级/末级行业"}</div> : <div className="grid gap-2 p-2 lg:grid-cols-2">{visibleIndustries.map((industry) => <IndustryLeaderRow key={industry.level3_code} industry={industry} leaders={(leaderMap[industry.level3_code] ?? []).filter((leader) => !valuationStatusFilter || !valuationSnapshotReady || valuationStatuses[leader.stock_code] === valuationStatusFilter)} summary={industrySummaries[industry.level3_code]} onSelect={setSelectedLeader} valuationStatuses={valuationStatuses} />)}</div>}
     </section>
 
-    <details className="rounded-xl border border-border bg-card"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold">指标词典与计算口径</summary><div className="space-y-4 border-t border-border p-4"><p className="text-xs leading-5 text-muted-foreground">{formula?.normalization || "所有指标先在同一行业内处理极端值，再转换成0—100相对分位。分数越高只表示相对同行更有利。"}</p><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{(formula?.dimensions || []).map((dimension) => <section key={dimension.key} className="rounded-lg border border-border p-3"><div className="flex justify-between gap-2"><strong className="text-sm">{dimension.label}</strong><span className="text-xs text-primary">总权重 {(dimension.weight * 100).toFixed(0)}%</span></div><div className="mt-2 space-y-2">{dimension.metrics.map((metric) => <div key={metric.key} className="text-xs"><div className="flex justify-between gap-2"><span className="font-medium">{metric.label}</span><span className="text-muted-foreground">{(metric.weight * 100).toFixed(0)}%</span></div><p className="mt-0.5 leading-5 text-muted-foreground">{metric.description}</p></div>)}</div></section>)}</div><div className="rounded-lg bg-muted/40 p-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">覆盖率不是准确率：</strong>维度覆盖表示有多少评分权重获得了有效数据；缺失时可能对剩余指标重新加权。页面同时显示原始指标数量、报告日期和小样本警告。</div></div></details>
+    <details id="sec-glossary" className="rounded-xl border border-border bg-card scroll-mt-16"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold">指标词典与计算口径</summary><div className="space-y-4 border-t border-border p-4"><p className="text-xs leading-5 text-muted-foreground">{formula?.normalization || "所有指标先在同一行业内处理极端值，再转换成0—100相对分位。分数越高只表示相对同行更有利。"}</p><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{(formula?.dimensions || []).map((dimension) => <section key={dimension.key} className="rounded-lg border border-border p-3"><div className="flex justify-between gap-2"><strong className="text-sm">{dimension.label}</strong><span className="text-xs text-primary">总权重 {(dimension.weight * 100).toFixed(0)}%</span></div><div className="mt-2 space-y-2">{dimension.metrics.map((metric) => <div key={metric.key} className="text-xs"><div className="flex justify-between gap-2"><span className="font-medium">{metric.label}</span><span className="text-muted-foreground">{(metric.weight * 100).toFixed(0)}%</span></div><p className="mt-0.5 leading-5 text-muted-foreground">{metric.description}</p></div>)}</div></section>)}</div><div className="rounded-lg bg-muted/40 p-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">覆盖率不是准确率：</strong>维度覆盖表示有多少评分权重获得了有效数据；缺失时可能对剩余指标重新加权。页面同时显示原始指标数量、报告日期和小样本警告。</div></div></details>
     <p className="px-1 text-xs text-muted-foreground">量化候选只用于同一三级行业内部排序，不用于跨行业比较，也不代表预期收益或买入建议。</p>
-    <Link to="/ai/agent" className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-transform hover:-translate-y-0.5"><MessageCircle className="h-4 w-4" />问投研主管</Link>
-    {selectedLeader ? <LeaderCompanyQuickView leader={selectedLeader} onClose={() => setSelectedLeader(null)} onChat={() => { window.location.assign("/ai/agent"); }} /> : null}
+    <button type="button" onClick={() => setSupervisorOpen(true)} className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-transform hover:-translate-y-0.5"><MessageCircle className="h-4 w-4" />问投研主管</button>
+    <AskSupervisorDrawer open={supervisorOpen} onClose={() => setSupervisorOpen(false)} />
+    {selectedLeader ? <LeaderCompanyQuickView leader={selectedLeader} onClose={() => setSelectedLeader(null)} onChat={() => setSupervisorOpen(true)} /> : null}
   </div>;
 }

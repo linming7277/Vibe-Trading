@@ -6,6 +6,7 @@ import { Layout } from "@/components/layout/Layout";
 const Today = lazy(() => import("@/pages/Today").then((m) => ({ default: m.Today })));
 const ValueStrategy = lazy(() => import("@/pages/ValueStrategy").then((m) => ({ default: m.ValueStrategy })));
 const ValueResearchQueue = lazy(() => import("@/pages/ValueResearchWorkspace").then((m) => ({ default: m.ValueResearchQueue })));
+const CompanyCioReportPage = lazy(() => import("@/pages/CompanyCioReport").then((m) => ({ default: m.CompanyCioReportPage })));
 const ValueOpportunitiesCenter = lazy(() => import("@/pages/ValueFocusSelection").then((m) => ({ default: m.ValueFocusSelectionPage })));
 const ValueFocusPage = lazy(() => import("@/pages/ValueFocusPage").then((m) => ({ default: m.ValueFocusPage })));
 const Macro = lazy(() => import("@/pages/Macro").then((m) => ({ default: m.Macro })));
@@ -89,6 +90,7 @@ export const router = createBrowserRouter([{
       { path: "leaders", element: wrap(ValueLeaderPoolPage) },
       { path: "methodology", element: wrap(ValueLeaderMethodology) },
       { path: "research", element: wrap(ValueResearchQueue) },
+      { path: "cio", element: wrap(CompanyCioReportPage) },
       { path: "operations", element: redirect("/value/research") },
       { path: "opportunities", element: wrap(ValueOpportunitiesCenter) },
       // Deprecated compatibility addresses: keep them available while the new default is /value.

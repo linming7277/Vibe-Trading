@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bot, Loader2, Send, X } from "lucide-react";
+import ReactMarkdown, { type Options as ReactMarkdownOptions } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api, type FinancialAgentProgress, type Level3Leader } from "@/lib/api";
 
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
@@ -77,6 +79,16 @@ export function FinancialAgentFloat({
 
   if (!open) return null;
   const title = target ? `${target.stock_name} · 财报研究员` : "财报研究员";
+  const AGENT_MARKDOWN: ReactMarkdownOptions = {
+    remarkPlugins: [remarkGfm],
+    components: {
+      h3: ({ children }) => <h3 className="mb-1.5 mt-3 text-sm font-semibold text-foreground first:mt-0">{children}</h3>,
+      p: ({ children }) => <p className="mt-1.5 text-sm leading-6 first:mt-0">{children}</p>,
+      ul: ({ children }) => <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm leading-6">{children}</ul>,
+      strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+    },
+  };
+
   const subtitle = target ? `${target.stock_code} · ${target.level3_name} · 已加载研究档案` : "输入公司名称或代码可自动读取公司档案";
   return <section aria-label="财报研究员对话" className={`fixed bottom-5 z-[60] flex h-[min(620px,calc(100vh-2.5rem))] w-[min(420px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-xl border border-primary/30 bg-background shadow-2xl ${target ? "right-5 md:right-[34rem]" : "right-5"}`}>
     <header className="flex items-center justify-between gap-3 border-b border-border bg-primary/[0.04] px-4 py-3">
@@ -85,7 +97,13 @@ export function FinancialAgentFloat({
     </header>
     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
       {messages.length === 0 ? <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 text-sm leading-6 text-muted-foreground">{target ? <>已锁定 <strong className="text-foreground">{target.stock_name}</strong>。可以问财报变化、经营质量、风险、估值假设或需要验证的指标。</> : "每次回答都会先查询当前本地龙头池；在问题里写出龙头公司名称或股票代码时，还会自动加载该公司的财务数据进行分析。"}</div> : null}
-      {messages.map((message) => <div key={message.id} className={`max-w-[90%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm leading-6 ${message.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "border border-border bg-card"}`}>{message.content}</div>)}
+      {messages.map((message) => message.role === "assistant" ? (
+        <div key={message.id} className="max-w-[90%] rounded-lg border border-border bg-card px-3 py-2 text-sm leading-6">
+          {message.content.startsWith("Execution failed") ? <span className="whitespace-pre-wrap text-danger">{message.content}</span> : <ReactMarkdown {...AGENT_MARKDOWN}>{message.content}</ReactMarkdown>}
+        </div>
+      ) : (
+        <div key={message.id} className="ml-auto max-w-[90%] whitespace-pre-wrap rounded-lg bg-primary px-3 py-2 text-sm leading-6 text-primary-foreground">{message.content}</div>
+      ))}
       {progress.length > 0 ? <div className="rounded-lg border border-primary/20 bg-primary/[0.035] p-3 text-xs"><div className="mb-2 flex items-center gap-2 font-medium text-primary"><Bot className="h-3.5 w-3.5" />本次财报研究过程{sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}</div><div className="space-y-1.5">{progress.map((item, index) => <div key={item.stage} className="flex items-start gap-2 text-muted-foreground"><span className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-[10px] text-emerald-600 dark:text-emerald-300">{index + 1}</span><span className={index === progress.length - 1 && sending ? "text-foreground" : ""}>{item.message}</span></div>)}</div></div> : null}
       {sending && progress.length === 0 ? <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />正在启动财报研究…</div> : null}
       {error ? <div role="alert" className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">{error}</div> : null}

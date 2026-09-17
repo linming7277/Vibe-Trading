@@ -1528,7 +1528,61 @@ export const api = {
   getMacroSectorProjection: (asOf?: string) =>
     request<MacroSectorProjection>(`/api/value/macro-sector-projection${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ""}`),
   getMacroOverview: () => request<MacroOverview>(`/api/value/macro-overview`),
+  getMacroRecentNews: (days = 3) => request<MacroRecentNews>(`/macro/recent-news?days=${days}`),
+  getTrackingList: () => request<TrackingList>(`/api/value/tracking`),
+  searchCompanies: (q: string) => request<CompanySearchResult[]>(`/api/research/cio/company-search?q=${encodeURIComponent(q)}`),
+  getCompanyCioReport: (stockCode: string) => request<CompanyCioReport>(`/api/research/cio/${encodeURIComponent(stockCode)}`),
+  addTracking: (body: { stock_code: string; company_name: string; tier: string; reasons: string[] }) =>
+    request<{ status: string; added_price: number | null; note?: string }>(`/api/value/tracking`, { method: "POST", body: JSON.stringify(body) }),
+  removeTracking: (stockCode: string) =>
+    request<{ removed: boolean }>(`/api/value/tracking/${encodeURIComponent(stockCode)}`, { method: "DELETE" }),
 };
+
+export interface CompanySearchResult {
+  stock_code: string;
+  company_name: string;
+  focus_tier: string | null;
+  in_pool: boolean;
+}
+
+export interface CompanyCioReportSection {
+  section_type: string;
+  title: string;
+  freshness_status: string;
+  narrative_md: string;
+  structured_payload: Record<string, unknown>;
+}
+
+export interface CompanyCioReport {
+  stock_code: string;
+  research_as_of: string;
+  status: string;
+  overall_freshness: string;
+  synthesis_source: string;
+  narrative_report_md: string;
+  sections: CompanyCioReportSection[];
+}
+
+export interface TrackingItem {
+  stock_code: string;
+  company_name: string;
+  source: "auto" | "manual";
+  added_date: string;
+  days_tracked: number | null;
+  added_tier: string;
+  added_price: number | null;
+  current_price: number | null;
+  price_as_of: string | null;
+  change_pct: number | null;
+  current_tier: string | null;
+  added_reasons: string[];
+}
+
+export interface TrackingList {
+  items: TrackingItem[];
+  total: number;
+  generated_at: string;
+}
 
 export interface MacroOverviewSeries {
   series_id: string;
@@ -1564,6 +1618,26 @@ export interface MacroOverview {
   axes_trend: Record<string, { score: number; state: string; prev?: { score: number; state: string } | null }>;
   forecast: MacroOverviewForecast | null;
   projection: MacroSectorProjection;
+}
+
+export interface MacroNewsItem {
+  source: string;
+  title: string;
+  url: string;
+  time: string;
+  published_at: string;
+}
+
+export interface MacroNewsDay {
+  date: string;
+  domestic: MacroNewsItem[];
+  overseas: MacroNewsItem[];
+}
+
+export interface MacroRecentNews {
+  days: MacroNewsDay[];
+  total: number;
+  analysis?: { status: "ready" | "generating" | "failed" | "discarded"; content_md?: string; generated_at?: string } | null;
 }
 
 export interface MacroSectorProjection {

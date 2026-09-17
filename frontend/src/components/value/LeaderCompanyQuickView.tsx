@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ArrowRight, Loader2, MessageCircle, X } from "lucide-react";
 import { Link } from "react-router";
 import { CandlestickChart } from "@/components/charts/CandlestickChart";
+import { FinancialAnalysisContent } from "@/pages/FinancialAnalysis";
+import { cn } from "@/lib/utils";
 import { LazyDetails } from "@/components/value/LazyDetails";
 import {
   api,
@@ -357,6 +359,7 @@ export function LeaderCompanyQuickView({
   onClose: () => void;
   onChat: () => void;
 }) {
+  const [viewTab, setViewTab] = useState<"quick" | "financial">("quick");
   const [details, setDetails] = useState<DetailState>(emptyDetails);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -401,9 +404,17 @@ export function LeaderCompanyQuickView({
     <section role="dialog" aria-modal="true" aria-label="龙头快速判断" className="fixed inset-3 z-50 flex flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl md:inset-y-8 md:left-1/2 md:right-auto md:w-[min(900px,calc(100vw-3rem))] md:-translate-x-1/2">
       <header className="border-b border-border px-5 py-4">
         <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="text-xs font-medium text-primary">龙头快速判断</p><div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1"><h2 className="truncate text-xl font-semibold">{leader.stock_name} <span className="font-mono text-sm font-normal text-muted-foreground">{leader.stock_code}</span></h2>{reasons.length ? <span className="flex flex-wrap items-center gap-1.5"><span className="text-xs font-semibold">为什么入选</span>{reasons.map((reason) => <span key={reason} className="rounded bg-primary/10 px-2 py-1 text-[11px] text-primary">{reason}</span>)}</span> : <span className="text-xs text-muted-foreground">该公司在当前三级行业内排名第 {leader.leader_rank}，进入量化龙头候选池。</span>}</div><p className="mt-1 truncate text-xs text-muted-foreground">{industryLine}</p></div><button type="button" aria-label="关闭龙头快速判断" onClick={onClose} className="rounded-md border border-border p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></div>
+        <div className="mt-3 flex gap-2" role="tablist" aria-label="快速查看内容">
+          <button type="button" role="tab" aria-selected={viewTab === "quick"} onClick={() => setViewTab("quick")} className={cn("rounded-md px-4 py-1.5 text-sm", viewTab === "quick" ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:text-foreground")}>快速判断</button>
+          <button type="button" role="tab" aria-selected={viewTab === "financial"} onClick={() => setViewTab("financial")} className={cn("rounded-md px-4 py-1.5 text-sm", viewTab === "financial" ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:text-foreground")}>财务分析</button>
+        </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        {viewTab === "financial" ? (
+          <FinancialAnalysisContent stockCode={leader.stock_code} />
+        ) : (
+        <>
         <PriceJudgmentCard zones={details.zones} currentPrice={currentPrice} currentPe={currentPe} currentPb={currentPb} currentYield={currentYield} loading={loading} />
 
         <SupportPressureDetails zones={details.zones} currentPrice={currentPrice} stockCode={leader.stock_code} />
@@ -413,6 +424,8 @@ export function LeaderCompanyQuickView({
         <section className="mt-4 rounded-xl border border-primary/20 bg-primary/[0.025] p-4"><h3 className="font-semibold">一句话研究结论</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{details.conclusion?.research_conclusion || "当前研究结论尚未建立；可先查看价格状态，再进入完整公司研究补齐资料。"}</p></section>
 
         <p className="mt-4 rounded-lg bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">行业内量化排名只用于同一三级行业比较，不等同于市场份额第一。完整同行对比与排名依据请在公司研究中查看。</p>
+        </>
+        )}
       </div>
 
       <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-4"><Link to={openResearchPath} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">打开公司研究 <ArrowRight className="h-4 w-4" /></Link><button type="button" onClick={onChat} className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"><MessageCircle className="h-4 w-4" />问投研主管</button></footer>
