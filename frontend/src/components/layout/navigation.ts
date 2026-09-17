@@ -40,6 +40,7 @@ export const PRIMARY_NAVIGATION: PrimaryNavigationItem[] = [
       { to: "/value/leaders", label: "行业龙头", matches: ["/value/leaders", "/value/methodology"] },
       { to: "/value/focus", label: "低估龙头池", matches: ["/value/focus", "/value/plans"] },
       { to: "/value/opportunities", label: "机会与风险", matches: ["=/value", "/value/opportunities", "/value/valuation", "/value/timing"] },
+      { to: "/value/cio", label: "公司研究", matches: ["/value/cio"] },
     ],
   },
   {
@@ -55,7 +56,7 @@ export const PRIMARY_NAVIGATION: PrimaryNavigationItem[] = [
     ],
   },
   {
-    id: "global", to: "/global", label: "宏观", icon: Globe,
+    id: "global", to: "/global", label: "宏观环境", icon: Globe,
     matches: ["/global", "/macro"],
     secondary: [
       { to: "/global", label: "宏观总览" },
