@@ -12,9 +12,10 @@ from typing import Any
 from src.cio_report.builder import (
     CIO_REPORT_FORMULA_VERSION,
     SECTION_TITLES,
+    _translate_enums,
     build_all_sections,
 )
-from src.cio_report.narrative import BOSS_SECTIONS, render_boss_report
+from src.cio_report.narrative import render_boss_report
 from src.cio_report.store import CioReportStore
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 CIO_SYNTHESIS_PROMPT_VERSION = "cio-synthesis-v4-incremental"  # 分节增量：每节小请求+缓存，单节失败降级底稿
 # Narrative-layer version rides the report fingerprint so a template upgrade
 # re-renders persisted reports instead of being swallowed by idempotent reuse.
-NARRATIVE_TEMPLATE_VERSION = "boss-narrative-v4"  # round2: 10a 按年对照表 + 三情景折线（2026-09-16 专项）
+NARRATIVE_TEMPLATE_VERSION = "boss-narrative-v5"  # v5: 护城河全维度资料不足时收敛为一句话（2026-09-17）
 _TRADING_LANGUAGE = re.compile(r"买入|卖出|推荐|止盈|止损|仓位|加仓|减仓|建仓")
 
 # Delivery-layer status semantics (polish §4): research freshness and
@@ -72,7 +73,9 @@ class CioReportService:
         for section in report.get("sections") or []:
             section["title"] = SECTION_TITLES.get(str(section.get("section_type") or ""),
                                                   str(section.get("section_type") or ""))
+            section["narrative_md"] = _translate_enums(str(section.get("narrative_md") or ""))
             sections.append(section)
+        report["narrative_report_md"] = _translate_enums(str(report.get("narrative_report_md") or ""))
         # 未知 section_type（旧/异构报告）排在末尾，绝不因排序抛内部错误
         section_order = {t: i for i, t in enumerate(SECTION_TITLES)}
         report["sections"] = sorted(

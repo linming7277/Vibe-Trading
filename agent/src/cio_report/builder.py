@@ -14,7 +14,7 @@ import re
 from typing import Any, Callable
 
 CIO_REPORT_FORMULA_VERSION = "cio-report-v1"
-SECTION_TEMPLATE_VERSION = "cio-section-template-v2"  # round1: 10-column table, PE/PB, labels, watchpoint fallback
+SECTION_TEMPLATE_VERSION = "cio-section-template-v3"  # v3: 护城河全维度资料不足时收敛为一句话，不再逐条展开
 
 SECTION_TITLES: dict[str, str] = {
     "company_position": "01 公司与产业位置",
@@ -39,6 +39,45 @@ SECTION_TITLES: dict[str, str] = {
 }
 
 _TRADING_LANGUAGE_RE = re.compile(r"买入|卖出|推荐|仓位|止盈|止损|加仓|减仓|建仓")
+
+# 底层数据模块返回的英文枚举值 → 老板可读中文（AGENTS.md 铁律 #1）。
+# None 清理排最前（必须先于枚举替换执行，否则替换后正则匹配不上）。
+_ENUM_CN_RE: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\[FACT\]\s*None"), ""),
+    (re.compile(r"\[INFERENCE\]\s*None"), ""),
+    (re.compile(r"\[UNKNOWN\]\s*None"), ""),
+    (re.compile(r"\bMEDIUM\b"), "中等"),
+    (re.compile(r"\bHIGH\b"), "高"),
+    (re.compile(r"\bLOW\b"), "低"),
+    (re.compile(r"\bUNKNOWN\b"), "资料不足"),
+    (re.compile(r"\bREADY\b"), "已就绪"),
+    (re.compile(r"\bPARTIAL\b"), "部分就绪"),
+    (re.compile(r"\bMISSING\b"), "缺失"),
+    (re.compile(r"\bDEEPLY_UNDERVALUED\b"), "深度低估"),
+    (re.compile(r"\bUNDERVALUED\b"), "低估关注"),
+    (re.compile(r"\bINSUFFICIENT_DATA\b"), "资料不足"),
+    (re.compile(r"\bFORMING\b"), "形成中"),
+    (re.compile(r"\bSTRENGTHENING\b"), "增强中"),
+    (re.compile(r"\bWEAKENING\b"), "减弱中"),
+    (re.compile(r"\bFALSIFIED\b"), "已失效"),
+    (re.compile(r"\bBUSINESS_CUSTOMER_CONCENTRATION\b"), "客户集中度较高"),
+    (re.compile(r"\bFINANCIAL_PROFIT_DECLINE\b"), "净利润下降"),
+    (re.compile(r"\bFINANCIAL_INVENTORY\b"), "存货"),
+    (re.compile(r"\bFINANCIAL_RECEIVABLE\b"), "应收账款"),
+    (re.compile(r"\bVALUE_TRAP\b"), "低估陷阱"),
+    (re.compile(r"\bRANGE_BOUND\b"), "震荡"),
+    (re.compile(r"\bRECOVERY\b"), "回升"),
+    (re.compile(r"\bCYCLICAL_RECOVERY\b"), "周期修复"),
+    (re.compile(r"\bEXPANSION\b"), "扩张"),
+    (re.compile(r"\bCONTRACTION\b"), "收缩"),
+    (re.compile(r"\bDOWNTURN\b"), "下行"),
+]
+
+
+def _translate_enums(text: str) -> str:
+    for pattern, cn in _ENUM_CN_RE:
+        text = pattern.sub(cn, text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 def _digest(payload: Any) -> str:
@@ -215,6 +254,7 @@ class CioSectionBuilder:
     def _section(self, section_type: str, payload: dict[str, Any], narrative: str,
                  refs: list[str] | None = None) -> dict[str, Any]:
         safe_narrative = _TRADING_LANGUAGE_RE.sub("■■", narrative)
+        safe_narrative = _translate_enums(safe_narrative)
         return {
             "section_type": section_type,
             "title": SECTION_TITLES[section_type],
@@ -652,6 +692,10 @@ class CioSectionBuilder:
             ],
         }
         lines = [f"竞争优势研究：证据 {moat.get('evidence_count') or 0} 条、反证 {moat.get('counter_evidence_count') or 0} 条。"]
+        has_supported = any(str(d.get("status")) == "SUPPORTED" for d in payload["dimensions"])
+        if not has_supported:
+            lines.append("\n各维度研究资料尚不完整，暂无法判断，不据此认定竞争优势；规模、排名或知名度本身不构成护城河。")
+            return self._section("moat", payload, "\n".join(lines))
         for d in payload["dimensions"]:
             status = str(d.get("status") or "")
             zh_status = self._MOAT_STATUS_LABELS.get(status, status)
@@ -666,10 +710,7 @@ class CioSectionBuilder:
                 lines.append(f"  - {ev.get('claim')}（{source}{'，' + period if period else ''}）")
             if status == "SUPPORTED" and not d.get("evidence"):
                 lines.append("  （证据详情暂未映射到研究快照）")
-        has_supported = any(str(d.get("status")) == "SUPPORTED" for d in payload["dimensions"])
         has_counter = moat.get("counter_evidence_count") and int(moat["counter_evidence_count"]) > 0
-        if not has_supported:
-            lines.append("\n当前无任何维度获得较明确证据支持，不据此认定竞争优势；规模、排名或知名度本身不构成护城河。")
         if has_counter:
             lines.append(f"\n⚠️ 存在 {moat['counter_evidence_count']} 条反证，需与支持证据一并权衡。")
         return self._section("moat", payload, "\n".join(lines))

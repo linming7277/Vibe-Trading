@@ -532,7 +532,10 @@ class BossRenderer:
             return (f"竞争优势研究：证据 {m.get('evidence_count') or 0} 条、"
                     f"反证 {m.get('counter_evidence_count') or 0} 条：暂无法判断竞争优势是否成立。")
         lines = [f"证据 {m.get('evidence_count') or 0} 条、反证 {m.get('counter_evidence_count') or 0} 条。"]
-        has_supported = False
+        has_supported = any(str(d.get("status")) == "SUPPORTED" for d in dims[:8])
+        if not has_supported:
+            return ("\n".join(lines) +
+                    "\n各维度研究资料尚不完整，暂无法判断，不据此认定竞争优势；规模、排名或知名度本身不构成护城河。")
         for d in dims[:8]:
             status = str(d.get("status") or "")
             zh_label = status_labels.get(status, status)
@@ -546,12 +549,8 @@ class BossRenderer:
                 source = str(ev.get("source_type") or "来源")
                 period = str(ev.get("period") or "")[:10]
                 lines.append(f"  {i}. {ev.get('claim')}（{source}{'，' + period if period else ''}）")
-            if status == "SUPPORTED":
-                has_supported = True
-                if not evidence:
-                    lines.append("  （证据详情暂未映射到研究快照）")
-        if not has_supported:
-            lines.append("\n当前无任何维度获得较明确证据支持，不据此认定竞争优势；规模、排名或知名度本身不构成护城河。")
+            if status == "SUPPORTED" and not evidence:
+                lines.append("  （证据详情暂未映射到研究快照）")
         counter = int(m.get("counter_evidence_count") or 0)
         if counter > 0:
             lines.append(f"\n⚠️ 存在 {counter} 条反证，需与支持证据一并权衡。")
