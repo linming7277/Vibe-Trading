@@ -551,3 +551,30 @@ def test_27_daily_brief_and_value_line_untouched() -> None:
                                    macro_catalog=[], registry_version="t",
                                    bars_as_of="20260605")
     assert "us_rates_brief" not in payload and "oil_section" not in payload
+
+
+# ---------------------------------------------------------------------------
+# 月度序列新鲜度容忍窗口（2026-09-17 放宽专项）
+# ---------------------------------------------------------------------------
+
+def test_monthly_default_window_covers_publication_lag() -> None:
+    """月度默认容忍 3 个月：覆盖"数据月 + 发布滞后月 + 缓冲"的正常节奏。
+
+    identity 表当前唯一的月度序列（铜）单独收紧为 2 个月；默认窗口通过
+    规则常量直接验证——未来新增月度序列自动继承 3 个月窗口，不再把
+    官方发布节奏的固有滞后误标 STALE。
+    """
+    from src.macro_data.freshness import _MONTHLY_DEFAULT_MAX_LAG_MONTHS
+
+    assert _MONTHLY_DEFAULT_MAX_LAG_MONTHS == 3
+
+
+def test_monthly_copper_keeps_tight_window() -> None:
+    """铜价单独收紧的 2 个月窗口不变。"""
+    from datetime import date
+
+    from src.macro_data.freshness import evaluate_freshness
+
+    now = date(2026, 9, 17)
+    assert evaluate_freshness("copper_world_monthly", date(2026, 7, 1), now_date=now) == "READY"
+    assert evaluate_freshness("copper_world_monthly", date(2026, 6, 1), now_date=now) == "STALE"

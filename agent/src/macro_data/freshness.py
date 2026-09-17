@@ -25,9 +25,14 @@ _DAILY_MAX_BUSINESS_LAG = {
     "usd_cny_official_mid": 4,
 }
 # 月频序列允许的最大月度周期滞后。
+# 官方月度数据（CPI/PPI/PMI/M1/M2 等）的发布节奏是"数据月 + 约 1 个月的
+# 发布滞后"：8 月值 9 月中旬发布、9 月中读到的最新值就是 8 月——2 个月
+# 容忍窗口会把这类正常滞后误标 STALE。默认放宽到 3 个月（数据月 + 发布
+# 滞后月 + 缓冲），铜等有更快发布节奏的序列单独收紧。
 _MONTHLY_MAX_LAG_MONTHS = {
     "copper_world_monthly": 2,
 }
+_MONTHLY_DEFAULT_MAX_LAG_MONTHS = 3
 
 
 def business_days_between(earlier: date, later: date) -> int:
@@ -55,7 +60,7 @@ def evaluate_freshness(series_id: str, latest_observation: date | None, *,
     if latest_observation is None:
         return "MISSING"
     if identity.frequency == FREQ_MONTHLY:
-        max_months = _MONTHLY_MAX_LAG_MONTHS.get(series_id, 2)
+        max_months = _MONTHLY_MAX_LAG_MONTHS.get(series_id, _MONTHLY_DEFAULT_MAX_LAG_MONTHS)
         return "READY" if months_between(latest_observation, now_date) <= max_months else "STALE"
     max_lag = _DAILY_MAX_BUSINESS_LAG.get(series_id)
     if max_lag is None:

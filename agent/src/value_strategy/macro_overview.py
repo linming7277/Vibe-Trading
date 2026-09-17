@@ -72,13 +72,33 @@ def _catalog_meta() -> dict[str, dict[str, str]]:
     return {str(item.get("series_id")): item for item in MACRO_SERIES_CATALOG}
 
 
+# 未注册新鲜度规则的序列按频率分治兜底：日频（shibor 等）用日历日窗口；
+# 月频（CPI/PPI/M1 等国内官方指标）走官方发布节奏——数据月 + 发布滞后月
+# + 缓冲，共 92 天。只有节奏内的固有滞后不应被误标 STALE。
+_FALLBACK_MAX_LAG_DAYS = 3
+_FALLBACK_MONTHLY_MAX_LAG_DAYS = 92
+_MONTHLY_SERIES = {
+    "cpi_yoy", "ppi_yoy", "pmi_manufacturing", "m1_yoy", "m2_yoy",
+    "new_rmb_loans_yoy", "social_financing_increment", "exports_yoy",
+    "fixed_asset_investment_yoy", "gdp_yoy", "industrial_output_yoy",
+    "retail_sales_yoy", "lpr_1y", "lpr_5y",
+}
+# 季度序列（GDP）：官方节奏为季度 + 约 20 天发布滞后，容忍 130 天。
+_QUARTERLY_SERIES = {"gdp_yoy"}
+_FALLBACK_QUARTERLY_MAX_LAG_DAYS = 130
+
+
 def _freshness_status(series_id: str, obs_day: date, *, now_date: date) -> str:
     from src.macro_data.freshness import evaluate_freshness
 
     try:
         return evaluate_freshness(series_id, obs_day, now_date=now_date)
     except ValueError:
-        # 序列未注册新鲜度规则（如 shibor）：按日历日兜底，只标注不挡接口。
+        # 序列未注册新鲜度规则：按频率分治兜底，只标注不挡接口。
+        if series_id in _QUARTERLY_SERIES:
+            return "READY" if (now_date - obs_day).days <= _FALLBACK_QUARTERLY_MAX_LAG_DAYS else "STALE"
+        if series_id in _MONTHLY_SERIES:
+            return "READY" if (now_date - obs_day).days <= _FALLBACK_MONTHLY_MAX_LAG_DAYS else "STALE"
         return "READY" if (now_date - obs_day).days <= _FALLBACK_MAX_LAG_DAYS else "STALE"
 
 
