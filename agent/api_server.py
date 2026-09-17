@@ -168,6 +168,11 @@ def _start_preflight_background() -> threading.Thread:
 
 async def _run_startup_preflight() -> None:
     """Run preflight checks on server startup."""
+    # serve 从不读取 dotenv；这里补一次加载，让 .env 里的功能开关
+    # （如 VIBE_TRADING_ENABLE_SCHEDULER）与凭据对 lifespan 内的组件可见。
+    from src.providers.llm import _ensure_dotenv
+
+    _ensure_dotenv()
     from src.config import migrate as _migrate
 
     try:

@@ -620,6 +620,19 @@ class ValueResearchScheduler:
                 logger.warning("cio focus tier ensure failed (fail-soft)", exc_info=True)
                 stages["CIO_FOCUS_TIER_READY"] = "FAILED"
 
+            # 跟踪清单自动同步：A 档（重点研究）默认纳入，退出 A 档自动移出；
+            # B/C 档人工纳入不受影响。fail-soft。
+            try:
+                from src.focus_selection import get_focus_selection_service
+                from src.company_tracking import get_company_tracking_service
+
+                focus_selection = get_focus_selection_service().get_focus_selection()
+                sync_result = get_company_tracking_service().sync_focus_a(focus_selection.get("A") or [])
+                stages["TRACKING_SYNC"] = f"A档纳{sync_result.get('added') or 0}/移{sync_result.get('removed') or 0}"
+            except Exception:
+                logger.warning("tracking sync failed (fail-soft)", exc_info=True)
+                stages["TRACKING_SYNC"] = "FAILED"
+
             self._retry_counts.pop(as_of, None)
             store.update_automation(
                 last_run_id=pool["id"], last_status="completed", last_error=self._stage_summary(stages),

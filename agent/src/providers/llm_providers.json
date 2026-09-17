@@ -1,14 +1,5 @@
 [
   {
-    "name": "openrouter",
-    "label": "OpenRouter",
-    "api_key_env": "OPENROUTER_API_KEY",
-    "base_url_env": "OPENROUTER_BASE_URL",
-    "default_model": "deepseek/deepseek-v4-pro",
-    "default_base_url": "https://openrouter.ai/api/v1",
-    "api_key_required": true
-  },
-  {
     "name": "requesty",
     "label": "Requesty",
     "api_key_env": "REQUESTY_API_KEY",
