@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Any
 from zoneinfo import ZoneInfo
 

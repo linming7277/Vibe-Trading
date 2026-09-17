@@ -29,8 +29,8 @@ def _service(tmp_path, *, tiers=None):
     service = CompanyTrackingService(store=store)
     patchers = [
         patch("src.tdx_data.store.TdxDataStore", lambda: fake_tdx),
-        patch("src.company_tracking.service.CompanyTrackingService._focus_tier_map",
-              staticmethod(lambda: tiers or {})),
+        patch("src.company_tracking.service.CompanyTrackingService._focus_company_map",
+              staticmethod(lambda: {k: {"tier": v} for k, v in (tiers or {}).items()})),
     ]
     for patcher in patchers:
         patcher.start()

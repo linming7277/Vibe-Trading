@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS company_tracking_list (
     added_tier TEXT NOT NULL DEFAULT '',
     added_price REAL,
     added_reasons_json TEXT NOT NULL DEFAULT '[]',
+    added_cautions_json TEXT NOT NULL DEFAULT '[]',
+    entry_snapshot_json TEXT NOT NULL DEFAULT '{}',
     added_note TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active',
     removed_date TEXT,
@@ -47,6 +49,10 @@ class CompanyTrackingStore:
             self._conn.execute("ALTER TABLE company_tracking_list ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
         if "added_date" not in columns:
             self._conn.execute("ALTER TABLE company_tracking_list ADD COLUMN added_date TEXT")
+        if "added_cautions_json" not in columns:
+            self._conn.execute("ALTER TABLE company_tracking_list ADD COLUMN added_cautions_json TEXT NOT NULL DEFAULT '[]'")
+        if "entry_snapshot_json" not in columns:
+            self._conn.execute("ALTER TABLE company_tracking_list ADD COLUMN entry_snapshot_json TEXT NOT NULL DEFAULT '{}'")
         self._conn.commit()
 
     def close(self) -> None:
@@ -61,7 +67,8 @@ class CompanyTrackingStore:
 
     def add(self, *, market: str, stock_code: str, company_name: str, source: str,
             tier: str, reasons: list[str], price: float | None, note: str = "",
-            added_date: str | None = None, now: datetime | None = None) -> dict[str, Any]:
+            added_date: str | None = None, now: datetime | None = None,
+            cautions: list[str] | None = None, entry_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
         now_dt = now or datetime.now().astimezone()
         stamp = now_dt.isoformat(timespec="seconds")
         added_date = (added_date or now_dt.date().isoformat())[:10]
@@ -73,8 +80,9 @@ class CompanyTrackingStore:
             self._conn.execute(
                 """INSERT INTO company_tracking_list(
                        market, stock_code, company_name, source, added_date, added_tier, added_price,
-                       added_reasons_json, added_note, status, created_at, updated_at)
-                   VALUES(?,?,?,?,?,?,?,?,?,'active',?,?)
+                       added_reasons_json, added_cautions_json, entry_snapshot_json,
+                       added_note, status, created_at, updated_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,'active',?,?)
                    ON CONFLICT(stock_code) DO UPDATE SET
                      market=excluded.market, company_name=excluded.company_name,
                      source=excluded.source, status='active', removed_date=NULL,
@@ -82,9 +90,14 @@ class CompanyTrackingStore:
                      added_tier=excluded.added_tier,
                      added_price=excluded.added_price,
                      added_reasons_json=excluded.added_reasons_json,
+                     added_cautions_json=excluded.added_cautions_json,
+                     entry_snapshot_json=excluded.entry_snapshot_json,
                      added_note=excluded.added_note, updated_at=excluded.updated_at""",
                 (market.upper(), stock_code.upper(), company_name.strip(), source, added_date, tier, price,
-                 json.dumps(reasons, ensure_ascii=False), note, stamp, stamp),
+                 json.dumps(reasons, ensure_ascii=False),
+                 json.dumps(cautions or [], ensure_ascii=False),
+                 json.dumps(entry_snapshot or {}, ensure_ascii=False),
+                 note, stamp, stamp),
             )
         reactivated = bool(previous and previous["status"] == "removed")
         row = self.get(stock_code) or {}
@@ -126,6 +139,14 @@ class CompanyTrackingStore:
             except (TypeError, ValueError):
                 item["added_reasons"] = []
             item.pop("added_reasons_json", None)
+            try:
+                item["added_cautions"] = json.loads(item.pop("added_cautions_json") or "[]")
+            except (KeyError, TypeError, ValueError):
+                item["added_cautions"] = []
+            try:
+                item["entry_snapshot"] = json.loads(item.pop("entry_snapshot_json") or "{}")
+            except (KeyError, TypeError, ValueError):
+                item["entry_snapshot"] = {}
             result.append(item)
         return result
 

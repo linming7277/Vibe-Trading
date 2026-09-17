@@ -1576,6 +1576,11 @@ export interface TrackingItem {
   change_pct: number | null;
   current_tier: string | null;
   added_reasons: string[];
+  added_cautions: string[];
+  entry_snapshot: { valuation_status?: string; risk_status?: string; thesis_status?: string; discount_to_mid?: number };
+  current_valuation_status: string | null;
+  current_risk_status: string | null;
+  current_thesis_status: string | null;
 }
 
 export interface TrackingList {

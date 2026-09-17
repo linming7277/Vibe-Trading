@@ -64,6 +64,8 @@ class CompanyTrackingService:
     def add(self, *, market: str = "CN", stock_code: str, company_name: str,
             tier: str = "", reasons: list[str] | None = None, note: str = "",
             source: str = "manual", added_date: str | None = None,
+            cautions: list[str] | None = None,
+            entry_snapshot: dict[str, Any] | None = None,
             now: datetime | None = None) -> dict[str, Any]:
         code = stock_code.strip().upper()
         if not code:
@@ -73,6 +75,7 @@ class CompanyTrackingService:
             market=market, stock_code=code, company_name=company_name.strip(),
             source=source, tier=tier, reasons=reasons or [], price=price, note=note,
             added_date=added_date, now=now,
+            cautions=cautions, entry_snapshot=entry_snapshot,
         )
         return {
             "status": "added", "reactivated": result.get("reactivated", False),
@@ -90,7 +93,7 @@ class CompanyTrackingService:
     def list_items(self, *, now: datetime | None = None) -> dict[str, Any]:
         now_dt = now or datetime.now().astimezone()
         items = self.store.list_active()
-        focus_tiers = self._focus_tier_map()
+        focus_map = self._focus_company_map()
         enriched: list[dict[str, Any]] = []
         for item in items:
             code = str(item["stock_code"])
@@ -100,7 +103,8 @@ class CompanyTrackingService:
             if price is not None and isinstance(added_price, (int, float)) and added_price:
                 change = round((price / float(added_price) - 1) * 100, 2)
             added_day = str(item.get("added_date") or str(item.get("created_at") or "")[:10])
-            tier = focus_tiers.get(code)
+            fc = focus_map.get(code) or {}
+            entry_snap = item.get("entry_snapshot") or {}
             enriched.append({
                 "stock_code": code,
                 "company_name": item.get("company_name") or code,
@@ -111,9 +115,14 @@ class CompanyTrackingService:
                 "current_price": price,
                 "price_as_of": price_as_of,
                 "change_pct": change,
-                "current_tier": tier,
+                "current_tier": fc.get("tier"),
                 "source": str(item.get("source") or "manual"),
                 "added_reasons": item.get("added_reasons") or [],
+                "added_cautions": item.get("added_cautions") or [],
+                "entry_snapshot": entry_snap,
+                "current_valuation_status": fc.get("valuation_status"),
+                "current_risk_status": fc.get("risk_status"),
+                "current_thesis_status": fc.get("thesis_status"),
             })
         enriched.sort(key=lambda item: item.get("change_pct") is not None and item["change_pct"] < 0,
                       reverse=False)
@@ -163,6 +172,14 @@ class CompanyTrackingService:
                 company_name=str(item.get("company_name") or code),
                 source="auto", tier="A",
                 reasons=[str(r) for r in (item.get("focus_reasons") or [])],
+                cautions=[str(c) for c in (item.get("focus_cautions") or [])],
+                entry_snapshot={
+                    "valuation_status": item.get("valuation_status"),
+                    "risk_status": item.get("risk_status"),
+                    "thesis_status": item.get("thesis_status"),
+                    "discount_to_mid": item.get("discount_to_mid"),
+                    "fair_value_mid": item.get("fair_value_mid"),
+                },
                 price=price, note="", added_date=entry_date or None, now=now_dt,
             )
             added += 1
@@ -170,19 +187,26 @@ class CompanyTrackingService:
         return {"added": added, "removed": removed, "kept": len(keep), "anchored": anchored}
 
     @staticmethod
-    def _focus_tier_map() -> dict[str, str]:
-        """今日 Focus 分档映射（A/B/C）；读取失败按空处理，不阻断清单。"""
+    def _focus_company_map() -> dict[str, dict[str, Any]]:
+        """今日 Focus 分档 + 每家公司的研究状态（估值/风险/逻辑）。失败返回空。"""
         try:
             from src.focus_selection import get_focus_selection_service
 
             selection = get_focus_selection_service().get_focus_selection()
         except Exception:
             return {}
-        tiers: dict[str, str] = {}
+        result: dict[str, dict[str, Any]] = {}
         for tier_key, label in (("A", "重点研究"), ("B", "继续观察"), ("C", "暂缓优先")):
             for item in selection.get(tier_key) or []:
-                tiers[str(item.get("stock_code") or "").upper()] = label
-        return tiers
+                code = str(item.get("stock_code") or "").upper()
+                result[code] = {
+                    "tier": label,
+                    "valuation_status": item.get("valuation_status"),
+                    "risk_status": item.get("risk_status"),
+                    "thesis_status": item.get("thesis_status"),
+                    "current_price": item.get("current_price"),
+                }
+        return result
 
 
 _service: CompanyTrackingService | None = None
