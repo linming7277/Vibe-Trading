@@ -311,25 +311,34 @@ export function CompanyCioReportPage() {
             </button>
 
           </div>
-          <div className="p-5 md:p-6">
-            {(() => {
-              const md = report.narrative_report_md || "";
-              const lines = md.split("\n");
-              const idx = lines.findIndex((l) => l.startsWith("## ") && l.includes("10a"));
-              if (idx < 0) return <ReactMarkdown {...REPORT_MARKDOWN}>{md}</ReactMarkdown>;
-              let end = lines.length;
-              for (let i = idx + 1; i < lines.length; i++) { if (lines[i].startsWith("## ")) { end = i; break; } }
-              const fc = report.sections?.find((s) => s.section_type === "profit_forecast_detail");
-              const chartPayload = (fc?.structured_payload || {}) as Record<string, unknown>;
+          <div className="divide-y divide-border/60">
+            {(report.sections || []).map((section) => {
+              const isForecast = section.section_type === "profit_forecast_detail";
+              const chartPayload = isForecast
+                ? ((section.structured_payload || {}) as Record<string, unknown>)
+                : undefined;
+              const dotCls =
+                section.freshness_status === "REFRESHED" ? "bg-primary"
+                : section.freshness_status === "REUSED" ? "bg-muted-foreground/30"
+                : "bg-amber-400";
               return (
-                <>
-                  <ReactMarkdown {...REPORT_MARKDOWN}>{lines.slice(0, idx).join("\n")}</ReactMarkdown>
-                  <ProfitScenarioChart payload={chartPayload} />
-                  <ReactMarkdown {...REPORT_MARKDOWN}>{lines.slice(idx, end).join("\n")}</ReactMarkdown>
-                  <ReactMarkdown {...REPORT_MARKDOWN}>{lines.slice(end).join("\n")}</ReactMarkdown>
-                </>
+                <div key={section.section_type} id={`cio-${section.section_type}`} className="scroll-mt-20 px-5 py-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>
+                    <span className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", dotCls)}
+                      title={section.freshness_status} />
+                  </div>
+                  <div className="mt-1.5 text-sm leading-7 text-foreground/90">
+                    <ReactMarkdown {...REPORT_MARKDOWN}>{section.narrative_md}</ReactMarkdown>
+                  </div>
+                  {isForecast && chartPayload ? (
+                    <div className="mt-3 rounded-lg border bg-muted/10 p-3">
+                      <ProfitScenarioChart payload={chartPayload} />
+                    </div>
+                  ) : null}
+                </div>
               );
-            })()}
+            })}
           </div>
           <div className="border-t bg-muted/20 px-5 py-3 text-xs leading-5 text-muted-foreground">
             左侧目录可点击直达对应章节；圆点颜色表示该节资料新鲜度。本报告由系统确定性数据综合生成，仅供研究参考，不构成任何操作建议。

@@ -89,6 +89,40 @@ export function FinancialAgentFloat({
     },
   };
 
+  /** 把 LLM 输出里的英文枚举值替换为中文（AGENTS.md 铁律 #1）。 */
+  const translated = (raw: string) => {
+    const MAP: Array<[RegExp, string]> = [
+      [/\bDEEPLY_UNDERVALUED\b/g, "深度低估"],
+      [/\bUNDERVALUED\b/g, "低估关注"],
+      [/\bFAIR\b/g, "估值合理"],
+      [/\bOVERVALUED\b/g, "估值偏高"],
+      [/\bINSUFFICIENT_DATA\b/g, "资料不足"],
+      [/\bFORMING\b/g, "形成中"],
+      [/\bSTRENGTHENING\b/g, "增强中"],
+      [/\bWEAKENING\b/g, "减弱中"],
+      [/\bFALSIFIED\b/g, "已失效"],
+      [/\bBUSINESS_CUSTOMER_CONCENTRATION\b/g, "客户集中度较高"],
+      [/\bBUSINESS_OPERATION_CHANGE\b/g, "经营变化"],
+      [/\bFINANCIAL_INVENTORY\b/g, "存货"],
+      [/\bFINANCIAL_RECEIVABLE\b/g, "应收账款"],
+      [/\bVALUE_TRAP\b/g, "低估陷阱"],
+      [/\bWATCH\b/g, "继续观察"],
+      [/\bCRITICAL_REVIEW\b/g, "需要立即复核"],
+      [/\bREADY\b/g, "已就绪"],
+      [/\bPARTIAL\b/g, "部分就绪"],
+      [/\bMISSING\b/g, "缺失"],
+      [/\bHIGH\b/g, "高"],
+      [/\bMEDIUM\b/g, "中"],
+      [/\bLOW\b/g, "低"],
+      [/\bRANGE_BOUND\b/g, "震荡"],
+      [/\bSTRONGER\b/g, "偏强"],
+      [/\bWEAKER\b/g, "偏弱"],
+    ];
+    let result = raw;
+    for (const [re, cn] of MAP) result = result.replace(re, cn);
+    return result;
+  };
+
   const subtitle = target ? `${target.stock_code} · ${target.level3_name} · 已加载研究档案` : "输入公司名称或代码可自动读取公司档案";
   return <section aria-label="财报研究员对话" className={`fixed bottom-5 z-[60] flex h-[min(620px,calc(100vh-2.5rem))] w-[min(420px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-xl border border-primary/30 bg-background shadow-2xl ${target ? "right-5 md:right-[34rem]" : "right-5"}`}>
     <header className="flex items-center justify-between gap-3 border-b border-border bg-primary/[0.04] px-4 py-3">
@@ -99,7 +133,7 @@ export function FinancialAgentFloat({
       {messages.length === 0 ? <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 text-sm leading-6 text-muted-foreground">{target ? <>已锁定 <strong className="text-foreground">{target.stock_name}</strong>。可以问财报变化、经营质量、风险、估值假设或需要验证的指标。</> : "每次回答都会先查询当前本地龙头池；在问题里写出龙头公司名称或股票代码时，还会自动加载该公司的财务数据进行分析。"}</div> : null}
       {messages.map((message) => message.role === "assistant" ? (
         <div key={message.id} className="max-w-[90%] rounded-lg border border-border bg-card px-3 py-2 text-sm leading-6">
-          {message.content.startsWith("Execution failed") ? <span className="whitespace-pre-wrap text-danger">{message.content}</span> : <ReactMarkdown {...AGENT_MARKDOWN}>{message.content}</ReactMarkdown>}
+          {message.content.startsWith("Execution failed") ? <span className="whitespace-pre-wrap text-danger">{message.content}</span> : <ReactMarkdown {...AGENT_MARKDOWN}>{translated(message.content)}</ReactMarkdown>}
         </div>
       ) : (
         <div key={message.id} className="ml-auto max-w-[90%] whitespace-pre-wrap rounded-lg bg-primary px-3 py-2 text-sm leading-6 text-primary-foreground">{message.content}</div>
