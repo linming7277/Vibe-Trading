@@ -246,3 +246,78 @@ def test_flash_module_ast_no_research_stores():
 
 
 from datetime import timedelta as _td  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# 5. recent_flash_news：宏观总览页「最近 N 天新闻」
+# ---------------------------------------------------------------------------
+
+def _insert_flash(tmp_path, rows):
+    """rows: (published_at, title, url)；直接写缓存表（模拟已入库）。"""
+    conn = mm._flash_conn(tmp_path / "research.db")
+    try:
+        for pub, title, url in rows:
+            conn.execute(
+                "INSERT INTO morning_flash_items(source,title,url,published_at,raw_key,fetched_at,as_of_date)"
+                " VALUES('东财快讯',?,?,?,?,'','2026-09-16')",
+                (title, url, pub, f"东财快讯|{url}"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_recent_news_groups_by_day_partitions_and_keeps_window(tmp_path):
+    now = _sh(2026, 9, 16, 9, 0)
+    _insert_flash(tmp_path, [
+        ("2026-09-16 07:50", "国家统计局发布8月份经济数据", "http://e.com/1"),
+        ("2026-09-16 07:40", "美联储官员释放鹰派信号", "http://e.com/2"),
+        ("2026-09-15 16:10", "两市成交额突破1.5万亿元", "http://e.com/3"),
+        ("2026-09-14 09:00", "欧股收盘普跌", "http://e.com/4"),
+        ("2026-09-13 09:00", "窗口外的旧新闻不该出现", "http://e.com/5"),
+    ])
+    # 日期级（无发布时间）条目：按抓取时间归到 09-15。
+    conn = mm._flash_conn(tmp_path / "research.db")
+    try:
+        conn.execute(
+            "INSERT INTO morning_flash_items(source,title,url,published_at,raw_key,fetched_at,as_of_date)"
+            " VALUES('东财快讯','日期级条目也保留','http://e.com/6','','东财快讯|http://e.com/6','2026-09-15T08:00:00','2026-09-15')")
+        conn.commit()
+    finally:
+        conn.close()
+    result = mm.recent_flash_news(days=3, research_db_path=tmp_path / "research.db", now=now)
+    days = {d["date"]: d for d in result["days"]}
+    assert set(days) == {"2026-09-16", "2026-09-15", "2026-09-14"}
+    # 国内强制词优先；默认落国内；海外词归海外。
+    assert [i["title"] for i in days["2026-09-16"]["domestic"]] == ["国家统计局发布8月份经济数据"]
+    assert [i["title"] for i in days["2026-09-16"]["overseas"]] == ["美联储官员释放鹰派信号"]
+    assert "两市成交额突破1.5万亿元" in [i["title"] for i in days["2026-09-15"]["domestic"]]
+    # 日期级（无发布时间）条目按抓取时间归日，time 为空。
+    day15 = [i for i in days["2026-09-15"]["domestic"] if i["title"] == "日期级条目也保留"]
+    assert day15 and day15[0]["time"] == ""
+    assert result["total"] == 5
+
+
+def test_recent_news_drops_promo_calendar_and_cross_day_duplicates(tmp_path):
+    now = _sh(2026, 9, 16, 9, 0)
+    _insert_flash(tmp_path, [
+        ("2026-09-15 10:00", "美联储宣布维持利率不变", "http://e.com/old"),
+        ("2026-09-16 07:30", "600519.SH 涨停建议关注", "http://e.com/promo"),
+        ("2026-09-16 07:20", "新华财经早报：9月16日", "http://e.com/calendar"),
+        ("2026-09-16 07:10", "美联储宣布维持利率不变", "http://e.com/new"),
+    ])
+    result = mm.recent_flash_news(days=3, research_db_path=tmp_path / "research.db", now=now)
+    days = {d["date"]: d for d in result["days"]}
+    # 推广与纯日历占位被丢弃；同事件跨天只留最新一条。
+    overseas_today = [i["title"] for i in days["2026-09-16"]["overseas"]]
+    assert overseas_today == ["美联储宣布维持利率不变"]
+    assert all(i["title"] != "美联储宣布维持利率不变" for i in days["2026-09-15"]["overseas"])
+    assert result["total"] == 1
+
+
+def test_recent_news_respects_per_group_cap(tmp_path):
+    now = _sh(2026, 9, 16, 9, 0)
+    _insert_flash(tmp_path, [
+        (f"2026-09-16 0{i}:10", f"国内政策动向通报之{i}", f"http://e.com/{i}") for i in range(1, 5)
+    ])
+    result = mm.recent_flash_news(days=1, per_group_cap=2, research_db_path=tmp_path / "research.db", now=now)
+    assert len(result["days"][0]["domestic"]) == 2

@@ -58,6 +58,8 @@ _SERIES_LABELS: dict[str, str] = {
     "wti_spot": "WTI 原油现货",
     "usd_cny_official_mid": "人民币中间价",
     "copper_world_monthly": "全球铜价（月度）",
+    "shibor_overnight": "银行间隔夜拆借利率（SHIBOR）",
+    "shibor_3m": "三个月拆借利率（SHIBOR）",
 }
 
 _SPARKLINE_POINTS = 40

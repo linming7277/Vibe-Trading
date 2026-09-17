@@ -1045,6 +1045,56 @@ def _load_flash_items(as_of_date: str, *, research_db_path=None, limit: int = 20
     return out
 
 
+def recent_flash_news(*, days: int = 3, per_group_cap: int = 40, research_db_path=None, now=None) -> dict:
+    """宏观总览页「最近 N 天新闻」：按自然日分组 + 国内/海外分区，时间倒序。
+
+    与 08:00 卡的构建窗口解耦（这里取最近 N 个自然日、当日全天）；质量规则
+    与卡片一致——去推广/软文/纯日历占位、同事件跨天只留最新一条；分区复用
+    强制词与海外词规则；不截 6+6，改用页面分组上限。仅带链接的条目会出现。
+    """
+    local = (now or datetime.now(SHANGHAI)).astimezone(SHANGHAI)
+    dates = [(local.date() - timedelta(days=offset)).isoformat() for offset in range(max(1, int(days)))]
+    conn = _flash_conn(research_db_path)
+    try:
+        rows = conn.execute(
+            "SELECT source, title, url, published_at, fetched_at FROM morning_flash_items "
+            "WHERE url != '' ORDER BY id DESC LIMIT ?", (int(days) * 400,)).fetchall()
+    finally:
+        conn.close()
+    out = []
+    seen_url = set()
+    for source, title, url, published_at, fetched_at in rows:
+        pub = str(published_at or "")
+        # 归日依据：发布时间优先，缺失时回退抓取时间（入库必带）。
+        day = (pub or str(fetched_at or ""))[:10]
+        if day not in dates or url in seen_url:
+            continue
+        seen_url.add(url)
+        out.append({"source": source, "title": title, "url": url,
+                    "time": pub[11:16] if len(pub) >= 16 else "", "published_at": pub,
+                    "day": day})
+    filtered = _filter_news(out)
+    grouped = []
+    for day in dates:
+        day_items = [item for item in filtered if item.get("day") == day]
+        domestic, overseas = [], []
+        for item in day_items:
+            title = str(item.get("title") or "")
+            if any(k in title for k in _DOMESTIC_FORCE_KWS):
+                domestic.append(item)
+            elif _is_overseas_news(title):
+                overseas.append(item)
+            else:
+                domestic.append(item)
+        grouped.append({
+            "date": day,
+            "domestic": _rank_and_cap(domestic, per_group_cap),
+            "overseas": _rank_and_cap(overseas, per_group_cap),
+        })
+    total = sum(len(group["domestic"]) + len(group["overseas"]) for group in grouped)
+    return {"days": grouped, "total": total}
+
+
 def send_morning_macro_brief(as_of_date, *, research_db_path=None, force=False):
     from src.investment_research_supervisor.daily_brief_notification_service import (
         DailyBriefNotificationSettings, ShortLivedFeishuBriefSender)

@@ -830,38 +830,96 @@ class CioSectionBuilder:
         base_profit = _f(annual[-1].get("net_profit")) if annual else None
         base_revenue = _f(annual[-1].get("revenue")) if annual else None
         base_year = str(annual[-1].get("report_date") or "")[:4] if annual else ""
-        table = [
-            "| 情景 | 年度 | 营收(亿) | 营收增速 | 净利率假设 | 净利(亿) | 净利较基年 |",
-            "| --- | --- | --- | --- | --- | --- | --- |",
-        ]
+        # —— 主表：按年对照净利（基年实际行置顶作锚点）——
+        by_year: dict[int, dict[str, str]] = {}
+        base_cell = "—" if base_profit is None else _yi(base_profit)
+        scenario_meta: dict[str, dict[str, Any]] = {}
         scenario_payload: dict[str, Any] = {}
         for key in ("BEAR", "BASE", "BULL"):
             sc = dict(scenarios.get(key) or {})
-            growth = list(sc.get("revenue_growth_assumptions") or [])
-            margins = list(sc.get("margin_assumptions") or [])
+            label = str(sc.get("label") or key)
             rows = [dict(r) for r in list(sc.get("forecast") or [])]
             if not rows:
                 continue
+            scenario_meta[label] = {"rows": rows, "growth": list(sc.get("revenue_growth_assumptions") or []),
+                                    "margins": list(sc.get("margin_assumptions") or [])}
             scenario_payload[key] = sc
             for i, r in enumerate(rows):
-                revenue, profit = _f(r.get("revenue")), _f(r.get("net_profit"))
-                g = _f(growth[i]) if i < len(growth) else None
-                m = _f(margins[i]) if i < len(margins) else None
-                delta = (profit / base_profit - 1) * 100 if profit is not None and base_profit else None
-                table.append(
-                    f"| {sc.get('label') or key} | {r.get('year')} | {_yi(revenue)} | "
-                    f"{'—' if g is None else f'{g:+.1f}%'} | {'—' if m is None else f'{m:.1f}%'} | "
-                    f"{_yi(profit)} | {'—' if delta is None else f'{delta:+.0f}%'} |"
-                )
-        notes = [str(n) for n in list(forecast.get("notes") or [])]
-        for sc in scenario_payload.values():
-            notes.extend(str(n) for n in list(sc.get("assumption_notes") or [])[:2])
-        lines = [
-            f"情景引擎状态：{forecast.get('status')}。基年 {base_year or '—'}：营收 {_yi(base_revenue)}、净利 {_yi(base_profit)}。",
-            *table,
-            "口径说明：" + ("；".join(notes[:4]) if notes else "引擎未附口径说明。"),
-            "三情景均为系统确定性推演（历史增速×净利率假设），不构成主观概率或收益承诺。",
+                year = int(str(r.get("year") or "0")[:4])
+                profit = _f(r.get("net_profit"))
+                cell = "—" if profit is None else _yi(profit)
+                if profit is not None and base_profit:
+                    cell += f"（较{base_year}年{(profit / base_profit - 1) * 100:+.0f}%）"
+                by_year.setdefault(year, {})[label] = cell
+
+        ordered_years = sorted(by_year)
+        main_table = [
+            "| 年度 | 谨慎情景净利 | 基准情景净利 | 乐观情景净利 |",
+            "| --- | --- | --- | --- |",
+            *( [f"| {base_year}（实际） | — | {base_cell} | — |"] if base_year and base_cell != "—" else [] ),
         ]
+        for year in ordered_years:
+            cells = by_year[year]
+            main_table.append(
+                f"| {year} | {cells.get('谨慎', '—')} | {cells.get('基准', '—')} | {cells.get('乐观', '—')} |"
+            )
+
+        # —— 结论句：以基准情景为锚，附谨慎/乐观两端 ——
+        conclusion = ""
+        base_rows = scenario_meta.get("基准", {}).get("rows") or []
+        bear_rows = scenario_meta.get("谨慎", {}).get("rows") or []
+        bull_rows = scenario_meta.get("乐观", {}).get("rows") or []
+        if base_rows and base_profit:
+            base_last = _f(base_rows[-1].get("net_profit"))
+            base_year_last = str(base_rows[-1].get("year") or "")[:4]
+            if base_last is not None:
+                base_delta = (base_last / base_profit - 1) * 100
+                parts = [f"基准情景下 {base_year_last} 年净利约 {_yi(base_last)}（较 {base_year} 年 {base_delta:+.0f}%）"]
+                if bear_rows:
+                    bear_last = _f(bear_rows[-1].get("net_profit"))
+                    if bear_last is not None:
+                        parts.append(f"谨慎情景 {_yi(bear_last)}（{((bear_last / base_profit) - 1) * 100:+.0f}%）")
+                if bull_rows:
+                    bull_last = _f(bull_rows[-1].get("net_profit"))
+                    if bull_last is not None:
+                        parts.append(f"乐观情景 {_yi(bull_last)}（{((bull_last / base_profit) - 1) * 100:+.0f}%）")
+                conclusion = "；".join(parts) + "。"
+
+        notes = [str(n) for n in list(forecast.get("notes") or [])]
+        for sc in scenarios.values():
+            notes.extend(str(n) for n in list(sc.get("assumption_notes") or [])[:2])
+        assumption_table = [
+            "| 情景 | 年度 | 营收(亿) | 营收增速 | 净利率假设 |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        for label, meta in scenario_meta.items():
+            for i, r in enumerate(meta["rows"]):
+                revenue, year = _f(r.get("revenue")), str(r.get("year") or "")
+                g = _f(meta["growth"][i]) if i < len(meta["growth"]) else None
+                m = _f(meta["margins"][i]) if i < len(meta["margins"]) else None
+                assumption_table.append(
+                    f"| {label} | {year} | {_yi(revenue)} | "
+                    f"{'—' if g is None else f'{g:+.1f}%'} | {'—' if m is None else f'{m:.1f}%'} |"
+                )
+
+        lines = [
+            f"结论：{conclusion}" if conclusion else "三情景推演如下。",
+            "",
+            "| 年度 | 谨慎情景净利 | 基准情景净利 | 乐观情景净利 |",
+            "| --- | --- | --- | --- |",
+            *( [f"| {base_year}（实际） | — | {base_cell} | — |"] if base_year and base_cell != "—" else [] ),
+        ]
+        for year in ordered_years:
+            cells = by_year[year]
+            lines.append(
+                f"| {year} | {cells.get('谨慎', '—')} | {cells.get('基准', '—')} | {cells.get('乐观', '—')} |"
+            )
+        lines.append("")
+        lines.append("**推演假设与营收明细（供核对推演过程）**")
+        lines.extend(assumption_table)
+        lines.append("")
+        lines.append("口径说明：" + ("；".join(notes[:4]) if notes else "引擎未附口径说明。"))
+        lines.append("三情景均为系统确定性推演（历史增速×净利率假设），不构成主观概率或收益承诺。")
         return self._section("profit_forecast_detail", {
             "status": forecast.get("status"), "base_year": base_year,
             "base_profit": base_profit, "base_revenue": base_revenue,
@@ -1217,6 +1275,32 @@ _BUILDERS: dict[str, Callable[[CioSectionBuilder], dict[str, Any]]] = {
     "thesis_watchpoints": CioSectionBuilder.build_thesis_watchpoints,
     "cio_conclusion": CioSectionBuilder.build_cio_conclusion,
 }
+
+
+def build_backfill_sections(market: str, stock_code: str, as_of: str, present: set[str]) -> list[dict[str, Any]]:
+    """按当前契约补齐旧报告缺失的节（2026-09-16 19 节补齐专项）。
+
+    块刷新路径从 `prev_sections` 继承章节集；契约升级（如新增
+    10a/05c）前生成的旧报告会把旧章节集永久继承下去。本函数只为
+    `present` 里没有的节构建，构建失败降级为资料不足占位行——
+    保证节数补齐且绝不因补齐阻断刷新。
+    """
+    builder = CioSectionBuilder(market, stock_code, as_of)
+    out: list[dict[str, Any]] = []
+    for section_type in SECTION_TITLES:
+        if section_type in present:
+            continue
+        try:
+            out.append(_BUILDERS[section_type](builder))
+        except Exception as exc:  # noqa: BLE001 - 补齐失败不阻断刷新
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "CIO backfill section %s failed for %s@%s: %s: %s",
+                section_type, stock_code, as_of, type(exc).__name__, exc,
+            )
+            out.append(builder._gap_section(section_type, "该节数据处理暂不可用，已按资料不足降级"))
+    return out
 
 
 def build_all_sections(market: str, stock_code: str, as_of: str) -> list[dict[str, Any]]:

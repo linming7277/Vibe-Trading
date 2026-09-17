@@ -127,6 +127,21 @@ def register_research_routes(app: FastAPI, require_auth: AuthDep | None = None, 
         value["evidence"] = store.list_research_evidence(value["market"], "macro", value["as_of"])
         return value
 
+    @app.get("/macro/recent-news", dependencies=[Depends(require_auth)])
+    async def macro_recent_news(days: int = Query(3, ge=1, le=7)):
+        """宏观总览页「最近 N 天新闻」：快讯缓存按日分组、国内/海外分区。
+
+        附带 AI 简要分析（缓存优先，过期后台重生成）：生成中/不可用时
+        analysis.status 相应标注，新闻本体不受影响。
+        """
+        from src.investment_research_supervisor.morning_macro_brief import recent_flash_news
+        from src.investment_research_supervisor.news_analysis import get_or_schedule_analysis
+
+        news = await asyncio.to_thread(recent_flash_news, days=days)
+        analysis = await asyncio.to_thread(
+            get_or_schedule_analysis, news, days=days)
+        return {**news, "analysis": analysis}
+
     @app.get("/sectors/rankings", dependencies=[Depends(require_auth)])
     async def sector_rankings(market: str = Query("CN"), limit: int = Query(50, ge=1, le=200)):
         normalized = normalize_market(market)

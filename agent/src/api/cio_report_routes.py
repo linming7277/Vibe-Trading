@@ -17,6 +17,60 @@ AuthDep = Callable[..., Awaitable[Any] | Any]
 
 
 def register_cio_report_routes(app: FastAPI, require_auth: AuthDep) -> None:
+    @app.get("/api/research/cio/company-search", dependencies=[Depends(require_auth)])
+    async def search_cio_companies(q: str = Query(default="", min_length=1)):
+        """按名称/代码搜公司：优先返回低估值龙头池内（带研究档位）的公司。"""
+        import asyncio as _asyncio
+
+        needle = q.strip()
+        if not needle:
+            return {"items": []}
+
+        def _search() -> list[dict[str, Any]]:
+            tiers: dict[str, str] = {}
+            pool_names: dict[str, str] = {}
+            try:
+                from src.focus_selection import get_focus_selection_service
+
+                selection = get_focus_selection_service().get_focus_selection()
+                for tier_key, label in (("A", "重点研究"), ("B", "继续观察"), ("C", "暂缓优先")):
+                    for item in selection.get(tier_key) or []:
+                        code = str(item.get("stock_code") or "").upper()
+                        tiers[code] = label
+                        pool_names[code] = str(item.get("company_name") or code)
+            except Exception:  # noqa: BLE001 - 档位读取失败退化为纯名录搜索
+                tiers, pool_names = {}, {}
+
+            items: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            for code, name in pool_names.items():
+                if needle in code or needle in name:
+                    items.append({"stock_code": code, "company_name": name,
+                                  "focus_tier": tiers.get(code), "in_pool": True})
+                    seen.add(code)
+
+            try:
+                from src.tdx_data.store import TdxDataStore
+
+                store = TdxDataStore()
+                try:
+                    rows = store.list_records("securities", query=needle, limit=12)["items"]
+                finally:
+                    store.close()
+                for row in rows:
+                    code = str(row.get("record_key") or "").upper()
+                    if not code or code in seen or not code[:1].isdigit():
+                        continue
+                    items.append({"stock_code": code,
+                                  "company_name": str(row.get("name") or code),
+                                  "focus_tier": None, "in_pool": False})
+                    seen.add(code)
+            except Exception:  # noqa: BLE001 - 名录搜索失败不阻断池内结果
+                pass
+            return items[:10]
+
+        return await _asyncio.to_thread(_search)
+
     @app.get("/api/research/cio/{stock_code}", dependencies=[Depends(require_auth)])
     async def get_cio_report(
         stock_code: str = Path(min_length=4, max_length=12),

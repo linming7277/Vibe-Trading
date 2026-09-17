@@ -110,16 +110,20 @@ def test_overview_carries_no_trading_language() -> None:
 
 
 def test_overview_uses_frozen_registry_labels_for_registered_series() -> None:
+    import src.value_strategy.macro_overview as module
     from src.macro_forecast.registry import MACRO_SERIES_CATALOG
 
     catalog = {str(item["series_id"]): item for item in MACRO_SERIES_CATALOG}
+    overridden = set(module._SERIES_LABELS)
     store_patch, _ = _patch_store([])
     with patch("src.value_strategy.macro_sector_projection.get_macro_sector_projection", _fake_projection), \
          store_patch, \
          patch("src.value_strategy.macro_overview._snapshot_axes_trend", lambda _db: {}), \
          patch("src.value_strategy.macro_overview._latest_forecast", lambda _db: None):
         result = get_macro_overview()
-    by_id = {item["series_id"]: item for item in result["domestic_series"]}
+    by_id = {item["series_id"]: item for item in [*result["domestic_series"], *result["series"]]}
+    # 注册表 name_zh 是标签单一来源；仅页面覆盖表（老板可读性）可以优先于它。
     for series_id, meta in catalog.items():
-        if series_id in by_id:
+        if series_id in by_id and series_id not in overridden:
             assert by_id[series_id]["label"] == meta["name_zh"]
+    assert by_id["shibor_overnight"]["label"].startswith("银行间隔夜拆借利率")

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { BarChart3, CircleAlert, Globe2, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronUp, CircleAlert, Globe2, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import ReactMarkdown, { type Options as ReactMarkdownOptions } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import { api, type MacroOverview, type MacroOverviewSeries, type TdxMarketCatalogQuotes, type TdxStatus } from "@/lib/api";
-import { PageHeader, WorkspacePage, formatNumber } from "@/components/workspace/WorkspaceUI";
+import { api, type MacroNewsDay, type MacroOverview, type MacroOverviewSeries, type TdxMarketCatalogQuotes, type TdxStatus } from "@/lib/api";
+import type { MacroRecentNews } from "@/lib/api";
+import { PageHeader, PageToc, WorkspacePage, formatNumber } from "@/components/workspace/WorkspaceUI";
 import { cn } from "@/lib/utils";
 
 type GlobalMarket = "HK" | "US";
@@ -15,20 +16,7 @@ const MARKETS: Array<{ code: GlobalMarket; label: string; currency: string; scop
   { code: "US", label: "美股", currency: "USD", scope: "通达信美股全市场" },
 ];
 
-const MARKDOWN_OPTIONS: ReactMarkdownOptions = {
-  remarkPlugins: [remarkGfm],
-  components: {
-    h1: ({ children }) => <h3 className="mt-3 text-base font-semibold">{children}</h3>,
-    h2: ({ children }) => <h3 className="mt-3 text-sm font-semibold">{children}</h3>,
-    h3: ({ children }) => <h4 className="mt-2 text-sm font-semibold">{children}</h4>,
-    p: ({ children }) => <p className="mt-1.5 text-sm leading-6">{children}</p>,
-    ul: ({ children }) => <ul className="mt-1.5 list-disc pl-5 text-sm leading-6">{children}</ul>,
-    ol: ({ children }) => <ol className="mt-1.5 list-decimal pl-5 text-sm leading-6">{children}</ol>,
-    table: ({ children }) => <div className="mt-2 overflow-x-auto"><table className="w-full text-xs">{children}</table></div>,
-    th: ({ children }) => <th className="border-b px-2 py-1 text-left font-medium">{children}</th>,
-    td: ({ children }) => <td className="border-b px-2 py-1">{children}</td>,
-  },
-};
+
 
 function formatTime(value?: string | null) {
   if (!value) return "—";
@@ -113,6 +101,8 @@ function Sparkline({ points }: { points: Array<{ date: string; value: number }> 
 
 export function GlobalOverview() {
   const [overview, setOverview] = useState<MacroOverview | null>(null);
+  const [news, setNews] = useState<MacroRecentNews | null>(null);
+  const [newsExpanded, setNewsExpanded] = useState(false);
   const [status, setStatus] = useState<TdxStatus | null>(null);
   const [quotes, setQuotes] = useState<Record<GlobalMarket, TdxMarketCatalogQuotes | null>>({ HK: null, US: null });
   const [loading, setLoading] = useState(true);
@@ -122,11 +112,12 @@ export function GlobalOverview() {
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
     try {
-      const [nextOverview, nextStatus, hkQuotes, usQuotes] = await Promise.all([
-        api.getMacroOverview(), api.getTdxStatus(),
+      const [nextOverview, nextNews, nextStatus, hkQuotes, usQuotes] = await Promise.all([
+        api.getMacroOverview(), api.getMacroRecentNews(3), api.getTdxStatus(),
         api.getTdxMarketCatalogQuotes("HK", 12), api.getTdxMarketCatalogQuotes("US", 12),
       ]);
       setOverview(nextOverview);
+      setNews(nextNews);
       setStatus(nextStatus);
       setQuotes({ HK: hkQuotes, US: usQuotes });
       setError("");
@@ -165,11 +156,21 @@ export function GlobalOverview() {
   };
 
   const activeMessage = active && ["queued", "running"].includes(active.status) ? active.message : "";
+
   const projection = overview?.projection;
   const macro = projection?.macro;
   const axes = macro?.axes ?? [];
   const missingAxes = axes.filter((axis) => axis.state === "资料不足");
-  const forecast = overview?.forecast;
+
+  const toc = [
+    ...(macro ? [{ id: "sec-environment", label: "宏观环境" }] : []),
+    ...(news ? [{ id: "sec-news", label: "最近 3 天要闻" }] : []),
+    ...(overview?.series?.length ? [{ id: "sec-series", label: "跨市场序列" }] : []),
+    ...(overview?.domestic_series?.length ? [{ id: "sec-domestic", label: "国内读数" }] : []),
+    { id: "sec-global", label: "港美股快照" },
+    { id: "sec-movers", label: "涨幅榜" },
+    { id: "sec-boundary", label: "数据说明" },
+  ];
 
   return (
     <WorkspacePage>
@@ -180,6 +181,8 @@ export function GlobalOverview() {
         actions={<div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground"><span className={cn("h-1.5 w-1.5 rounded-full", status?.available && status?.client_process_running ? "bg-success" : "bg-warning")} />{status?.available && status?.client_process_running ? "通达信已连接" : "等待通达信连接"}</div>}
       />
 
+      <PageToc items={toc} />
+
       {loading && !overview ? <div className="flex min-h-48 items-center justify-center gap-2 rounded-xl border border-dashed text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />正在读取宏观与跨市场数据…</div> : null}
       {error ? <div className="rounded-xl border border-danger/30 bg-danger/5 p-4 text-sm text-danger">{error}</div> : null}
       {activeMessage ? <section className="mb-4 rounded-xl border border-primary/25 bg-primary/5 p-4 text-sm"><span className="inline-flex items-center gap-2 font-medium"><Loader2 className="h-4 w-4 animate-spin" />{activeMessage}</span><span className="ml-2 font-mono text-xs text-muted-foreground">{active?.progress}/{active?.total}</span></section> : null}
@@ -189,7 +192,7 @@ export function GlobalOverview() {
       ) : null}
 
       {macro ? (
-        <section className="rounded-xl border border-primary/25 bg-card p-6 shadow-sm">
+        <section id="sec-environment" className="rounded-xl border border-primary/25 bg-card p-6 shadow-sm scroll-mt-16">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-1.5 text-xs font-medium text-primary"><Globe2 className="h-3.5 w-3.5" />宏观环境</div>
@@ -226,26 +229,43 @@ export function GlobalOverview() {
         </section>
       ) : null}
 
-      {forecast && forecast.narrative_md ? (
-        <section className="mt-4 rounded-xl border bg-card p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <h2 className="text-lg font-semibold">下一交易日前瞻</h2>
-              {forecast.direction_cn ? <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">{forecast.direction_cn}</span> : null}
-              {forecast.run_mode ? <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">影子运行 {forecast.run_mode}</span> : null}
+      {news ? (
+        <section id="sec-news" className="mt-4 rounded-xl border bg-card shadow-sm scroll-mt-16">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b p-5">
+            <h2 className="text-lg font-semibold">最近 3 天要闻</h2>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground">共 {news.days.reduce((sum: number, day: MacroNewsDay) => sum + day.domestic.length + day.overseas.length, 0)} 条 · 仅作背景阅读，不构成投资建议</span>
+              <button onClick={() => setNewsExpanded((v) => !v)} className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted">
+                {newsExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                {newsExpanded ? "收起新闻列表" : "展开新闻列表"}
+              </button>
             </div>
-            <span className="text-xs text-muted-foreground">目标交易日 {forecast.target_trade_date || "—"} · 生成 {formatTime(forecast.created_at)}</span>
           </div>
-          <div className="mt-2 text-xs text-muted-foreground">由宏观预测引擎在每日收盘链自动生成（SHADOW 影子模式），仅供参考，不作为结论，更不是交易指令。</div>
-          <div className="mt-3 rounded-lg bg-muted/20 p-4 text-foreground">
-            <ReactMarkdown {...MARKDOWN_OPTIONS}>{forecast.narrative_md}</ReactMarkdown>
-          </div>
+          {news.analysis?.status === "ready" && news.analysis.content_md ? (
+            <div className="border-b bg-primary/[0.03] p-5">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold">简要分析</span>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">AI 生成 · 仅供参考</span>
+                {news.analysis.generated_at ? <span className="text-[11px] text-muted-foreground">生成于 {formatTime(news.analysis.generated_at)}</span> : null}
+              </div>
+              <div className="mt-2">
+                <ReactMarkdown {...NEWS_MARKDOWN}>{news.analysis.content_md}</ReactMarkdown>
+              </div>
+            </div>
+          ) : news.analysis?.status === "generating" ? (
+            <div className="flex items-center gap-2 border-b bg-muted/20 p-4 text-sm text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />正在生成简要分析，稍后刷新页面可见…
+            </div>
+          ) : null}
+          {newsExpanded ? news.days.map((day) => <NewsDayBlock key={day.date} day={day} />) : (
+            <p className="p-4 text-xs text-muted-foreground">新闻列表已折叠，点上方按钮按天展开。</p>
+          )}
         </section>
       ) : null}
 
       {overview?.series?.length ? (
-        <section className="mt-4">
+        <section id="sec-series" className="mt-4 scroll-mt-16">
           <div className="flex items-baseline justify-between">
             <h2 className="text-lg font-semibold">跨市场关键序列</h2>
             <span className="text-xs text-muted-foreground">每个工作日 07:35 自动刷新 · 生成于 {formatTime(overview.generated_at)}</span>
@@ -274,7 +294,7 @@ export function GlobalOverview() {
       ) : null}
 
       {overview?.domestic_series?.length ? (
-        <section className="mt-4 rounded-xl border bg-card shadow-sm">
+        <section id="sec-domestic" className="mt-4 rounded-xl border bg-card shadow-sm scroll-mt-16">
           <div className="border-b p-5"><h2 className="text-lg font-semibold">国内宏观读数</h2><p className="mt-1 text-xs text-muted-foreground">官方月度序列与市场内部指标；月度数据按官方发布节奏更新，滞后以徽标标注。</p></div>
           <div className="grid grid-cols-[1.4fr_1fr_.9fr_.9fr] gap-2 border-b bg-muted/40 px-4 py-2 text-[11px] font-medium text-muted-foreground"><span>指标</span><span className="text-right">最新值</span><span className="text-right">较前值</span><span className="text-right">数据日期</span></div>
           {overview.domestic_series.map((item) => {
@@ -292,7 +312,7 @@ export function GlobalOverview() {
         </section>
       ) : null}
 
-      <section className="mt-4">
+      <section id="sec-global" className="mt-4 scroll-mt-16">
         <h2 className="text-lg font-semibold">港美股市场快照</h2>
         <div className="mt-3 grid gap-4 lg:grid-cols-2">
           {MARKETS.map((market) => {
@@ -300,7 +320,7 @@ export function GlobalOverview() {
             const coverage = catalog?.securities ? (catalog.quotes / catalog.securities) * 100 : null;
             const busy = Boolean(activeMessage) || Boolean(refreshing);
             return <article key={market.code} className="rounded-xl border bg-card p-5 shadow-sm">
-              <div className="flex items-start justify-between gap-4"><div><div className="text-xs font-semibold text-primary">TDX / {market.code}</div><h3 className="mt-1 text-xl font-semibold">{market.label}市场快照</h3><p className="mt-1 text-sm text-muted-foreground">{market.scope} · 计价货币 {market.currency}</p></div><span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", catalog?.latest_refresh?.status === "completed" ? "bg-success/10 text-success" : catalog?.latest_refresh?.status === "failed" ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning")}>{statusLabel(catalog?.latest_refresh?.status)}</span></div>
+              <div className="flex items-start justify-between gap-4"><div><div className="text-xs font-semibold text-primary">通达信 · {market.label}</div><h3 className="mt-1 text-xl font-semibold">{market.label}市场快照</h3><p className="mt-1 text-sm text-muted-foreground">{market.scope} · 计价货币 {market.currency}</p></div><span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", catalog?.latest_refresh?.status === "completed" ? "bg-success/10 text-success" : catalog?.latest_refresh?.status === "failed" ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning")}>{statusLabel(catalog?.latest_refresh?.status)}</span></div>
               <div className="mt-5 grid grid-cols-3 gap-3"><Metric label="证券目录" value={catalog ? formatNumber(catalog.securities, 0) : "—"} /><Metric label="有效行情" value={catalog ? formatNumber(catalog.quotes, 0) : "—"} /><Metric label="行情覆盖" value={coverage == null ? "—" : `${coverage.toFixed(1)}%`} tone={coverage != null && coverage >= 90 ? "success" : "warning"} /></div>
               <div className="mt-4 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground"><div className="flex justify-between gap-3"><span>快照版本</span><span className="truncate font-mono text-foreground">{catalog?.latest_refresh?.snapshot_id ?? "—"}</span></div><div className="mt-2 flex justify-between gap-3"><span>最近刷新</span><span>{formatTime(catalog?.latest_refresh?.completed_at)}</span></div></div>
               <button onClick={() => void refresh(market.code)} disabled={busy} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"><RefreshCw className={cn("h-4 w-4", refreshing === market.code && "animate-spin")} />刷新{market.label}快照</button>
@@ -309,10 +329,72 @@ export function GlobalOverview() {
         </div>
       </section>
 
-      <section className="mt-4 grid gap-4 xl:grid-cols-2">{MARKETS.map((market) => <MarketMovers key={market.code} market={market} data={quotes[market.code]} />)}</section>
+      <section id="sec-movers" className="mt-4 grid gap-4 xl:grid-cols-2 scroll-mt-16">{MARKETS.map((market) => <MarketMovers key={market.code} market={market} data={quotes[market.code]} />)}</section>
 
-      <section className="mt-4 rounded-xl border bg-card p-5 shadow-sm"><div className="flex items-start gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Globe2 className="h-4 w-4" /></div><div><h2 className="font-semibold">数据边界</h2><p className="mt-1 text-sm leading-6 text-muted-foreground">宏观环境来自本地宏观序列的确定性投影；跨市场序列每个工作日早上从官方与 FRED 渠道自动刷新，滞后直接标注在卡片上；前瞻由预测引擎在影子模式生成，不进入任何结论。港美股行情、基础财务和估值优先使用本机通达信客户端。宏观不筛名单：行业分类、指数成分与官方披露以独立版本继续接入。</p></div></div></section>
+      <section id="sec-boundary" className="mt-4 rounded-xl border bg-card p-5 shadow-sm scroll-mt-16"><div className="flex items-start gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Globe2 className="h-4 w-4" /></div><div><h2 className="font-semibold">数据说明</h2><p className="mt-1 text-sm leading-6 text-muted-foreground">宏观环境来自本地宏观序列的确定性投影；跨市场序列每个工作日早上从官方与 FRED 渠道自动刷新，滞后直接标注在卡片上；前瞻由预测引擎在影子模式生成，不进入任何结论。港美股行情、基础财务和估值优先使用本机通达信客户端。宏观不筛名单：行业分类、指数成分与官方披露以独立版本继续接入。</p></div></div></section>
     </WorkspacePage>
+  );
+}
+
+const NEWS_MARKDOWN: ReactMarkdownOptions = {
+  remarkPlugins: [remarkGfm],
+  components: {
+    p: ({ children }) => <p className="text-sm leading-6">{children}</p>,
+    ul: ({ children }) => <ul className="list-disc space-y-1 pl-5 text-sm leading-6">{children}</ul>,
+    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  },
+};
+
+function dayLabel(date: string) {
+  const today = new Date();
+  const target = new Date(`${date}T00:00:00`);
+  const diff = Math.round((today.setHours(0, 0, 0, 0) - target.getTime()) / 86400000);
+  const weekday = target.toLocaleDateString("zh-CN", { weekday: "short" });
+  if (diff === 0) return `${date} · 今天 ${weekday}`;
+  if (diff === 1) return `${date} · 昨天 ${weekday}`;
+  if (diff === 2) return `${date} · 前天 ${weekday}`;
+  return `${date} · ${weekday}`;
+}
+
+function NewsList({ title, items }: { title: string; items: MacroNewsDay["domestic"] }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <span className="text-xs font-semibold text-primary">{title}</span>
+        <span className="text-[11px] text-muted-foreground">{items.length} 条</span>
+      </div>
+      {items.length ? (
+        <ul className="mt-2 space-y-2">
+          {items.map((item) => (
+            <li key={item.url} className="text-sm leading-6">
+              <a href={item.url} target="_blank" rel="noreferrer" className="hover:underline">
+                {item.time ? <span className="mr-1.5 font-mono text-xs text-muted-foreground">{item.time}</span> : null}
+                {item.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">暂无快讯</p>
+      )}
+    </div>
+  );
+}
+
+function NewsDayBlock({ day }: { day: MacroNewsDay }) {
+  const count = day.domestic.length + day.overseas.length;
+  return (
+    <div className="border-b p-5 last:border-b-0">
+      <div className="text-sm font-semibold">{dayLabel(day.date)}</div>
+      {count ? (
+        <div className="mt-3 grid gap-6 lg:grid-cols-2">
+          <NewsList title="国内" items={day.domestic} />
+          <NewsList title="海外" items={day.overseas} />
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">该日暂无快讯。</p>
+      )}
+    </div>
   );
 }
 
@@ -322,7 +404,7 @@ function Metric({ label, value, tone }: { label: string; value: string; tone?: "
 
 function MarketMovers({ market, data }: { market: { code: GlobalMarket; label: string; currency: string }; data: TdxMarketCatalogQuotes | null }) {
   return <article className="overflow-hidden rounded-xl border bg-card shadow-sm">
-    <div className="flex items-center justify-between border-b p-5"><div><div className="text-xs font-semibold text-primary">MARKET MOVERS / {market.code}</div><h3 className="mt-1 text-lg font-semibold">{market.label}涨幅居前</h3></div><BarChart3 className="h-5 w-5 text-muted-foreground" /></div>
+    <div className="flex items-center justify-between border-b p-5"><div><div className="text-xs font-semibold text-primary">涨幅榜 · {market.label}</div><h3 className="mt-1 text-lg font-semibold">{market.label}涨幅居前</h3></div><BarChart3 className="h-5 w-5 text-muted-foreground" /></div>
     <div className="grid grid-cols-[1.1fr_.75fr_.7fr_.85fr] gap-2 border-b bg-muted/40 px-4 py-2 text-[11px] font-medium text-muted-foreground"><span>证券</span><span>现价</span><span>涨跌幅</span><span>成交量</span></div>
     {data?.items?.length ? data.items.map((item) => <div key={item.code} className="grid grid-cols-[1.1fr_.75fr_.7fr_.85fr] gap-2 border-b px-4 py-3 text-xs last:border-b-0"><div className="min-w-0"><div className="truncate font-medium" title={item.name}>{item.name || item.code}</div><div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{item.code}</div></div><div className="self-center font-medium">{typeof item.price === "number" ? item.price.toFixed(2) : "—"}</div><div className={cn("self-center font-medium", typeof item.change_pct === "number" && item.change_pct > 0 ? "text-success" : typeof item.change_pct === "number" && item.change_pct < 0 ? "text-danger" : "text-muted-foreground")}>{percent(item.change_pct)}</div><div className="self-center text-muted-foreground">{typeof item.volume_lots === "number" ? formatNumber(item.volume_lots, 0) : "—"}</div></div>) : <div className="p-8 text-center text-sm text-muted-foreground"><CircleAlert className="mr-1 inline h-4 w-4" />尚无可展示的市场行情快照</div>}
     <div className="border-t bg-muted/20 px-4 py-2 text-[11px] text-muted-foreground">数据日期：{formatTime(data?.as_of)} · 按涨跌幅排序 · 不构成交易信号</div>

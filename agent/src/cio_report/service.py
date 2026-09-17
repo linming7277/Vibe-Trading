@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 CIO_SYNTHESIS_PROMPT_VERSION = "cio-synthesis-v4-incremental"  # 分节增量：每节小请求+缓存，单节失败降级底稿
 # Narrative-layer version rides the report fingerprint so a template upgrade
 # re-renders persisted reports instead of being swallowed by idempotent reuse.
-NARRATIVE_TEMPLATE_VERSION = "boss-narrative-v3"  # round1: latest quarter, moat evidence, verdict depth
+NARRATIVE_TEMPLATE_VERSION = "boss-narrative-v4"  # round2: 10a 按年对照表 + 三情景折线（2026-09-16 专项）
 _TRADING_LANGUAGE = re.compile(r"买入|卖出|推荐|止盈|止损|仓位|加仓|减仓|建仓")
 
 # Delivery-layer status semantics (polish §4): research freshness and
@@ -430,7 +430,8 @@ class CioReportService:
             CIO_BLOCK_CONTRACT, MISSING_SECTIONS_NOTE, block_fingerprint,
             price_block_inputs, stored_block_fingerprint,
         )
-        from src.cio_report.builder import SECTION_TITLES, CioSectionBuilder, template_report_markdown
+        from src.cio_report.builder import (
+            SECTION_TITLES, CioSectionBuilder, build_backfill_sections, template_report_markdown)
 
         contract = CIO_BLOCK_CONTRACT.get(str(block_id or "").upper())
         block_id = str(block_id or "").upper()
@@ -488,6 +489,10 @@ class CioReportService:
                 new_section if s.get("section_type") in contract["section_types"] else s
                 for s in prev_sections
             ]
+            # 契约升级自愈：旧报告继承的章节集缺新节时，按当前构建器补齐
+            # （如 2026-09-14 新增的 10a/05c），避免旧结构被永久继承。
+            present = {str(s.get("section_type") or "") for s in sections}
+            sections += build_backfill_sections(market, code, research_as_of, present)
             for column, block in (("financial_hash", "FINANCIAL"), ("business_hash", "BUSINESS"),
                                   ("risk_hash", "RISK"), ("thesis_hash", "THESIS"),
                                   ("leader_hash", "LEADER"), ("moat_hash", "MOAT"),
