@@ -6,6 +6,7 @@ import threading
 from typing import Any
 
 from src.business_research import BusinessResearchService, get_business_research_service
+from src.business_research.service import BUSINESS_RESEARCH_VERSION
 from src.company_thesis import CompanyThesisRepository
 from src.disclosure_materials import DisclosureMaterialService, get_disclosure_material_service
 from src.financial_analysis.service import FinancialAnalysisService, get_financial_analysis_service
@@ -89,14 +90,24 @@ class RiskResearchPreparationService:
 
     def _business_research_status(self, stock_code: str, *, as_of: str) -> tuple[str, str, dict[str, Any]]:
         existing = self.business_research.get_saved_research(stock_code, as_of=as_of)
-        if existing and str(existing.get("analysis_status") or "") == "COMPLETED":
+        # 2026-09-16 专项：旧契约版本（module_version 不一致）下生成的快照可能
+        # 没有任何带引用 claim（如 SUMMARY_ONLY 件），只看 analysis_status 会被
+        # 永久复用为 MISSING。版本不匹配的存量件做一次 force 重跑；重跑后版本
+        # 对齐，不会每天重骰。
+        version_matched = bool(
+            existing
+            and str(existing.get("analysis_status") or "") == "COMPLETED"
+            and str(existing.get("module_version") or "") == BUSINESS_RESEARCH_VERSION
+        )
+        if version_matched:
             return "READY", "REUSED", {"snapshot_id": existing.get("id"), "data_as_of": _day(existing.get("data_as_of"))}
         # Analyze is intentionally called only by this worker.  Page GETs and
         # chats remain read-only; the service's own source/citation contract is
         # retained without duplicating its logic here.
-        result = self.business_research.analyze(stock_code, as_of=as_of)
+        result = self.business_research.analyze(stock_code, as_of=as_of, force=bool(existing))
         analysis_status = str(result.get("analysis_status") or "MISSING")
-        metadata = {"snapshot_id": result.get("id"), "data_as_of": _day(result.get("data_as_of")), "analysis_status": analysis_status}
+        metadata = {"snapshot_id": result.get("id"), "data_as_of": _day(result.get("data_as_of")), "analysis_status": analysis_status,
+                    "forced_reanalysis": bool(existing)}
         if analysis_status == "COMPLETED":
             return "READY", "PREPARED", metadata
         if analysis_status == "FAILED":

@@ -25,9 +25,12 @@ from .citations import BusinessClaimCitationResolver
 from .store import BusinessResearchStore
 
 
-BUSINESS_RESEARCH_VERSION = "financial-researcher-business-v1.1.0"
+BUSINESS_RESEARCH_VERSION = "financial-researcher-business-v1.2.0"
 BUSINESS_CLAIM_TYPES = {"FACT", "INFERENCE", "UNKNOWN"}
-BUSINESS_TOPICS = {"MAIN_BUSINESS", "PRODUCT", "BUSINESS_MODEL", "BUSINESS_CHANGE"}
+# CUSTOMER_CONCENTRATION / PRODUCT_REVENUE_SHARE 与风险引擎的业务质量判定条件一一对应：
+# 缺了这两个主题，风险侧的客户集中度与收入占比条件将结构性落空（2026-09-16 专项）。
+BUSINESS_TOPICS = {"MAIN_BUSINESS", "PRODUCT", "BUSINESS_MODEL", "BUSINESS_CHANGE",
+                   "CUSTOMER_CONCENTRATION", "PRODUCT_REVENUE_SHARE"}
 BUSINESS_CONFIDENCES = {"LOW", "MEDIUM", "HIGH"}
 MAX_BUSINESS_CLAIMS = 8
 BUSINESS_RESEARCH_MAX_TOKENS = 4096
@@ -535,7 +538,7 @@ class BusinessResearchService:
         return (
             "你是现有财报研究员中的公司经营研究模块。只根据 Business Source Manifest 输出 JSON，"
             "只允许 summary 和 claims。claims 最多 8 条，type 只允许 FACT、INFERENCE、UNKNOWN，"
-            "topic 只允许 MAIN_BUSINESS、PRODUCT、BUSINESS_MODEL、BUSINESS_CHANGE。"
+            "topic 只允许 MAIN_BUSINESS、PRODUCT、BUSINESS_MODEL、BUSINESS_CHANGE、CUSTOMER_CONCENTRATION、PRODUCT_REVENUE_SHARE。"
             "每条 claim 必须且只能包含 type、topic、text、source_keys、confidence；"
             "source_keys 是字符串数组（UNKNOWN 时可为空数组），绝不能省略该字段。"
             "输出前逐条检查：keys 是否恰好为 type/topic/text/source_keys/confidence 五个。"
@@ -546,6 +549,10 @@ class BusinessResearchService:
             "本步骤没有 FORECAST。经营变化的 FACT/INFERENCE 必须同时引用同一资料类别的 CURRENT 和 PREVIOUS 成对资料；"
             "只引用 CURRENT、或只有静态主营/客户/产品资料时，BUSINESS_CHANGE 必须写 UNKNOWN，不能根据单期资料推断变化；"
             "没有可比历史资料就写 UNKNOWN，不得制造重大变化。没有产品收入占比就不得判断哪个产品贡献最大。"
+            "以下两类信息只要来源里真实出现，就必须各自输出一条带引用的 FACT（放进对应 topic，不算凑数）："
+            "①客户集中度类资料（键名含 CUSTOMER）：text 需包含「客户集中度」并紧跟括号白话解释（如「客户集中度（即对少数大客户的依赖程度）」），"
+            "或使用「前五名客户」表述；来源原文的占比数字必须逐字保留。"
+            "②产品结构/收入占比类资料（键名含 PRODUCT）：text 需包含「占营业收入」或「收入占比」字样并逐字保留来源数字。"
             "summary 和 text 必须用普通人能理解的话，按发生了什么、为什么重要、意味着什么、还要观察什么来写。"
             "输出前逐条自查：不得直接使用“客户集中度、议价权、护城河、单位经济模型、渠道下沉”；"
             "如确有必要，必须紧跟括号解释，例如“客户集中度（简单说就是是否依赖少数几个客户）”。"

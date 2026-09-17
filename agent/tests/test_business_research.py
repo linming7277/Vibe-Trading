@@ -321,3 +321,30 @@ def test_business_api_get_and_analyze(tmp_path: Path, monkeypatch) -> None:
     analyzed = client.post("/api/value/companies/000001.SZ/business-research/analyze", json={"force": True})
     assert analyzed.status_code == 200
     assert analyzed.json()["traceability_status"] == "COMPLETE"
+
+
+# ---------------------------------------------------------------------------
+# 2026-09-16 专项：客户集中度 / 收入占比主题与风险引擎判定条件对齐
+# ---------------------------------------------------------------------------
+
+def test_new_contract_topics_are_accepted_and_cited() -> None:
+    manifest = {
+        "CURRENT_CUSTOMER": {"value": "前五名客户占营业收入 32%", "profile_role": "CURRENT"},
+        "CURRENT_PRODUCT": {"value": "污水处理收入占营业收入 58%", "profile_role": "CURRENT"},
+    }
+    claims = {"summary": "客户与产品结构", "claims": [
+        {"type": "FACT", "topic": "CUSTOMER_CONCENTRATION",
+         "text": "客户集中度（即对少数大客户的依赖程度）较高：前五名客户占营业收入 32%",
+         "source_keys": ["CURRENT_CUSTOMER"], "confidence": "HIGH"},
+        {"type": "FACT", "topic": "PRODUCT_REVENUE_SHARE",
+         "text": "污水处理收入占营业收入 58%", "source_keys": ["CURRENT_PRODUCT"], "confidence": "HIGH"},
+    ]}
+    result = BusinessResearchService.validate_claims(claims, manifest)
+    assert not result["rejected_claims"]
+    assert {item["topic"] for item in result["claims"]} == {"CUSTOMER_CONCENTRATION", "PRODUCT_REVENUE_SHARE"}
+
+
+def test_instruction_requires_the_risk_engine_phrasings() -> None:
+    instruction = BusinessResearchService._instruction()
+    assert "CUSTOMER_CONCENTRATION" in instruction and "PRODUCT_REVENUE_SHARE" in instruction
+    assert "客户集中度" in instruction and "占营业收入" in instruction

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from src.api import risk_research_preparation_routes
 from src.api.risk_research_preparation_routes import register_risk_research_preparation_routes
 from src.risk_research_preparation.service import RiskResearchPreparationService
+from src.business_research.service import BUSINESS_RESEARCH_VERSION
 from src.risk_research_preparation.store import RiskResearchPreparationRepository
 
 
@@ -42,11 +43,13 @@ class _Profiles:
 class _Business:
     def __init__(self, existing: dict | None = None, result: dict | None = None):
         self.existing = existing or {}
-        self.result = result or {"id": "business-new", "data_as_of": "2026-08-25", "analysis_status": "COMPLETED"}
+        self.result = result or {"id": "business-new", "data_as_of": "2026-08-25", "analysis_status": "COMPLETED", "module_version": BUSINESS_RESEARCH_VERSION}
         self.calls = []
     def get_saved_research(self, _code: str, *, as_of: str): return self.existing
-    def analyze(self, code: str, *, as_of: str | None = None):
+    def analyze(self, code: str, *, as_of: str | None = None, force: bool = False):
         self.calls.append((code, as_of))
+        self.force_calls = getattr(self, "force_calls", [])
+        self.force_calls.append(force)
         return self.result
 
 
@@ -90,7 +93,7 @@ def _service(tmp_path, *, business: _Business | None = None, disclosure: _Disclo
 
 
 def test_prepares_only_active_pool_reuses_completed_business_and_preserves_missing_thesis(tmp_path):
-    business = _Business(existing={"id": "business-old", "data_as_of": "2026-08-25", "analysis_status": "COMPLETED"})
+    business = _Business(existing={"id": "business-old", "data_as_of": "2026-08-25", "analysis_status": "COMPLETED", "module_version": BUSINESS_RESEARCH_VERSION})
     disclosure = _Disclosure(_documents("ANNUAL", "SEMIANNUAL", "Q1", "Q3"))
     service = _service(tmp_path, business=business, disclosure=disclosure)
     result = service.prepare_current_active_low_value_pool(source_as_of="2026-08-25")

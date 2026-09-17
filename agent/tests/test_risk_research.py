@@ -237,7 +237,8 @@ def test_cited_business_claims_are_usable_before_human_thesis_confirmation() -> 
     result = _service(snapshots=[stable, deepcopy(stable)], thesis=None, business=business).get_risk_research("CN", SYMBOL)
     kinds = {item["risk_type"] for item in result["risks"]}
     assert {"BUSINESS_OPERATION_CHANGE", "BUSINESS_CUSTOMER_CONCENTRATION"} <= kinds
-    assert result["data_quality"]["business"] == "PARTIAL"
+    # 三项业务条件齐备即 READY；市占率是永久披露的非阻塞缺口（官方无审计口径）。
+    assert result["data_quality"]["business"] == "READY"
     assert result["data_quality"]["missing"] == ["MARKET_SHARE", "THESIS"]
 
 

@@ -627,9 +627,6 @@ class RiskResearchService:
             "BUSINESS_CHANGE": any(item["topic"] == "BUSINESS_CHANGE" for item in cited),
             "CUSTOMER_CONCENTRATION": any("客户集中度" in item["text"] or "前五名客户" in item["text"] for item in cited),
             "PRODUCT_REVENUE_SHARE": any("占营业收入" in item["text"] or "收入占比" in item["text"] for item in cited),
-            # Current official reports do not reliably provide an auditable
-            # market-share time series.  Keep this visible as a true gap.
-            "MARKET_SHARE": False,
         }
         negative = ("下降", "下滑", "收缩", "减少", "承压", "不利")
         for item in cited:
@@ -662,7 +659,12 @@ class RiskResearchService:
                 why="经营方向或核心业务变化会影响未来收入和利润假设。", sources=sources, evidence_ids=ids,
                 watch="核对后续经营资料是否确认或缓解这些变化"))
         missing = [name for name, available in ready.items() if not available]
-        quality = "READY" if not missing else "PARTIAL" if cited else "MISSING"
+        # Market share is a permanently disclosed, non-blocking gap: official
+        # reports do not reliably provide an auditable time series, so it must
+        # stay visible in `missing` without making READY unreachable.
+        missing.append("MARKET_SHARE")
+        blocking = [name for name in missing if name != "MARKET_SHARE"]
+        quality = "READY" if not blocking else "PARTIAL" if cited else "MISSING"
         return risks, missing, quality
 
     @staticmethod
