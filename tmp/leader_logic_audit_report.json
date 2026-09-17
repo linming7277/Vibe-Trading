@@ -1,0 +1,3678 @@
+{
+  "verdict": {
+    "code_uses": "value-leader-v3.0.0 (level3_leaders/service.py + value_line.py)",
+    "production_pool_formula": [
+      {
+        "formula": "value-leader-v2.0.0",
+        "n": 251
+      },
+      {
+        "formula": "value-leader-v3.0.0",
+        "n": 676
+      }
+    ],
+    "production_as_of": "2026-09-07",
+    "production_cutover": "NOT_CUT_OVER",
+    "frontend_copy": "ValueLeaderPool still describes V2 '六维加权排序' flow"
+  },
+  "formula_timeline": [
+    {
+      "as_of": "2026-09-07",
+      "formula": "value-leader-v3.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5570,
+      "last_at": "2026-09-08T02:28:24.640306+00:00"
+    },
+    {
+      "as_of": "2026-09-07",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5570,
+      "last_at": "2026-09-07T08:45:42.107162+00:00"
+    },
+    {
+      "as_of": "2026-09-04",
+      "formula": "value-leader-v3.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5570,
+      "last_at": "2026-09-07T04:39:44.721355+00:00"
+    },
+    {
+      "as_of": "2026-09-04",
+      "formula": "value-leader-v2.1.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5570,
+      "last_at": "2026-09-07T03:40:50.799438+00:00"
+    },
+    {
+      "as_of": "2026-09-04",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5569,
+      "last_at": "2026-09-04T08:45:30.613590+00:00"
+    },
+    {
+      "as_of": "2026-09-03",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5569,
+      "last_at": "2026-09-03T08:45:34.270242+00:00"
+    },
+    {
+      "as_of": "2026-09-02",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5568,
+      "last_at": "2026-09-02T08:45:43.339559+00:00"
+    },
+    {
+      "as_of": "2026-09-01",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5566,
+      "last_at": "2026-09-01T08:45:26.564736+00:00"
+    },
+    {
+      "as_of": "2026-08-31",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5566,
+      "last_at": "2026-08-31T08:45:17.228420+00:00"
+    },
+    {
+      "as_of": "2026-08-28",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5565,
+      "last_at": "2026-08-28T08:01:28.520380+00:00"
+    },
+    {
+      "as_of": "2026-08-27",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5565,
+      "last_at": "2026-08-27T05:03:04.214149+00:00"
+    },
+    {
+      "as_of": "2026-08-26",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5565,
+      "last_at": "2026-08-27T01:18:50.846726+00:00"
+    },
+    {
+      "as_of": "2026-08-25",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5562,
+      "last_at": "2026-08-25T08:45:41.056525+00:00"
+    },
+    {
+      "as_of": "2026-08-24",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5562,
+      "last_at": "2026-08-24T08:45:13.532531+00:00"
+    },
+    {
+      "as_of": "2026-08-21",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5561,
+      "last_at": "2026-08-21T08:45:31.404735+00:00"
+    },
+    {
+      "as_of": "2026-08-19",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5561,
+      "last_at": "2026-08-21T03:14:24.816992+00:00"
+    },
+    {
+      "as_of": "2026-08-17",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5557,
+      "last_at": "2026-08-18T02:49:22.826245+00:00"
+    },
+    {
+      "as_of": "2026-08-14",
+      "formula": "value-leader-v2.0.0",
+      "runs": 1,
+      "industries": 345,
+      "rows": 5557,
+      "last_at": "2026-08-17T11:47:25.862448+00:00"
+    }
+  ],
+  "comparison": {
+    "as_of": "2026-09-07",
+    "v2_formula": "value-leader-v2.0.0",
+    "v2_run": "level3_7fed23b442284688",
+    "v3_formula": "value-leader-v3.0.0",
+    "v3_run": "level3_a7104a35e344477f",
+    "industry_count_v2": 344,
+    "industry_count_v3": 344,
+    "top2_set_unchanged": 94,
+    "top2_set_changed": 211,
+    "rank_order_swapped_same_set": 39,
+    "only_in_v2": 0,
+    "only_in_v3": 0,
+    "change_rate_pct": 61.3
+  },
+  "production_vs_v3": {
+    "industries_with_prod_top2": 344,
+    "top2_set_changed_vs_v3": 211,
+    "examples": [
+      {
+        "level3_code": "881003.SH",
+        "level3_name": "动力煤",
+        "prod_v2": [
+          "002128.SZ 电投能源#1",
+          "601088.SH 中国神华#1",
+          "601225.SH 陕西煤业#2"
+        ],
+        "v3": [
+          "601088.SH 中国神华#1",
+          "601225.SH 陕西煤业#2"
+        ],
+        "entered": [],
+        "exited": [
+          "002128.SZ"
+        ]
+      },
+      {
+        "level3_code": "881004.SH",
+        "level3_name": "炼焦煤",
+        "prod_v2": [
+          "600348.SH 华阳股份#1",
+          "600985.SH 淮北矿业#1",
+          "601699.SH 潞安环能#2"
+        ],
+        "v3": [
+          "600985.SH 淮北矿业#1",
+          "601699.SH 潞安环能#2"
+        ],
+        "entered": [],
+        "exited": [
+          "600348.SH"
+        ]
+      },
+      {
+        "level3_code": "881005.SH",
+        "level3_name": "焦炭加工",
+        "prod_v2": [
+          "600740.SH 山西焦化#1",
+          "000723.SZ 美锦能源#2",
+          "600997.SH 开滦股份#2"
+        ],
+        "v3": [
+          "600740.SH 山西焦化#1",
+          "600997.SH 开滦股份#2"
+        ],
+        "entered": [],
+        "exited": [
+          "000723.SZ"
+        ]
+      },
+      {
+        "level3_code": "881009.SH",
+        "level3_name": "油田服务",
+        "prod_v2": [
+          "600968.SH 海油发展#1",
+          "601808.SH 中海油服#1",
+          "600871.SH 石化油服#2"
+        ],
+        "v3": [
+          "601808.SH 中海油服#1",
+          "600871.SH 石化油服#2"
+        ],
+        "entered": [],
+        "exited": [
+          "600968.SH"
+        ]
+      },
+      {
+        "level3_code": "881010.SH",
+        "level3_name": "油气工程",
+        "prod_v2": [
+          "600583.SH 海油工程#1",
+          "300164.SZ 通源石油#2",
+          "600339.SH 中油工程#2"
+        ],
+        "v3": [
+          "600583.SH 海油工程#1",
+          "600339.SH 中油工程#2"
+        ],
+        "entered": [],
+        "exited": [
+          "300164.SZ"
+        ]
+      },
+      {
+        "level3_code": "881014.SH",
+        "level3_name": "其他石化",
+        "prod_v2": [
+          "000819.SZ 岳阳兴长#1",
+          "002221.SZ 东华能源#2",
+          "603798.SH 康普顿#2"
+        ],
+        "v3": [
+          "000819.SZ 岳阳兴长#1",
+          "002221.SZ 东华能源#2"
+        ],
+        "entered": [],
+        "exited": [
+          "603798.SH"
+        ]
+      },
+      {
+        "level3_code": "881017.SH",
+        "level3_name": "洗护用品",
+        "prod_v2": [
+          "600315.SH 上海家化#1",
+          "001328.SZ 登康口腔#2",
+          "603193.SH 润本股份#2"
+        ],
+        "v3": [
+          "600315.SH 上海家化#1",
+          "603193.SH 润本股份#2"
+        ],
+        "entered": [],
+        "exited": [
+          "001328.SZ"
+        ]
+      },
+      {
+        "level3_code": "881020.SH",
+        "level3_name": "涤纶",
+        "prod_v2": [
+          "002206.SZ 海 利 得#1",
+          "002493.SZ 荣盛石化#1",
+          "601233.SH 桐昆股份#2",
+          "603406.SH 天富龙#2"
+        ],
+        "v3": [
+          "002493.SZ 荣盛石化#1",
+          "601233.SH 桐昆股份#2"
+        ],
+        "entered": [],
+        "exited": [
+          "002206.SZ",
+          "603406.SH"
+        ]
+      },
+      {
+        "level3_code": "881023.SH",
+        "level3_name": "锦纶",
+        "prod_v2": [
+          "600810.SH 神马股份#1",
+          "601113.SH 华鼎股份#2",
+          "603382.SH 海阳科技#2"
+        ],
+        "v3": [
+          "600810.SH 神马股份#1",
+          "601113.SH 华鼎股份#2"
+        ],
+        "entered": [],
+        "exited": [
+          "603382.SH"
+        ]
+      },
+      {
+        "level3_code": "881024.SH",
+        "level3_name": "碳纤维",
+        "prod_v2": [
+          "300699.SZ 光威复材#1",
+          "300777.SZ 中简科技#2",
+          "688295.SH 中复神鹰#2"
+        ],
+        "v3": [
+          "300699.SZ 光威复材#1",
+          "688295.SH 中复神鹰#2"
+        ],
+        "entered": [],
+        "exited": [
+          "300777.SZ"
+        ]
+      },
+      {
+        "level3_code": "881029.SH",
+        "level3_name": "氯碱",
+        "prod_v2": [
+          "601216.SH 君正集团#1",
+          "600618.SH 氯碱化工#2",
+          "601678.SH 滨化股份#2"
+        ],
+        "v3": [
+          "601216.SH 君正集团#1",
+          "601678.SH 滨化股份#2"
+        ],
+        "entered": [],
+        "exited": [
+          "600618.SH"
+        ]
+      },
+      {
+        "level3_code": "881031.SH",
+        "level3_name": "无机盐",
+        "prod_v2": [
+          "603067.SH 振华股份#1",
+          "603299.SH 苏盐井神#2"
+        ],
+        "v3": [
+          "603067.SH 振华股份#1",
+          "603407.SH 长裕集团#2"
+        ],
+        "entered": [
+          "603407.SH"
+        ],
+        "exited": [
+          "603299.SH"
+        ]
+      },
+      {
+        "level3_code": "881032.SH",
+        "level3_name": "有机化工原料",
+        "prod_v2": [
+          "002648.SZ 卫星化学#1",
+          "300641.SZ 正丹股份#2",
+          "600273.SH 嘉化能源#2"
+        ],
+        "v3": [
+          "002648.SZ 卫星化学#1",
+          "600273.SH 嘉化能源#2"
+        ],
+        "entered": [],
+        "exited": [
+          "300641.SZ"
+        ]
+      },
+      {
+        "level3_code": "881033.SH",
+        "level3_name": "其他化学原料",
+        "prod_v2": [
+          "301373.SZ 凌玮科技#1",
+          "603938.SH 三孚股份#1",
+          "002125.SZ 湘潭电化#2",
+          "301059.SZ 金三江#2"
+        ],
+        "v3": [
+          "603938.SH 三孚股份#1",
+          "002125.SZ 湘潭电化#2"
+        ],
+        "entered": [],
+        "exited": [
+          "301059.SZ",
+          "301373.SZ"
+        ]
+      },
+      {
+        "level3_code": "881036.SH",
+        "level3_name": "涂料油墨",
+        "prod_v2": [
+          "603062.SH 麦加芯彩#1",
+          "603823.SH 百合花#1",
+          "688129.SH 东来技术#2"
+        ],
+        "v3": [
+          "603823.SH 百合花#1",
+          "301683.SZ 慧谷新材#2"
+        ],
+        "entered": [
+          "301683.SZ"
+        ],
+        "exited": [
+          "603062.SH",
+          "688129.SH"
+        ]
+      },
+      {
+        "level3_code": "881038.SH",
+        "level3_name": "纺织化学品",
+        "prod_v2": [
+          "600352.SH 浙江龙盛#1",
+          "002440.SZ 闰土股份#2",
+          "300905.SZ 宝丽迪#2"
+        ],
+        "v3": [
+          "600352.SH 浙江龙盛#1",
+          "002440.SZ 闰土股份#2"
+        ],
+        "entered": [],
+        "exited": [
+          "300905.SZ"
+        ]
+      },
+      {
+        "level3_code": "881039.SH",
+        "level3_name": "氟化工",
+        "prod_v2": [
+          "600160.SH 巨化股份#1",
+          "603379.SH 三美股份#1",
+          "600378.SH 昊华科技#2"
+        ],
+        "v3": [
+          "600160.SH 巨化股份#1",
+          "600378.SH 昊华科技#2"
+        ],
+        "entered": [],
+        "exited": [
+          "603379.SH"
+        ]
+      },
+      {
+        "level3_code": "881041.SH",
+        "level3_name": "有机硅",
+        "prod_v2": [
+          "300019.SZ 硅宝科技#1",
+          "600596.SH 新安股份#1",
+          "603260.SH 合盛硅业#2",
+          "603281.SH 江瀚新材#2"
+        ],
+        "v3": [
+          "600596.SH 新安股份#1",
+          "603260.SH 合盛硅业#2"
+        ],
+        "entered": [],
+        "exited": [
+          "300019.SZ",
+          "603281.SH"
+        ]
+      },
+      {
+        "level3_code": "881042.SH",
+        "level3_name": "胶黏剂及胶带",
+        "prod_v2": [
+          "300041.SZ 回天新材#1",
+          "301283.SZ 聚胶股份#2",
+          "603681.SH 永冠新材#2"
+        ],
+        "v3": [
+          "300041.SZ 回天新材#1",
+          "603681.SH 永冠新材#2"
+        ],
+        "entered": [],
+        "exited": [
+          "301283.SZ"
+        ]
+      },
+      {
+        "level3_code": "881045.SH",
+        "level3_name": "合成树脂",
+        "prod_v2": [
+          "605589.SH 圣泉集团#1",
+          "300487.SZ 蓝晓科技#2",
+          "301216.SZ 万凯新材#2"
+        ],
+        "v3": [
+          "605589.SH 圣泉集团#1",
+          "301216.SZ 万凯新材#2"
+        ],
+        "entered": [],
+        "exited": [
+          "300487.SZ"
+        ]
+      },
+      {
+        "level3_code": "881046.SH",
+        "level3_name": "塑料薄膜",
+        "prod_v2": [
+          "002632.SZ 道明光学#1",
+          "601208.SH 东材科技#1",
+          "000973.SZ 佛塑科技#2"
+        ],
+        "v3": [
+          "601208.SH 东材科技#1",
+          "000973.SZ 佛塑科技#2"
+        ],
+        "entered": [],
+        "exited": [
+          "002632.SZ"
+        ]
+      },
+      {
+        "level3_code": "881047.SH",
+        "level3_name": "改性塑料",
+        "prod_v2": [
+          "301538.SZ 骏鼎达#1",
+          "600143.SH 金发科技#1",
+          "002768.SZ 国恩股份#2"
+        ],
+        "v3": [
+          "600143.SH 金发科技#1",
+          "002768.SZ 国恩股份#2"
+        ],
+        "entered": [],
+        "exited": [
+          "301538.SZ"
+        ]
+      },
+      {
+        "level3_code": "881048.SH",
+        "level3_name": "合成革",
+        "prod_v2": [
+          "300180.SZ 华峰超纤#1",
+          "002395.SZ 双象股份#2",
+          "300218.SZ 安利股份#2"
+        ],
+        "v3": [
+          "300180.SZ 华峰超纤#1",
+          "002395.SZ 双象股份#2"
+        ],
+        "entered": [],
+        "exited": [
+          "300218.SZ"
+        ]
+      },
+      {
+        "level3_code": "881049.SH",
+        "level3_name": "塑料助剂",
+        "prod_v2": [
+          "300596.SZ 利安隆#1",
+          "600746.SH 江苏索普#2",
+          "688625.SH 呈和科技#2"
+        ],
+        "v3": [
+          "300596.SZ 利安隆#1",
+          "600746.SH 江苏索普#2"
+        ],
+        "entered": [],
+        "exited": [
+          "688625.SH"
+        ]
+      },
+      {
+        "level3_code": "881050.SH",
+        "level3_name": "其他塑料制品",
+        "prod_v2": [
+          "000920.SZ 沃顿科技#1",
+          "603150.SH 万朗磁塑#1",
+          "605488.SH 福莱新材#2",
+          "920694.BJ 中裕科技#2"
+        ],
+        "v3": [
+          "603150.SH 万朗磁塑#1",
+          "605488.SH 福莱新材#2"
+        ],
+        "entered": [],
+        "exited": [
+          "000920.SZ",
+          "920694.BJ"
+        ]
+      }
+    ]
+  },
+  "changed_examples": [
+    {
+      "level3_code": "881003.SH",
+      "level3_name": "动力煤",
+      "v2_codes": [
+        "002128.SZ",
+        "601225.SH"
+      ],
+      "v3_codes": [
+        "601088.SH",
+        "601225.SH"
+      ],
+      "entered": [
+        "601088.SH"
+      ],
+      "exited": [
+        "002128.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "002128.SZ",
+          "stock_name": "电投能源",
+          "rank": 1,
+          "score": 81.22,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601225.SH",
+          "stock_name": "陕西煤业",
+          "rank": 2,
+          "score": 73.8069,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "601088.SH",
+          "stock_name": "中国神华",
+          "rank": 1,
+          "score": 62.7241,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601225.SH",
+          "stock_name": "陕西煤业",
+          "rank": 2,
+          "score": 68.2667,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "601088.SH 中国神华"
+      ],
+      "exited_named": [
+        "002128.SZ 电投能源"
+      ]
+    },
+    {
+      "level3_code": "881004.SH",
+      "level3_name": "炼焦煤",
+      "v2_codes": [
+        "600348.SH",
+        "600985.SH"
+      ],
+      "v3_codes": [
+        "600985.SH",
+        "601699.SH"
+      ],
+      "entered": [
+        "601699.SH"
+      ],
+      "exited": [
+        "600348.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "600348.SH",
+          "stock_name": "华阳股份",
+          "rank": 1,
+          "score": 77.5833,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600985.SH",
+          "stock_name": "淮北矿业",
+          "rank": 2,
+          "score": 62.4206,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600985.SH",
+          "stock_name": "淮北矿业",
+          "rank": 1,
+          "score": 57.336,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601699.SH",
+          "stock_name": "潞安环能",
+          "rank": 2,
+          "score": 53.5608,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "601699.SH 潞安环能"
+      ],
+      "exited_named": [
+        "600348.SH 华阳股份"
+      ]
+    },
+    {
+      "level3_code": "881005.SH",
+      "level3_name": "焦炭加工",
+      "v2_codes": [
+        "000723.SZ",
+        "600997.SH"
+      ],
+      "v3_codes": [
+        "600740.SH",
+        "600997.SH"
+      ],
+      "entered": [
+        "600740.SH"
+      ],
+      "exited": [
+        "000723.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "600997.SH",
+          "stock_name": "开滦股份",
+          "rank": 1,
+          "score": 74.9881,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000723.SZ",
+          "stock_name": "美锦能源",
+          "rank": 2,
+          "score": 61.3601,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600740.SH",
+          "stock_name": "山西焦化",
+          "rank": 1,
+          "score": 50.5,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600997.SH",
+          "stock_name": "开滦股份",
+          "rank": 2,
+          "score": 74.6667,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600740.SH 山西焦化"
+      ],
+      "exited_named": [
+        "000723.SZ 美锦能源"
+      ]
+    },
+    {
+      "level3_code": "881009.SH",
+      "level3_name": "油田服务",
+      "v2_codes": [
+        "600968.SH",
+        "601808.SH"
+      ],
+      "v3_codes": [
+        "600871.SH",
+        "601808.SH"
+      ],
+      "entered": [
+        "600871.SH"
+      ],
+      "exited": [
+        "600968.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "600968.SH",
+          "stock_name": "海油发展",
+          "rank": 1,
+          "score": 73.0571,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601808.SH",
+          "stock_name": "中海油服",
+          "rank": 2,
+          "score": 69.4215,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "601808.SH",
+          "stock_name": "中海油服",
+          "rank": 1,
+          "score": 63.3286,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600871.SH",
+          "stock_name": "石化油服",
+          "rank": 2,
+          "score": 35.0762,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600871.SH 石化油服"
+      ],
+      "exited_named": [
+        "600968.SH 海油发展"
+      ]
+    },
+    {
+      "level3_code": "881010.SH",
+      "level3_name": "油气工程",
+      "v2_codes": [
+        "300164.SZ",
+        "600583.SH"
+      ],
+      "v3_codes": [
+        "600339.SH",
+        "600583.SH"
+      ],
+      "entered": [
+        "600339.SH"
+      ],
+      "exited": [
+        "300164.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "600583.SH",
+          "stock_name": "海油工程",
+          "rank": 1,
+          "score": 79.25,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "300164.SZ",
+          "stock_name": "通源石油",
+          "rank": 2,
+          "score": 51.3839,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600583.SH",
+          "stock_name": "海油工程",
+          "rank": 1,
+          "score": 73.8333,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600339.SH",
+          "stock_name": "中油工程",
+          "rank": 2,
+          "score": 37.6667,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600339.SH 中油工程"
+      ],
+      "exited_named": [
+        "300164.SZ 通源石油"
+      ]
+    },
+    {
+      "level3_code": "881014.SH",
+      "level3_name": "其他石化",
+      "v2_codes": [
+        "000819.SZ",
+        "603798.SH"
+      ],
+      "v3_codes": [
+        "000819.SZ",
+        "002221.SZ"
+      ],
+      "entered": [
+        "002221.SZ"
+      ],
+      "exited": [
+        "603798.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "000819.SZ",
+          "stock_name": "岳阳兴长",
+          "rank": 1,
+          "score": 65.977,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603798.SH",
+          "stock_name": "康普顿",
+          "rank": 2,
+          "score": 65.1837,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "000819.SZ",
+          "stock_name": "岳阳兴长",
+          "rank": 1,
+          "score": 65.1293,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002221.SZ",
+          "stock_name": "东华能源",
+          "rank": 2,
+          "score": 46.8265,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "002221.SZ 东华能源"
+      ],
+      "exited_named": [
+        "603798.SH 康普顿"
+      ]
+    },
+    {
+      "level3_code": "881017.SH",
+      "level3_name": "洗护用品",
+      "v2_codes": [
+        "001328.SZ",
+        "603193.SH"
+      ],
+      "v3_codes": [
+        "600315.SH",
+        "603193.SH"
+      ],
+      "entered": [
+        "600315.SH"
+      ],
+      "exited": [
+        "001328.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "603193.SH",
+          "stock_name": "润本股份",
+          "rank": 1,
+          "score": 76.3571,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "001328.SZ",
+          "stock_name": "登康口腔",
+          "rank": 2,
+          "score": 63.9916,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600315.SH",
+          "stock_name": "上海家化",
+          "rank": 1,
+          "score": 49.3952,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603193.SH",
+          "stock_name": "润本股份",
+          "rank": 2,
+          "score": 70.5655,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600315.SH 上海家化"
+      ],
+      "exited_named": [
+        "001328.SZ 登康口腔"
+      ]
+    },
+    {
+      "level3_code": "881020.SH",
+      "level3_name": "涤纶",
+      "v2_codes": [
+        "002206.SZ",
+        "603406.SH"
+      ],
+      "v3_codes": [
+        "002493.SZ",
+        "601233.SH"
+      ],
+      "entered": [
+        "002493.SZ",
+        "601233.SH"
+      ],
+      "exited": [
+        "002206.SZ",
+        "603406.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "002206.SZ",
+          "stock_name": "海 利 得",
+          "rank": 1,
+          "score": 66.689,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603406.SH",
+          "stock_name": "天富龙",
+          "rank": 2,
+          "score": 65.0355,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "002493.SZ",
+          "stock_name": "荣盛石化",
+          "rank": 1,
+          "score": 45.4803,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601233.SH",
+          "stock_name": "桐昆股份",
+          "rank": 2,
+          "score": 52.7181,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "002493.SZ 荣盛石化",
+        "601233.SH 桐昆股份"
+      ],
+      "exited_named": [
+        "002206.SZ 海 利 得",
+        "603406.SH 天富龙"
+      ]
+    },
+    {
+      "level3_code": "881023.SH",
+      "level3_name": "锦纶",
+      "v2_codes": [
+        "601113.SH",
+        "603382.SH"
+      ],
+      "v3_codes": [
+        "600810.SH",
+        "601113.SH"
+      ],
+      "entered": [
+        "600810.SH"
+      ],
+      "exited": [
+        "603382.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "601113.SH",
+          "stock_name": "华鼎股份",
+          "rank": 1,
+          "score": 62.6607,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603382.SH",
+          "stock_name": "海阳科技",
+          "rank": 2,
+          "score": 61.5914,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600810.SH",
+          "stock_name": "神马股份",
+          "rank": 1,
+          "score": 40.2143,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601113.SH",
+          "stock_name": "华鼎股份",
+          "rank": 2,
+          "score": 58.1667,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600810.SH 神马股份"
+      ],
+      "exited_named": [
+        "603382.SH 海阳科技"
+      ]
+    },
+    {
+      "level3_code": "881024.SH",
+      "level3_name": "碳纤维",
+      "v2_codes": [
+        "300699.SZ",
+        "300777.SZ"
+      ],
+      "v3_codes": [
+        "300699.SZ",
+        "688295.SH"
+      ],
+      "entered": [
+        "688295.SH"
+      ],
+      "exited": [
+        "300777.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "300699.SZ",
+          "stock_name": "光威复材",
+          "rank": 1,
+          "score": 76.3333,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "300777.SZ",
+          "stock_name": "中简科技",
+          "rank": 2,
+          "score": 56.6666,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "300699.SZ",
+          "stock_name": "光威复材",
+          "rank": 1,
+          "score": 71.5556,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "688295.SH",
+          "stock_name": "中复神鹰",
+          "rank": 2,
+          "score": 19.1111,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "688295.SH 中复神鹰"
+      ],
+      "exited_named": [
+        "300777.SZ 中简科技"
+      ]
+    },
+    {
+      "level3_code": "881029.SH",
+      "level3_name": "氯碱",
+      "v2_codes": [
+        "600618.SH",
+        "601216.SH"
+      ],
+      "v3_codes": [
+        "601216.SH",
+        "601678.SH"
+      ],
+      "entered": [
+        "601678.SH"
+      ],
+      "exited": [
+        "600618.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "601216.SH",
+          "stock_name": "君正集团",
+          "rank": 1,
+          "score": 84.614,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600618.SH",
+          "stock_name": "氯碱化工",
+          "rank": 2,
+          "score": 76.7638,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "601216.SH",
+          "stock_name": "君正集团",
+          "rank": 1,
+          "score": 83.6855,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601678.SH",
+          "stock_name": "滨化股份",
+          "rank": 2,
+          "score": 67.1863,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "601678.SH 滨化股份"
+      ],
+      "exited_named": [
+        "600618.SH 氯碱化工"
+      ]
+    },
+    {
+      "level3_code": "881031.SH",
+      "level3_name": "无机盐",
+      "v2_codes": [
+        "603067.SH",
+        "603299.SH"
+      ],
+      "v3_codes": [
+        "603067.SH",
+        "603407.SH"
+      ],
+      "entered": [
+        "603407.SH"
+      ],
+      "exited": [
+        "603299.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "603067.SH",
+          "stock_name": "振华股份",
+          "rank": 1,
+          "score": 74.3572,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603299.SH",
+          "stock_name": "苏盐井神",
+          "rank": 2,
+          "score": 62.1072,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "603067.SH",
+          "stock_name": "振华股份",
+          "rank": 1,
+          "score": 60.5357,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603407.SH",
+          "stock_name": "长裕集团",
+          "rank": 2,
+          "score": null,
+          "eligibility": "ineligible"
+        }
+      ],
+      "entered_named": [
+        "603407.SH 长裕集团"
+      ],
+      "exited_named": [
+        "603299.SH 苏盐井神"
+      ]
+    },
+    {
+      "level3_code": "881032.SH",
+      "level3_name": "有机化工原料",
+      "v2_codes": [
+        "002648.SZ",
+        "300641.SZ"
+      ],
+      "v3_codes": [
+        "002648.SZ",
+        "600273.SH"
+      ],
+      "entered": [
+        "600273.SH"
+      ],
+      "exited": [
+        "300641.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "002648.SZ",
+          "stock_name": "卫星化学",
+          "rank": 1,
+          "score": 78.3316,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "300641.SZ",
+          "stock_name": "正丹股份",
+          "rank": 2,
+          "score": 70.8668,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "002648.SZ",
+          "stock_name": "卫星化学",
+          "rank": 1,
+          "score": 74.2511,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600273.SH",
+          "stock_name": "嘉化能源",
+          "rank": 2,
+          "score": 67.2762,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600273.SH 嘉化能源"
+      ],
+      "exited_named": [
+        "300641.SZ 正丹股份"
+      ]
+    },
+    {
+      "level3_code": "881033.SH",
+      "level3_name": "其他化学原料",
+      "v2_codes": [
+        "301059.SZ",
+        "301373.SZ"
+      ],
+      "v3_codes": [
+        "002125.SZ",
+        "603938.SH"
+      ],
+      "entered": [
+        "002125.SZ",
+        "603938.SH"
+      ],
+      "exited": [
+        "301059.SZ",
+        "301373.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "301373.SZ",
+          "stock_name": "凌玮科技",
+          "rank": 1,
+          "score": 62.2549,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "301059.SZ",
+          "stock_name": "金三江",
+          "rank": 2,
+          "score": 61.4153,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "603938.SH",
+          "stock_name": "三孚股份",
+          "rank": 1,
+          "score": 34.6549,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002125.SZ",
+          "stock_name": "湘潭电化",
+          "rank": 2,
+          "score": 61.7253,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "002125.SZ 湘潭电化",
+        "603938.SH 三孚股份"
+      ],
+      "exited_named": [
+        "301059.SZ 金三江",
+        "301373.SZ 凌玮科技"
+      ]
+    },
+    {
+      "level3_code": "881036.SH",
+      "level3_name": "涂料油墨",
+      "v2_codes": [
+        "603062.SH",
+        "688129.SH"
+      ],
+      "v3_codes": [
+        "301683.SZ",
+        "603823.SH"
+      ],
+      "entered": [
+        "301683.SZ",
+        "603823.SH"
+      ],
+      "exited": [
+        "603062.SH",
+        "688129.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "603062.SH",
+          "stock_name": "麦加芯彩",
+          "rank": 1,
+          "score": 72.3921,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "688129.SH",
+          "stock_name": "东来技术",
+          "rank": 2,
+          "score": 70.275,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "603823.SH",
+          "stock_name": "百合花",
+          "rank": 1,
+          "score": 61.2373,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "301683.SZ",
+          "stock_name": "慧谷新材",
+          "rank": 2,
+          "score": null,
+          "eligibility": "ineligible"
+        }
+      ],
+      "entered_named": [
+        "301683.SZ 慧谷新材",
+        "603823.SH 百合花"
+      ],
+      "exited_named": [
+        "603062.SH 麦加芯彩",
+        "688129.SH 东来技术"
+      ]
+    },
+    {
+      "level3_code": "881038.SH",
+      "level3_name": "纺织化学品",
+      "v2_codes": [
+        "002440.SZ",
+        "300905.SZ"
+      ],
+      "v3_codes": [
+        "002440.SZ",
+        "600352.SH"
+      ],
+      "entered": [
+        "600352.SH"
+      ],
+      "exited": [
+        "300905.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "002440.SZ",
+          "stock_name": "闰土股份",
+          "rank": 1,
+          "score": 74.9176,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "300905.SZ",
+          "stock_name": "宝丽迪",
+          "rank": 2,
+          "score": 71.7548,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600352.SH",
+          "stock_name": "浙江龙盛",
+          "rank": 1,
+          "score": 67.0078,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002440.SZ",
+          "stock_name": "闰土股份",
+          "rank": 2,
+          "score": 68.0791,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600352.SH 浙江龙盛"
+      ],
+      "exited_named": [
+        "300905.SZ 宝丽迪"
+      ]
+    },
+    {
+      "level3_code": "881039.SH",
+      "level3_name": "氟化工",
+      "v2_codes": [
+        "600160.SH",
+        "603379.SH"
+      ],
+      "v3_codes": [
+        "600160.SH",
+        "600378.SH"
+      ],
+      "entered": [
+        "600378.SH"
+      ],
+      "exited": [
+        "603379.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "603379.SH",
+          "stock_name": "三美股份",
+          "rank": 1,
+          "score": 80.2639,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600160.SH",
+          "stock_name": "巨化股份",
+          "rank": 2,
+          "score": 75.4583,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600160.SH",
+          "stock_name": "巨化股份",
+          "rank": 1,
+          "score": 68.2183,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600378.SH",
+          "stock_name": "昊华科技",
+          "rank": 2,
+          "score": 58.9749,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600378.SH 昊华科技"
+      ],
+      "exited_named": [
+        "603379.SH 三美股份"
+      ]
+    },
+    {
+      "level3_code": "881041.SH",
+      "level3_name": "有机硅",
+      "v2_codes": [
+        "300019.SZ",
+        "603281.SH"
+      ],
+      "v3_codes": [
+        "600596.SH",
+        "603260.SH"
+      ],
+      "entered": [
+        "600596.SH",
+        "603260.SH"
+      ],
+      "exited": [
+        "300019.SZ",
+        "603281.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "300019.SZ",
+          "stock_name": "硅宝科技",
+          "rank": 1,
+          "score": 75.1571,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603281.SH",
+          "stock_name": "江瀚新材",
+          "rank": 2,
+          "score": 71.6912,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600596.SH",
+          "stock_name": "新安股份",
+          "rank": 1,
+          "score": 53.4071,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603260.SH",
+          "stock_name": "合盛硅业",
+          "rank": 2,
+          "score": 30.9184,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600596.SH 新安股份",
+        "603260.SH 合盛硅业"
+      ],
+      "exited_named": [
+        "300019.SZ 硅宝科技",
+        "603281.SH 江瀚新材"
+      ]
+    },
+    {
+      "level3_code": "881042.SH",
+      "level3_name": "胶黏剂及胶带",
+      "v2_codes": [
+        "300041.SZ",
+        "301283.SZ"
+      ],
+      "v3_codes": [
+        "300041.SZ",
+        "603681.SH"
+      ],
+      "entered": [
+        "603681.SH"
+      ],
+      "exited": [
+        "301283.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "300041.SZ",
+          "stock_name": "回天新材",
+          "rank": 1,
+          "score": 70.7429,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "301283.SZ",
+          "stock_name": "聚胶股份",
+          "rank": 2,
+          "score": 69.4118,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "300041.SZ",
+          "stock_name": "回天新材",
+          "rank": 1,
+          "score": 69.5619,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603681.SH",
+          "stock_name": "永冠新材",
+          "rank": 2,
+          "score": 54.9,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "603681.SH 永冠新材"
+      ],
+      "exited_named": [
+        "301283.SZ 聚胶股份"
+      ]
+    },
+    {
+      "level3_code": "881045.SH",
+      "level3_name": "合成树脂",
+      "v2_codes": [
+        "300487.SZ",
+        "605589.SH"
+      ],
+      "v3_codes": [
+        "301216.SZ",
+        "605589.SH"
+      ],
+      "entered": [
+        "301216.SZ"
+      ],
+      "exited": [
+        "300487.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "605589.SH",
+          "stock_name": "圣泉集团",
+          "rank": 1,
+          "score": 76.523,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "300487.SZ",
+          "stock_name": "蓝晓科技",
+          "rank": 2,
+          "score": 75.25,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "605589.SH",
+          "stock_name": "圣泉集团",
+          "rank": 1,
+          "score": 66.3853,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "301216.SZ",
+          "stock_name": "万凯新材",
+          "rank": 2,
+          "score": 46.9957,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "301216.SZ 万凯新材"
+      ],
+      "exited_named": [
+        "300487.SZ 蓝晓科技"
+      ]
+    },
+    {
+      "level3_code": "881046.SH",
+      "level3_name": "塑料薄膜",
+      "v2_codes": [
+        "000973.SZ",
+        "002632.SZ"
+      ],
+      "v3_codes": [
+        "000973.SZ",
+        "601208.SH"
+      ],
+      "entered": [
+        "601208.SH"
+      ],
+      "exited": [
+        "002632.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "002632.SZ",
+          "stock_name": "道明光学",
+          "rank": 1,
+          "score": 70.562,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000973.SZ",
+          "stock_name": "佛塑科技",
+          "rank": 2,
+          "score": 65.6343,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "601208.SH",
+          "stock_name": "东材科技",
+          "rank": 1,
+          "score": 45.9994,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000973.SZ",
+          "stock_name": "佛塑科技",
+          "rank": 2,
+          "score": 60.7277,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "601208.SH 东材科技"
+      ],
+      "exited_named": [
+        "002632.SZ 道明光学"
+      ]
+    },
+    {
+      "level3_code": "881047.SH",
+      "level3_name": "改性塑料",
+      "v2_codes": [
+        "002768.SZ",
+        "301538.SZ"
+      ],
+      "v3_codes": [
+        "002768.SZ",
+        "600143.SH"
+      ],
+      "entered": [
+        "600143.SH"
+      ],
+      "exited": [
+        "301538.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "301538.SZ",
+          "stock_name": "骏鼎达",
+          "rank": 1,
+          "score": 69.3684,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002768.SZ",
+          "stock_name": "国恩股份",
+          "rank": 2,
+          "score": 67.9987,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600143.SH",
+          "stock_name": "金发科技",
+          "rank": 1,
+          "score": 55.2569,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002768.SZ",
+          "stock_name": "国恩股份",
+          "rank": 2,
+          "score": 56.7597,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600143.SH 金发科技"
+      ],
+      "exited_named": [
+        "301538.SZ 骏鼎达"
+      ]
+    },
+    {
+      "level3_code": "881048.SH",
+      "level3_name": "合成革",
+      "v2_codes": [
+        "002395.SZ",
+        "300218.SZ"
+      ],
+      "v3_codes": [
+        "002395.SZ",
+        "300180.SZ"
+      ],
+      "entered": [
+        "300180.SZ"
+      ],
+      "exited": [
+        "300218.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "002395.SZ",
+          "stock_name": "双象股份",
+          "rank": 1,
+          "score": 62.4167,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "300218.SZ",
+          "stock_name": "安利股份",
+          "rank": 2,
+          "score": 56.9167,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "300180.SZ",
+          "stock_name": "华峰超纤",
+          "rank": 1,
+          "score": 47.9365,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002395.SZ",
+          "stock_name": "双象股份",
+          "rank": 2,
+          "score": 61.0,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "300180.SZ 华峰超纤"
+      ],
+      "exited_named": [
+        "300218.SZ 安利股份"
+      ]
+    },
+    {
+      "level3_code": "881049.SH",
+      "level3_name": "塑料助剂",
+      "v2_codes": [
+        "300596.SZ",
+        "688625.SH"
+      ],
+      "v3_codes": [
+        "300596.SZ",
+        "600746.SH"
+      ],
+      "entered": [
+        "600746.SH"
+      ],
+      "exited": [
+        "688625.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "300596.SZ",
+          "stock_name": "利安隆",
+          "rank": 1,
+          "score": 78.8838,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "688625.SH",
+          "stock_name": "呈和科技",
+          "rank": 2,
+          "score": 66.7895,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "300596.SZ",
+          "stock_name": "利安隆",
+          "rank": 1,
+          "score": 76.2692,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600746.SH",
+          "stock_name": "江苏索普",
+          "rank": 2,
+          "score": 60.7637,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600746.SH 江苏索普"
+      ],
+      "exited_named": [
+        "688625.SH 呈和科技"
+      ]
+    },
+    {
+      "level3_code": "881050.SH",
+      "level3_name": "其他塑料制品",
+      "v2_codes": [
+        "000920.SZ",
+        "920694.BJ"
+      ],
+      "v3_codes": [
+        "603150.SH",
+        "605488.SH"
+      ],
+      "entered": [
+        "603150.SH",
+        "605488.SH"
+      ],
+      "exited": [
+        "000920.SZ",
+        "920694.BJ"
+      ],
+      "v2": [
+        {
+          "stock_code": "000920.SZ",
+          "stock_name": "沃顿科技",
+          "rank": 1,
+          "score": 77.9497,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "920694.BJ",
+          "stock_name": "中裕科技",
+          "rank": 2,
+          "score": 67.1219,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "603150.SH",
+          "stock_name": "万朗磁塑",
+          "rank": 1,
+          "score": 44.4536,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "605488.SH",
+          "stock_name": "福莱新材",
+          "rank": 2,
+          "score": 34.9886,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "603150.SH 万朗磁塑",
+        "605488.SH 福莱新材"
+      ],
+      "exited_named": [
+        "000920.SZ 沃顿科技",
+        "920694.BJ 中裕科技"
+      ]
+    },
+    {
+      "level3_code": "881053.SH",
+      "level3_name": "炭黑",
+      "v2_codes": [
+        "001207.SZ",
+        "605183.SH"
+      ],
+      "v3_codes": [
+        "002068.SZ",
+        "605183.SH"
+      ],
+      "entered": [
+        "002068.SZ"
+      ],
+      "exited": [
+        "001207.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "605183.SH",
+          "stock_name": "确成股份",
+          "rank": 1,
+          "score": 76.25,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "001207.SZ",
+          "stock_name": "联科科技",
+          "rank": 2,
+          "score": 65.25,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "605183.SH",
+          "stock_name": "确成股份",
+          "rank": 1,
+          "score": 73.8333,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002068.SZ",
+          "stock_name": "黑猫股份",
+          "rank": 2,
+          "score": 8.5357,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "002068.SZ 黑猫股份"
+      ],
+      "exited_named": [
+        "001207.SZ 联科科技"
+      ]
+    },
+    {
+      "level3_code": "881054.SH",
+      "level3_name": "橡胶制品",
+      "v2_codes": [
+        "001325.SZ",
+        "300320.SZ"
+      ],
+      "v3_codes": [
+        "300320.SZ",
+        "605008.SH"
+      ],
+      "entered": [
+        "605008.SH"
+      ],
+      "exited": [
+        "001325.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "001325.SZ",
+          "stock_name": "元创股份",
+          "rank": 1,
+          "score": 69.4986,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "300320.SZ",
+          "stock_name": "海达股份",
+          "rank": 2,
+          "score": 67.6808,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "300320.SZ",
+          "stock_name": "海达股份",
+          "rank": 1,
+          "score": 66.6659,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "605008.SH",
+          "stock_name": "长鸿高科",
+          "rank": 2,
+          "score": 31.372,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "605008.SH 长鸿高科"
+      ],
+      "exited_named": [
+        "001325.SZ 元创股份"
+      ]
+    },
+    {
+      "level3_code": "881056.SH",
+      "level3_name": "农药",
+      "v2_codes": [
+        "002004.SZ",
+        "002215.SZ"
+      ],
+      "v3_codes": [
+        "301035.SZ",
+        "600486.SH"
+      ],
+      "entered": [
+        "301035.SZ",
+        "600486.SH"
+      ],
+      "exited": [
+        "002004.SZ",
+        "002215.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "002215.SZ",
+          "stock_name": "诺 普 信",
+          "rank": 1,
+          "score": 76.5186,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002004.SZ",
+          "stock_name": "华邦健康",
+          "rank": 2,
+          "score": 73.3878,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600486.SH",
+          "stock_name": "扬农化工",
+          "rank": 1,
+          "score": 65.2936,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "301035.SZ",
+          "stock_name": "润丰股份",
+          "rank": 2,
+          "score": 58.4303,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "301035.SZ 润丰股份",
+        "600486.SH 扬农化工"
+      ],
+      "exited_named": [
+        "002004.SZ 华邦健康",
+        "002215.SZ 诺 普 信"
+      ]
+    },
+    {
+      "level3_code": "881057.SH",
+      "level3_name": "氮肥",
+      "v2_codes": [
+        "000731.SZ",
+        "000912.SZ"
+      ],
+      "v3_codes": [
+        "000912.SZ",
+        "600227.SH"
+      ],
+      "entered": [
+        "600227.SH"
+      ],
+      "exited": [
+        "000731.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "000912.SZ",
+          "stock_name": "泸天化",
+          "rank": 1,
+          "score": 72.75,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000731.SZ",
+          "stock_name": "四川美丰",
+          "rank": 2,
+          "score": 52.0357,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "000912.SZ",
+          "stock_name": "泸天化",
+          "rank": 1,
+          "score": 69.3333,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600227.SH",
+          "stock_name": "赤天化",
+          "rank": 2,
+          "score": 25.2857,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600227.SH 赤天化"
+      ],
+      "exited_named": [
+        "000731.SZ 四川美丰"
+      ]
+    },
+    {
+      "level3_code": "881058.SH",
+      "level3_name": "磷肥及磷化工",
+      "v2_codes": [
+        "002895.SZ",
+        "600096.SH"
+      ],
+      "v3_codes": [
+        "600096.SH",
+        "600141.SH"
+      ],
+      "entered": [
+        "600141.SH"
+      ],
+      "exited": [
+        "002895.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "002895.SZ",
+          "stock_name": "川恒股份",
+          "rank": 1,
+          "score": 77.8929,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600096.SH",
+          "stock_name": "云天化",
+          "rank": 2,
+          "score": 76.9911,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600096.SH",
+          "stock_name": "云天化",
+          "rank": 1,
+          "score": 72.0357,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600141.SH",
+          "stock_name": "兴发集团",
+          "rank": 2,
+          "score": 45.5214,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600141.SH 兴发集团"
+      ],
+      "exited_named": [
+        "002895.SZ 川恒股份"
+      ]
+    },
+    {
+      "level3_code": "881060.SH",
+      "level3_name": "复合肥",
+      "v2_codes": [
+        "000902.SZ",
+        "002170.SZ"
+      ],
+      "v3_codes": [
+        "000902.SZ",
+        "002539.SZ"
+      ],
+      "entered": [
+        "002539.SZ"
+      ],
+      "exited": [
+        "002170.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "000902.SZ",
+          "stock_name": "新洋丰",
+          "rank": 1,
+          "score": 74.1375,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002170.SZ",
+          "stock_name": "芭田股份",
+          "rank": 2,
+          "score": 71.75,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "000902.SZ",
+          "stock_name": "新洋丰",
+          "rank": 1,
+          "score": 67.7365,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002539.SZ",
+          "stock_name": "云图控股",
+          "rank": 2,
+          "score": 52.0341,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "002539.SZ 云图控股"
+      ],
+      "exited_named": [
+        "002170.SZ 芭田股份"
+      ]
+    },
+    {
+      "level3_code": "881063.SH",
+      "level3_name": "铁矿石",
+      "v2_codes": [
+        "000655.SZ",
+        "000923.SZ"
+      ],
+      "v3_codes": [
+        "000923.SZ",
+        "001203.SZ"
+      ],
+      "entered": [
+        "001203.SZ"
+      ],
+      "exited": [
+        "000655.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "000923.SZ",
+          "stock_name": "河钢资源",
+          "rank": 1,
+          "score": 55.525,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000655.SZ",
+          "stock_name": "金岭矿业",
+          "rank": 2,
+          "score": 54.575,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "001203.SZ",
+          "stock_name": "大中矿业",
+          "rank": 1,
+          "score": 39.5667,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000923.SZ",
+          "stock_name": "河钢资源",
+          "rank": 2,
+          "score": 47.2333,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "001203.SZ 大中矿业"
+      ],
+      "exited_named": [
+        "000655.SZ 金岭矿业"
+      ]
+    },
+    {
+      "level3_code": "881067.SH",
+      "level3_name": "板材",
+      "v2_codes": [
+        "600019.SH",
+        "600282.SH"
+      ],
+      "v3_codes": [
+        "000932.SZ",
+        "600019.SH"
+      ],
+      "entered": [
+        "000932.SZ"
+      ],
+      "exited": [
+        "600282.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "600019.SH",
+          "stock_name": "宝钢股份",
+          "rank": 1,
+          "score": 80.9271,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600282.SH",
+          "stock_name": "南钢股份",
+          "rank": 2,
+          "score": 80.5438,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600019.SH",
+          "stock_name": "宝钢股份",
+          "rank": 1,
+          "score": 78.0361,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000932.SZ",
+          "stock_name": "华菱钢铁",
+          "rank": 2,
+          "score": 69.2083,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "000932.SZ 华菱钢铁"
+      ],
+      "exited_named": [
+        "600282.SH 南钢股份"
+      ]
+    },
+    {
+      "level3_code": "881072.SH",
+      "level3_name": "铜",
+      "v2_codes": [
+        "601899.SH",
+        "603979.SH"
+      ],
+      "v3_codes": [
+        "600362.SH",
+        "601899.SH"
+      ],
+      "entered": [
+        "600362.SH"
+      ],
+      "exited": [
+        "603979.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "601899.SH",
+          "stock_name": "紫金矿业",
+          "rank": 1,
+          "score": 86.2779,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603979.SH",
+          "stock_name": "金诚信",
+          "rank": 2,
+          "score": 75.43,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "601899.SH",
+          "stock_name": "紫金矿业",
+          "rank": 1,
+          "score": 80.8451,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600362.SH",
+          "stock_name": "江西铜业",
+          "rank": 2,
+          "score": 56.5353,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600362.SH 江西铜业"
+      ],
+      "exited_named": [
+        "603979.SH 金诚信"
+      ]
+    },
+    {
+      "level3_code": "881073.SH",
+      "level3_name": "铝",
+      "v2_codes": [
+        "000807.SZ",
+        "002532.SZ"
+      ],
+      "v3_codes": [
+        "002379.SZ",
+        "601600.SH"
+      ],
+      "entered": [
+        "002379.SZ",
+        "601600.SH"
+      ],
+      "exited": [
+        "000807.SZ",
+        "002532.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "000807.SZ",
+          "stock_name": "云铝股份",
+          "rank": 1,
+          "score": 77.4761,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002532.SZ",
+          "stock_name": "天山铝业",
+          "rank": 2,
+          "score": 76.344,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "002379.SZ",
+          "stock_name": "宏桥控股",
+          "rank": 1,
+          "score": 65.2319,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601600.SH",
+          "stock_name": "中国铝业",
+          "rank": 2,
+          "score": 68.0127,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "002379.SZ 宏桥控股",
+        "601600.SH 中国铝业"
+      ],
+      "exited_named": [
+        "000807.SZ 云铝股份",
+        "002532.SZ 天山铝业"
+      ]
+    },
+    {
+      "level3_code": "881074.SH",
+      "level3_name": "铅锌",
+      "v2_codes": [
+        "000688.SZ",
+        "603132.SH"
+      ],
+      "v3_codes": [
+        "000426.SZ",
+        "600497.SH"
+      ],
+      "entered": [
+        "000426.SZ",
+        "600497.SH"
+      ],
+      "exited": [
+        "000688.SZ",
+        "603132.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "000688.SZ",
+          "stock_name": "国城矿业",
+          "rank": 1,
+          "score": 67.7864,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603132.SH",
+          "stock_name": "金徽股份",
+          "rank": 2,
+          "score": 61.9884,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "000426.SZ",
+          "stock_name": "兴业银锡",
+          "rank": 1,
+          "score": 66.8734,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600497.SH",
+          "stock_name": "驰宏锌锗",
+          "rank": 2,
+          "score": 47.901,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "000426.SZ 兴业银锡",
+        "600497.SH 驰宏锌锗"
+      ],
+      "exited_named": [
+        "000688.SZ 国城矿业",
+        "603132.SH 金徽股份"
+      ]
+    },
+    {
+      "level3_code": "881076.SH",
+      "level3_name": "黄金",
+      "v2_codes": [
+        "000975.SZ",
+        "600489.SH"
+      ],
+      "v3_codes": [
+        "600489.SH",
+        "600547.SH"
+      ],
+      "entered": [
+        "600547.SH"
+      ],
+      "exited": [
+        "000975.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "600489.SH",
+          "stock_name": "中金黄金",
+          "rank": 1,
+          "score": 65.0972,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000975.SZ",
+          "stock_name": "山金国际",
+          "rank": 2,
+          "score": 62.8681,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600547.SH",
+          "stock_name": "山东黄金",
+          "rank": 1,
+          "score": 43.3796,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600489.SH",
+          "stock_name": "中金黄金",
+          "rank": 2,
+          "score": 56.6111,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600547.SH 山东黄金"
+      ],
+      "exited_named": [
+        "000975.SZ 山金国际"
+      ]
+    },
+    {
+      "level3_code": "881079.SH",
+      "level3_name": "锂",
+      "v2_codes": [
+        "002466.SZ",
+        "002738.SZ"
+      ],
+      "v3_codes": [
+        "002460.SZ",
+        "002466.SZ"
+      ],
+      "entered": [
+        "002460.SZ"
+      ],
+      "exited": [
+        "002738.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "002466.SZ",
+          "stock_name": "天齐锂业",
+          "rank": 1,
+          "score": 66.4484,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002738.SZ",
+          "stock_name": "中矿资源",
+          "rank": 2,
+          "score": 65.3834,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "002460.SZ",
+          "stock_name": "赣锋锂业",
+          "rank": 1,
+          "score": 51.6444,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002466.SZ",
+          "stock_name": "天齐锂业",
+          "rank": 2,
+          "score": 64.254,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "002460.SZ 赣锋锂业"
+      ],
+      "exited_named": [
+        "002738.SZ 中矿资源"
+      ]
+    },
+    {
+      "level3_code": "881081.SH",
+      "level3_name": "钴",
+      "v2_codes": [
+        "301219.SZ",
+        "603799.SH"
+      ],
+      "v3_codes": [
+        "600711.SH",
+        "603799.SH"
+      ],
+      "entered": [
+        "600711.SH"
+      ],
+      "exited": [
+        "301219.SZ"
+      ],
+      "v2": [
+        {
+          "stock_code": "603799.SH",
+          "stock_name": "华友钴业",
+          "rank": 1,
+          "score": 76.125,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "301219.SZ",
+          "stock_name": "腾远钴业",
+          "rank": 2,
+          "score": 71.25,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "603799.SH",
+          "stock_name": "华友钴业",
+          "rank": 1,
+          "score": 56.6667,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600711.SH",
+          "stock_name": "盛屯矿业",
+          "rank": 2,
+          "score": 45.5556,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600711.SH 盛屯矿业"
+      ],
+      "exited_named": [
+        "301219.SZ 腾远钴业"
+      ]
+    },
+    {
+      "level3_code": "881084.SH",
+      "level3_name": "钨钼",
+      "v2_codes": [
+        "601958.SH",
+        "603993.SH"
+      ],
+      "v3_codes": [
+        "600549.SH",
+        "603993.SH"
+      ],
+      "entered": [
+        "600549.SH"
+      ],
+      "exited": [
+        "601958.SH"
+      ],
+      "v2": [
+        {
+          "stock_code": "603993.SH",
+          "stock_name": "洛阳钼业",
+          "rank": 1,
+          "score": 78.35,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601958.SH",
+          "stock_name": "金钼股份",
+          "rank": 2,
+          "score": 73.75,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "603993.SH",
+          "stock_name": "洛阳钼业",
+          "rank": 1,
+          "score": 75.5143,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600549.SH",
+          "stock_name": "厦门钨业",
+          "rank": 2,
+          "score": 55.4976,
+          "eligibility": "eligible"
+        }
+      ],
+      "entered_named": [
+        "600549.SH 厦门钨业"
+      ],
+      "exited_named": [
+        "601958.SH 金钼股份"
+      ]
+    }
+  ],
+  "rank_swap_examples": [
+    {
+      "level3_code": "881007.SH",
+      "level3_name": "油气开采",
+      "v2": [
+        {
+          "stock_code": "600938.SH",
+          "stock_name": "中国海油",
+          "rank": 1,
+          "score": 69.8,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601857.SH",
+          "stock_name": "中国石油",
+          "rank": 2,
+          "score": 60.65,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "601857.SH",
+          "stock_name": "中国石油",
+          "rank": 1,
+          "score": 46.1333,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600938.SH",
+          "stock_name": "中国海油",
+          "rank": 2,
+          "score": 62.8,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881028.SH",
+      "level3_name": "钛白粉",
+      "v2": [
+        {
+          "stock_code": "002145.SZ",
+          "stock_name": "钛能化学",
+          "rank": 1,
+          "score": 73.975,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002601.SZ",
+          "stock_name": "龙佰集团",
+          "rank": 2,
+          "score": 66.0857,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "002601.SZ",
+          "stock_name": "龙佰集团",
+          "rank": 1,
+          "score": 71.5333,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002145.SZ",
+          "stock_name": "钛能化学",
+          "rank": 2,
+          "score": 75.6,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881077.SH",
+      "level3_name": "白银",
+      "v2": [
+        {
+          "stock_code": "000603.SZ",
+          "stock_name": "盛达资源",
+          "rank": 1,
+          "score": 70.5,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002716.SZ",
+          "stock_name": "湖南白银",
+          "rank": 2,
+          "score": 29.5,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "002716.SZ",
+          "stock_name": "湖南白银",
+          "rank": 1,
+          "score": 16.0,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000603.SZ",
+          "stock_name": "盛达资源",
+          "rank": 2,
+          "score": 84.0,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881092.SH",
+      "level3_name": "水泥制造",
+      "v2": [
+        {
+          "stock_code": "600801.SH",
+          "stock_name": "华新建材",
+          "rank": 1,
+          "score": 76.1428,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600585.SH",
+          "stock_name": "海螺水泥",
+          "rank": 2,
+          "score": 72.7143,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "600585.SH",
+          "stock_name": "海螺水泥",
+          "rank": 1,
+          "score": 65.1126,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600801.SH",
+          "stock_name": "华新建材",
+          "rank": 2,
+          "score": 71.4329,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881095.SH",
+      "level3_name": "玻璃制造",
+      "v2": [
+        {
+          "stock_code": "300395.SZ",
+          "stock_name": "菲利华",
+          "rank": 1,
+          "score": 72.7143,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601636.SH",
+          "stock_name": "旗滨集团",
+          "rank": 2,
+          "score": 65.7143,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "601636.SH",
+          "stock_name": "旗滨集团",
+          "rank": 1,
+          "score": 67.6667,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "300395.SZ",
+          "stock_name": "菲利华",
+          "rank": 2,
+          "score": 71.1428,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881110.SH",
+      "level3_name": "其他种植业",
+      "v2": [
+        {
+          "stock_code": "600108.SH",
+          "stock_name": "亚盛集团",
+          "rank": 1,
+          "score": 71.7619,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601118.SH",
+          "stock_name": "海南橡胶",
+          "rank": 2,
+          "score": 64.4167,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "601118.SH",
+          "stock_name": "海南橡胶",
+          "rank": 1,
+          "score": 56.4127,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600108.SH",
+          "stock_name": "亚盛集团",
+          "rank": 2,
+          "score": 68.0317,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881112.SH",
+      "level3_name": "生猪养殖",
+      "v2": [
+        {
+          "stock_code": "300498.SZ",
+          "stock_name": "温氏股份",
+          "rank": 1,
+          "score": 76.6786,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002714.SZ",
+          "stock_name": "牧原股份",
+          "rank": 2,
+          "score": 74.15,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "002714.SZ",
+          "stock_name": "牧原股份",
+          "rank": 1,
+          "score": 72.9333,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "300498.SZ",
+          "stock_name": "温氏股份",
+          "rank": 2,
+          "score": 67.7667,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881118.SH",
+      "level3_name": "水产捕捞",
+      "v2": [
+        {
+          "stock_code": "600097.SH",
+          "stock_name": "开创国际",
+          "rank": 1,
+          "score": 49.75,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000798.SZ",
+          "stock_name": "中水渔业",
+          "rank": 2,
+          "score": 48.4286,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "000798.SZ",
+          "stock_name": "中水渔业",
+          "rank": 1,
+          "score": 46.2381,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600097.SH",
+          "stock_name": "开创国际",
+          "rank": 2,
+          "score": 54.3333,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881133.SH",
+      "level3_name": "黄酒",
+      "v2": [
+        {
+          "stock_code": "600059.SH",
+          "stock_name": "古越龙山",
+          "rank": 1,
+          "score": 63.5,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601579.SH",
+          "stock_name": "会稽山",
+          "rank": 2,
+          "score": 60.0,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "601579.SH",
+          "stock_name": "会稽山",
+          "rank": 1,
+          "score": 56.6667,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "600059.SH",
+          "stock_name": "古越龙山",
+          "rank": 2,
+          "score": 65.0,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881141.SH",
+      "level3_name": "零食",
+      "v2": [
+        {
+          "stock_code": "002847.SZ",
+          "stock_name": "盐津铺子",
+          "rank": 1,
+          "score": 70.6207,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "300972.SZ",
+          "stock_name": "万辰集团",
+          "rank": 2,
+          "score": 61.3155,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "300972.SZ",
+          "stock_name": "万辰集团",
+          "rank": 1,
+          "score": 54.7936,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002847.SZ",
+          "stock_name": "盐津铺子",
+          "rank": 2,
+          "score": 67.4074,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881152.SH",
+      "level3_name": "棉纺制品",
+      "v2": [
+        {
+          "stock_code": "000726.SZ",
+          "stock_name": "鲁 泰Ａ",
+          "rank": 1,
+          "score": 72.75,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "601339.SH",
+          "stock_name": "百隆东方",
+          "rank": 2,
+          "score": 71.125,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "601339.SH",
+          "stock_name": "百隆东方",
+          "rank": 1,
+          "score": 63.1667,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000726.SZ",
+          "stock_name": "鲁 泰Ａ",
+          "rank": 2,
+          "score": 69.1111,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881155.SH",
+      "level3_name": "其他纺织",
+      "v2": [
+        {
+          "stock_code": "603889.SH",
+          "stock_name": "新澳股份",
+          "rank": 1,
+          "score": 76.3984,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603055.SH",
+          "stock_name": "台华新材",
+          "rank": 2,
+          "score": 74.5815,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "603055.SH",
+          "stock_name": "台华新材",
+          "rank": 1,
+          "score": 67.1981,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603889.SH",
+          "stock_name": "新澳股份",
+          "rank": 2,
+          "score": 69.2375,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881169.SH",
+      "level3_name": "生活用纸",
+      "v2": [
+        {
+          "stock_code": "605009.SH",
+          "stock_name": "豪悦护理",
+          "rank": 1,
+          "score": 66.125,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002511.SZ",
+          "stock_name": "中顺洁柔",
+          "rank": 2,
+          "score": 60.375,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "002511.SZ",
+          "stock_name": "中顺洁柔",
+          "rank": 1,
+          "score": 43.3333,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "605009.SH",
+          "stock_name": "豪悦护理",
+          "rank": 2,
+          "score": 59.5,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881176.SH",
+      "level3_name": "其他包装",
+      "v2": [
+        {
+          "stock_code": "603607.SH",
+          "stock_name": "京华激光",
+          "rank": 1,
+          "score": 60.3334,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002243.SZ",
+          "stock_name": "力合科创",
+          "rank": 2,
+          "score": 59.4167,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "002243.SZ",
+          "stock_name": "力合科创",
+          "rank": 1,
+          "score": 33.1389,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603607.SH",
+          "stock_name": "京华激光",
+          "rank": 2,
+          "score": 65.5556,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881179.SH",
+      "level3_name": "其他家居",
+      "v2": [
+        {
+          "stock_code": "001386.SZ",
+          "stock_name": "马可波罗",
+          "rank": 1,
+          "score": 85.564,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603195.SH",
+          "stock_name": "公牛集团",
+          "rank": 2,
+          "score": 82.3196,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "603195.SH",
+          "stock_name": "公牛集团",
+          "rank": 1,
+          "score": 75.2338,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "001386.SZ",
+          "stock_name": "马可波罗",
+          "rank": 2,
+          "score": 78.2307,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881185.SH",
+      "level3_name": "空调",
+      "v2": [
+        {
+          "stock_code": "000651.SZ",
+          "stock_name": "格力电器",
+          "rank": 1,
+          "score": 73.25,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000333.SZ",
+          "stock_name": "美的集团",
+          "rank": 2,
+          "score": 69.875,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "000333.SZ",
+          "stock_name": "美的集团",
+          "rank": 1,
+          "score": 54.0,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000651.SZ",
+          "stock_name": "格力电器",
+          "rank": 2,
+          "score": 69.1111,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881189.SH",
+      "level3_name": "其他黑色家电",
+      "v2": [
+        {
+          "stock_code": "000801.SZ",
+          "stock_name": "四川九洲",
+          "rank": 1,
+          "score": 76.0,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000810.SZ",
+          "stock_name": "创维数字",
+          "rank": 2,
+          "score": 62.375,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "000810.SZ",
+          "stock_name": "创维数字",
+          "rank": 1,
+          "score": 60.2917,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "000801.SZ",
+          "stock_name": "四川九洲",
+          "rank": 2,
+          "score": 72.5,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881192.SH",
+      "level3_name": "清洁小家电",
+      "v2": [
+        {
+          "stock_code": "688169.SH",
+          "stock_name": "石头科技",
+          "rank": 1,
+          "score": 75.6786,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603486.SH",
+          "stock_name": "科沃斯",
+          "rank": 2,
+          "score": 75.4214,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "603486.SH",
+          "stock_name": "科沃斯",
+          "rank": 1,
+          "score": 75.1238,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "688169.SH",
+          "stock_name": "石头科技",
+          "rank": 2,
+          "score": 60.7429,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881196.SH",
+      "level3_name": "卫浴电器",
+      "v2": [
+        {
+          "stock_code": "603551.SH",
+          "stock_name": "奥普科技",
+          "rank": 1,
+          "score": 63.0,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603366.SH",
+          "stock_name": "日出东方",
+          "rank": 2,
+          "score": 37.0,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "603366.SH",
+          "stock_name": "日出东方",
+          "rank": 1,
+          "score": 22.0,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "603551.SH",
+          "stock_name": "奥普科技",
+          "rank": 2,
+          "score": 78.0,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    {
+      "level3_code": "881209.SH",
+      "level3_name": "跨境电商",
+      "v2": [
+        {
+          "stock_code": "002315.SZ",
+          "stock_name": "焦点科技",
+          "rank": 1,
+          "score": 78.0402,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "301381.SZ",
+          "stock_name": "赛维时代",
+          "rank": 2,
+          "score": 69.7678,
+          "eligibility": "eligible"
+        }
+      ],
+      "v3": [
+        {
+          "stock_code": "301381.SZ",
+          "stock_name": "赛维时代",
+          "rank": 1,
+          "score": 60.0298,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002315.SZ",
+          "stock_name": "焦点科技",
+          "rank": 2,
+          "score": 81.1452,
+          "eligibility": "eligible"
+        }
+      ]
+    }
+  ],
+  "laser_881316": {
+    "prod": [
+      {
+        "level3_code": "881316.SH",
+        "level3_name": "激光设备",
+        "stock_code": "000988.SZ",
+        "stock_name": "华工科技",
+        "leader_rank": 1,
+        "leader_score": 67.4727,
+        "leader_formula_version": "value-leader-v3.0.0"
+      },
+      {
+        "level3_code": "881316.SH",
+        "level3_name": "激光设备",
+        "stock_code": "002008.SZ",
+        "stock_name": "大族激光",
+        "leader_rank": 2,
+        "leader_score": 65.7394,
+        "leader_formula_version": "value-leader-v3.0.0"
+      }
+    ],
+    "v2_run": {
+      "level3_name": "激光设备",
+      "top2": [
+        {
+          "stock_code": "000988.SZ",
+          "stock_name": "华工科技",
+          "rank": 1,
+          "score": 76.4961,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002008.SZ",
+          "stock_name": "大族激光",
+          "rank": 2,
+          "score": 73.5974,
+          "eligibility": "eligible"
+        }
+      ]
+    },
+    "v3_run": {
+      "level3_name": "激光设备",
+      "top2": [
+        {
+          "stock_code": "000988.SZ",
+          "stock_name": "华工科技",
+          "rank": 1,
+          "score": 67.4727,
+          "eligibility": "eligible"
+        },
+        {
+          "stock_code": "002008.SZ",
+          "stock_name": "大族激光",
+          "rank": 2,
+          "score": 65.7394,
+          "eligibility": "eligible"
+        }
+      ]
+    }
+  }
+}

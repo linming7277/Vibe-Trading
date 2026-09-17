@@ -1,0 +1,388 @@
+{
+ "research_as_of": "2026-09-01",
+ "qualified_close": "2026-09-01",
+ "active": 202,
+ "focus": {
+  "A": 10,
+  "B": 20,
+  "C": 172
+ },
+ "stats": {
+  "pool": {
+   "financial": {
+    "STALE": 136,
+    "READY": 66
+   },
+   "financial_claims": {
+    "NOT_RUN": 202
+   },
+   "latest_quarter": {
+    "PARTIAL": 192,
+    "READY": 10
+   },
+   "business": {
+    "PARTIAL": 202
+   },
+   "business_driver": {
+    "MISSING": 202
+   },
+   "disclosure": {
+    "PARTIAL": 4,
+    "READY": 141,
+    "STALE": 57
+   },
+   "risk": {
+    "READY": 142,
+    "PARTIAL": 60
+   },
+   "value_trap": {
+    "HIGH": 67,
+    "LOW": 49,
+    "UNKNOWN": 62,
+    "MEDIUM": 24
+   },
+   "thesis": {
+    "PARTIAL": 167,
+    "MISSING": 35
+   },
+   "moat": {
+    "MISSING": 200,
+    "PARTIAL": 1,
+    "READY": 1
+   },
+   "capital": {
+    "READY": 202
+   },
+   "historical_valuation": {
+    "READY": 196,
+    "INSUFFICIENT": 4,
+    "PARTIAL": 2
+   },
+   "cio": {
+    "MISSING": 199,
+    "STALE": 3
+   },
+   "watchpoint": {
+    "READY": 202
+   },
+   "normalized_earnings": {
+    "NOT_APPLICABLE": 157,
+    "READY": 43,
+    "INSUFFICIENT": 2
+   },
+   "cycle_profit_scenario": {
+    "NOT_APPLICABLE": 159,
+    "READY": 34,
+    "PARTIAL": 9
+   }
+  },
+  "A": {
+   "financial": {
+    "STALE": 4,
+    "READY": 6
+   },
+   "financial_claims": {
+    "NOT_RUN": 10
+   },
+   "latest_quarter": {
+    "PARTIAL": 10
+   },
+   "business": {
+    "PARTIAL": 10
+   },
+   "business_driver": {
+    "MISSING": 10
+   },
+   "disclosure": {
+    "READY": 4,
+    "STALE": 6
+   },
+   "risk": {
+    "READY": 10
+   },
+   "value_trap": {
+    "UNKNOWN": 5,
+    "MEDIUM": 5
+   },
+   "thesis": {
+    "PARTIAL": 10
+   },
+   "moat": {
+    "MISSING": 9,
+    "READY": 1
+   },
+   "capital": {
+    "READY": 10
+   },
+   "historical_valuation": {
+    "READY": 10
+   },
+   "cio": {
+    "MISSING": 9,
+    "STALE": 1
+   },
+   "watchpoint": {
+    "READY": 10
+   },
+   "normalized_earnings": {
+    "NOT_APPLICABLE": 10
+   },
+   "cycle_profit_scenario": {
+    "NOT_APPLICABLE": 10
+   }
+  },
+  "B": {
+   "financial": {
+    "STALE": 12,
+    "READY": 8
+   },
+   "financial_claims": {
+    "NOT_RUN": 20
+   },
+   "latest_quarter": {
+    "PARTIAL": 19,
+    "READY": 1
+   },
+   "business": {
+    "PARTIAL": 20
+   },
+   "business_driver": {
+    "MISSING": 20
+   },
+   "disclosure": {
+    "READY": 13,
+    "STALE": 7
+   },
+   "risk": {
+    "PARTIAL": 14,
+    "READY": 6
+   },
+   "value_trap": {
+    "LOW": 12,
+    "UNKNOWN": 7,
+    "MEDIUM": 1
+   },
+   "thesis": {
+    "PARTIAL": 15,
+    "MISSING": 5
+   },
+   "moat": {
+    "MISSING": 20
+   },
+   "capital": {
+    "READY": 20
+   },
+   "historical_valuation": {
+    "READY": 20
+   },
+   "cio": {
+    "MISSING": 19,
+    "STALE": 1
+   },
+   "watchpoint": {
+    "READY": 20
+   },
+   "normalized_earnings": {
+    "NOT_APPLICABLE": 18,
+    "READY": 2
+   },
+   "cycle_profit_scenario": {
+    "NOT_APPLICABLE": 18,
+    "READY": 2
+   }
+  },
+  "C": {
+   "financial": {
+    "STALE": 120,
+    "READY": 52
+   },
+   "financial_claims": {
+    "NOT_RUN": 172
+   },
+   "latest_quarter": {
+    "PARTIAL": 163,
+    "READY": 9
+   },
+   "business": {
+    "PARTIAL": 172
+   },
+   "business_driver": {
+    "MISSING": 172
+   },
+   "disclosure": {
+    "PARTIAL": 4,
+    "READY": 124,
+    "STALE": 44
+   },
+   "risk": {
+    "READY": 126,
+    "PARTIAL": 46
+   },
+   "value_trap": {
+    "HIGH": 67,
+    "LOW": 37,
+    "UNKNOWN": 50,
+    "MEDIUM": 18
+   },
+   "thesis": {
+    "PARTIAL": 142,
+    "MISSING": 30
+   },
+   "moat": {
+    "MISSING": 171,
+    "PARTIAL": 1
+   },
+   "capital": {
+    "READY": 172
+   },
+   "historical_valuation": {
+    "READY": 166,
+    "INSUFFICIENT": 4,
+    "PARTIAL": 2
+   },
+   "cio": {
+    "MISSING": 171,
+    "STALE": 1
+   },
+   "watchpoint": {
+    "READY": 172
+   },
+   "normalized_earnings": {
+    "NOT_APPLICABLE": 129,
+    "READY": 41,
+    "INSUFFICIENT": 2
+   },
+   "cycle_profit_scenario": {
+    "NOT_APPLICABLE": 131,
+    "READY": 32,
+    "PARTIAL": 9
+   }
+  }
+ },
+ "readiness": {
+  "002887.SZ": "READY_WITH_CAUTIONS",
+  "600108.SH": "READY_WITH_CAUTIONS",
+  "600335.SH": "READY_WITH_CAUTIONS",
+  "600894.SH": "READY_WITH_CAUTIONS",
+  "601117.SH": "READY_WITH_CAUTIONS",
+  "601186.SH": "READY_WITH_CAUTIONS",
+  "601717.SH": "READY_WITH_CAUTIONS",
+  "603511.SH": "READY_WITH_CAUTIONS",
+  "605108.SH": "READY_WITH_CAUTIONS",
+  "688138.SH": "READY_WITH_CAUTIONS"
+ },
+ "readiness_dist": {
+  "READY_WITH_CAUTIONS": 10
+ },
+ "gap_dist": {
+  "HIGH_VALUE": 106,
+  "MEDIUM_VALUE": 125,
+  "LOW_VALUE": 684,
+  "IGNORE_FOR_NOW": 269
+ },
+ "gap_module_dist": {
+  "financial": 136,
+  "financial_claims": 202,
+  "thesis": 202,
+  "disclosure": 61,
+  "business": 34,
+  "risk": 60,
+  "business_driver": 43,
+  "cio": 202,
+  "moat": 200,
+  "value_trap": 27,
+  "normalized_earnings": 2,
+  "historical_valuation": 6,
+  "cycle_profit_scenario": 9
+ },
+ "cross": {
+  "trap_high_x_business_shallow": 12,
+  "trap_high_x_thesis_missing": 13,
+  "trap_high_x_disclosure_not_ready": 19,
+  "risk_high_x_business_shallow": 14,
+  "risk_high_x_thesis_missing": 14,
+  "risk_high_x_disclosure_not_ready": 24,
+  "risk_unknown_x_business_missing_snap": 11
+ },
+ "risk_unknown_root": {
+  "BUSINESS_GAP_PARTIAL": 49,
+  "BUSINESS_GAP_MISSING": 11
+ },
+ "business_root": {
+  "OK(带来源claims>0)": 168,
+  "PARTIAL_CLAIMS(0 claims)": 34
+ },
+ "cio_stale_root": {
+  "SECTION_STALE:company_position": 3,
+  "SECTION_STALE:latest_quarter": 3,
+  "SECTION_STALE:quality_risk": 3,
+  "SECTION_STALE:business_structure": 3,
+  "SECTION_STALE:moat": 3,
+  "SECTION_STALE:valuation": 3,
+  "SECTION_STALE:normalized_earnings": 3,
+  "SECTION_STALE:cycle_profit_scenario": 3,
+  "SECTION_STALE:why_research": 3,
+  "SECTION_STALE:why_caution": 3,
+  "SECTION_STALE:thesis_watchpoints": 3,
+  "SECTION_STALE:cio_conclusion": 3
+ },
+ "wp_gap_root": {
+  "MOAT": 1223,
+  "CAPITAL": 423,
+  "RISK": 60,
+  "THESIS": 1
+ },
+ "fresh_modules": {
+  "financial": {
+   "STALE": 202
+  },
+  "business": {
+   "STALE": 179,
+   "FRESH": 23
+  },
+  "valuation": {
+   "FRESH": 202
+  },
+  "risk": {
+   "FRESH": 202
+  },
+  "moat": {
+   "FRESH": 202
+  },
+  "capital_allocation": {
+   "FRESH": 202
+  },
+  "thesis": {
+   "FRESH": 167,
+   "NOT_PERSISTED": 35
+  },
+  "risk_snapshot": {
+   "FRESH": 202
+  },
+  "low_value_pool": {
+   "FRESH": 202
+  },
+  "daily_brief": {
+   "NOT_PERSISTED": 202
+  }
+ },
+ "cheapest_high_value": 43,
+ "batch1_companies": [
+  "002887.SZ",
+  "600108.SH",
+  "600335.SH",
+  "600894.SH",
+  "601117.SH",
+  "601186.SH",
+  "601717.SH",
+  "688138.SH"
+ ],
+ "batch1_gaps": 20,
+ "validation_errors": [],
+ "timings": {
+  "phase_a_s": 1.9,
+  "phase_b_watchpoint_batch_s": 27.55,
+  "phase_b_services_s": 79.43,
+  "phase_b2_wp_s": 24.93
+ }
+}

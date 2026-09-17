@@ -1,0 +1,1035 @@
+{
+ "timings": {
+  "watchpoint_batch_s": 1.25,
+  "per_company_services_s": 1.94
+ },
+ "company_count": 4,
+ "cio_live_freshness": {
+  "605108.SH": {
+   "stock_code": "605108.SH",
+   "research_as_of": "2026-08-28",
+   "overall": "PARTIALLY_STALE",
+   "sections": {
+    "company_position": "STALE",
+    "leader_quality": "FRESH",
+    "financial_path": "FRESH",
+    "latest_quarter": "STALE",
+    "operating_stage": "FRESH",
+    "quality_risk": "STALE",
+    "business_structure": "STALE",
+    "moat": "STALE",
+    "capital_allocation": "FRESH",
+    "valuation": "STALE",
+    "normalized_earnings": "STALE",
+    "scenarios": "FRESH",
+    "cycle_profit_scenario": "STALE",
+    "why_research": "STALE",
+    "why_caution": "STALE",
+    "thesis_watchpoints": "STALE",
+    "cio_conclusion": "STALE"
+   },
+   "stale_sections": [
+    "company_position",
+    "latest_quarter",
+    "quality_risk",
+    "business_structure",
+    "moat",
+    "valuation",
+    "normalized_earnings",
+    "cycle_profit_scenario",
+    "why_research",
+    "why_caution",
+    "thesis_watchpoints",
+    "cio_conclusion"
+   ]
+  },
+  "600460.SH": {
+   "stock_code": "600460.SH",
+   "research_as_of": "2026-08-31",
+   "overall": "PARTIALLY_STALE",
+   "sections": {
+    "company_position": "FRESH",
+    "leader_quality": "FRESH",
+    "financial_path": "FRESH",
+    "latest_quarter": "FRESH",
+    "operating_stage": "FRESH",
+    "quality_risk": "STALE",
+    "business_structure": "STALE",
+    "moat": "FRESH",
+    "capital_allocation": "FRESH",
+    "valuation": "STALE",
+    "normalized_earnings": "FRESH",
+    "scenarios": "FRESH",
+    "cycle_profit_scenario": "FRESH",
+    "why_research": "FRESH",
+    "why_caution": "FRESH",
+    "thesis_watchpoints": "STALE",
+    "cio_conclusion": "FRESH"
+   },
+   "stale_sections": [
+    "quality_risk",
+    "business_structure",
+    "valuation",
+    "thesis_watchpoints"
+   ]
+  }
+ },
+ "per_company": {
+  "600987.SH": {
+   "in_pool": true,
+   "watchpoint": {
+    "error": null,
+    "top_count": 1,
+    "watchpoint_count": 9,
+    "data_gap_count": 8,
+    "primary_action": "RISK_REVIEW",
+    "focus_tier": "C",
+    "suggested_research_need": null,
+    "source_freshness": {
+     "focus_as_of": "2026-09-01",
+     "historical_valuation_as_of": "2026-09-01",
+     "low_value_as_of": "2026-09-01",
+     "market_price_as_of": "2026-09-01",
+     "notice": null,
+     "price_structure": {
+      "current_quote_date": "2026-09-01",
+      "gap_calendar_days": 13,
+      "gap_semantics": "CALENDAR_DAYS_FALLBACK",
+      "gap_trading_days": null,
+      "label": "已过期",
+      "last_bar_date": "2026-08-19",
+      "status": "EXPIRED"
+     },
+     "price_structure_as_of": "2026-08-19",
+     "risk_as_of": "2026-09-01",
+     "thesis_as_of": "2026-08-27",
+     "financial_as_of": "2026-08-27",
+     "normalized_as_of": "2026-09-01",
+     "business_as_of": "2026-08-27",
+     "moat_as_of": "2026-09-01",
+     "capital_as_of": "2026-09-01"
+    },
+    "categories": [
+     "CAPITAL",
+     "FINANCIAL",
+     "RISK",
+     "THESIS",
+     "VALUATION"
+    ]
+   },
+   "deep_coverage": {
+    "market": "CN",
+    "stock_code": "600987.SH",
+    "research_as_of": null,
+    "dimensions": {
+     "financial": "READY",
+     "business_profile": "READY",
+     "business_research": "READY",
+     "valuation": "READY",
+     "risk": "READY",
+     "disclosure": "READY",
+     "moat_evidence": "MISSING",
+     "moat_research": "MISSING",
+     "thesis": "READY",
+     "capital_allocation": "READY",
+     "leader_quality": "READY"
+    },
+    "overall_coverage": "USABLE",
+    "layers": {
+     "P0": [
+      "financial",
+      "business_profile",
+      "business_research",
+      "valuation",
+      "risk"
+     ],
+     "P1": [
+      "disclosure",
+      "moat_evidence",
+      "moat_research",
+      "thesis"
+     ],
+     "P2": [
+      "capital_allocation",
+      "leader_quality"
+     ]
+    }
+   },
+   "moat": {
+    "status": "UNKNOWN",
+    "dimension_count": 11,
+    "supported": 0,
+    "partial": 0,
+    "unknown": 11,
+    "challenged": 0,
+    "applicable": 0,
+    "challenges_count": 0,
+    "data_gaps": 8,
+    "error": null
+   },
+   "capital": {
+    "status": "READY",
+    "core_known": 4,
+    "dividend_status": "SUPPORTED",
+    "buyback_status": "UNKNOWN",
+    "mna_status": "UNKNOWN",
+    "data_gaps": [
+     "investment_cash_flow",
+     "financing_cash_flow",
+     "buyback",
+     "m_and_a",
+     "equity_financing_reason",
+     "debt_maturity",
+     "debt_cost",
+     "NO_ROIC",
+     "NO_PROJECT_LEVEL_CAPEX",
+     "LATEST_OUTCOME_MAY_NOT_BE_OBSERVABLE",
+     "DIVIDEND_PIT_LIMITED",
+     "NO_DECLARATION_DATE",
+     "DEBT_MATURITY_MISSING",
+     "DEBT_COST_MISSING",
+     "NO_BORROWING_REPAYMENT_CASH_FLOW",
+     "EQUITY_FINANCING_REASON_UNKNOWN",
+     "INVESTMENT_CASH_FLOW_MISSING",
+     "FINANCING_CASH_FLOW_MISSING",
+     "CASH_USE_MISSING",
+     "BUYBACK_DATA_MISSING",
+     "M_AND_A_DATA_MISSING"
+    ],
+    "error": null
+   },
+   "normalized": {
+    "status": "READY",
+    "applicability": "LOW_VALUE_ADDED",
+    "insufficient_reason": null,
+    "error": null
+   },
+   "cycle": {
+    "status": "NOT_APPLICABLE",
+    "applicability": "NOT_APPLICABLE",
+    "not_applicable_reason": "适用性=LOW_VALUE_ADDED，不需要周期利润情景",
+    "error": null
+   },
+   "freshness": {
+    "market": "CN",
+    "stock_code": "600987.SH",
+    "research_as_of": "2026-09-02",
+    "overall_freshness": "STALE",
+    "modules": [
+     {
+      "module": "financial",
+      "title": "财务研究（特征/预测/叙述）",
+      "status": "STALE",
+      "stale_reason": "输入指纹已变化（新财报/行情/版本），确定性层待 prepare 换代",
+      "input_fingerprint": "a92263df2e9941b8d1773d3462eefdc440990138d3fc2c796b3f760316cf2537",
+      "persisted_as_of": "2026-08-27"
+     },
+     {
+      "module": "business",
+      "title": "经营研究",
+      "status": "STALE",
+      "stale_reason": "画像/披露输入已变化",
+      "input_fingerprint": "3f9105067281bb73c7bb506505b458d34f0b51552bfbf8e8b05ad85290ef990a",
+      "persisted_as_of": "2026-08-27"
+     },
+     {
+      "module": "valuation",
+      "title": "估值（价格区间/历史分位/入场/退出）",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "555bdeac2a03685f27db33bf2e45d8b46947b23f60187943932c5e3deb815d95",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "risk",
+      "title": "风险研究（规则引擎）",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "4152449072e0b4c8e1996b006c9127f5a125b498b039a8cdfcb18f915aa8cfb9",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "moat",
+      "title": "护城河（证据/研究）",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "7c4f618e35eb78af475cba9245b4dc27fd1a12c2c708c2bc569bb7df8c030e33",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "capital_allocation",
+      "title": "资本配置",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "80b0888639cba9c4518b59299ebbaf1d3e0b08b3cb81047f40cc6578816e54db",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "thesis",
+      "title": "公司核心逻辑（Thesis/Evidence/Review）",
+      "status": "FRESH",
+      "stale_reason": "",
+      "input_fingerprint": null,
+      "persisted_as_of": "2026-08-27",
+      "thesis_version": 1,
+      "authority_status": "AI_PROVISIONAL",
+      "review_is_stale": false
+     },
+     {
+      "module": "risk_snapshot",
+      "title": "风险快照（低估池）",
+      "status": "FRESH",
+      "stale_reason": "",
+      "input_fingerprint": "4152449072e0b4c8e1996b006c9127f5a125b498b039a8cdfcb18f915aa8cfb9",
+      "persisted_as_of": "2026-09-01"
+     },
+     {
+      "module": "low_value_pool",
+      "title": "低估龙头池成员资格",
+      "status": "FRESH",
+      "stale_reason": "ACTIVE，池基准日 2026-09-01（EOD 按日幂等刷新）",
+      "input_fingerprint": null,
+      "persisted_as_of": "2026-09-01",
+      "valuation_status": "DEEPLY_UNDERVALUED",
+      "entry_level": "HIGH_ATTENTION"
+     },
+     {
+      "module": "daily_brief",
+      "title": "每日投研简报",
+      "status": "NOT_PERSISTED",
+      "stale_reason": "当日简报尚未生成",
+      "input_fingerprint": null,
+      "persisted_as_of": null
+     }
+    ],
+    "summary": {
+     "FRESH": 7,
+     "PARTIALLY_STALE": 0,
+     "STALE": 2,
+     "UNKNOWN": 0,
+     "INVALID": 0,
+     "NOT_PERSISTED": 1
+    }
+   }
+  },
+  "600874.SH": {
+   "in_pool": true,
+   "watchpoint": {
+    "error": null,
+    "top_count": 2,
+    "watchpoint_count": 6,
+    "data_gap_count": 9,
+    "primary_action": "CONTINUE_OBSERVE",
+    "focus_tier": "B",
+    "suggested_research_need": "继续观察，同时补齐风险证据。",
+    "source_freshness": {
+     "focus_as_of": "2026-09-01",
+     "historical_valuation_as_of": "2026-09-01",
+     "low_value_as_of": "2026-09-01",
+     "market_price_as_of": "2026-09-01",
+     "notice": null,
+     "price_structure": {
+      "current_quote_date": "2026-09-01",
+      "gap_calendar_days": 13,
+      "gap_semantics": "CALENDAR_DAYS_FALLBACK",
+      "gap_trading_days": null,
+      "label": "已过期",
+      "last_bar_date": "2026-08-19",
+      "status": "EXPIRED"
+     },
+     "price_structure_as_of": "2026-08-19",
+     "risk_as_of": "2026-09-01",
+     "thesis_as_of": "2026-08-27",
+     "financial_as_of": "2026-08-25",
+     "normalized_as_of": "2026-09-01",
+     "business_as_of": "2026-08-27",
+     "moat_as_of": "2026-09-01",
+     "capital_as_of": "2026-09-01"
+    },
+    "categories": [
+     "CAPITAL",
+     "FINANCIAL",
+     "THESIS"
+    ]
+   },
+   "deep_coverage": {
+    "market": "CN",
+    "stock_code": "600874.SH",
+    "research_as_of": null,
+    "dimensions": {
+     "financial": "READY",
+     "business_profile": "READY",
+     "business_research": "READY",
+     "valuation": "READY",
+     "risk": "READY",
+     "disclosure": "READY",
+     "moat_evidence": "MISSING",
+     "moat_research": "MISSING",
+     "thesis": "READY",
+     "capital_allocation": "READY",
+     "leader_quality": "READY"
+    },
+    "overall_coverage": "USABLE",
+    "layers": {
+     "P0": [
+      "financial",
+      "business_profile",
+      "business_research",
+      "valuation",
+      "risk"
+     ],
+     "P1": [
+      "disclosure",
+      "moat_evidence",
+      "moat_research",
+      "thesis"
+     ],
+     "P2": [
+      "capital_allocation",
+      "leader_quality"
+     ]
+    }
+   },
+   "moat": {
+    "status": "UNKNOWN",
+    "dimension_count": 11,
+    "supported": 0,
+    "partial": 0,
+    "unknown": 11,
+    "challenged": 0,
+    "applicable": 0,
+    "challenges_count": 0,
+    "data_gaps": 8,
+    "error": null
+   },
+   "capital": {
+    "status": "READY",
+    "core_known": 4,
+    "dividend_status": "SUPPORTED",
+    "buyback_status": "UNKNOWN",
+    "mna_status": "UNKNOWN",
+    "data_gaps": [
+     "investment_cash_flow",
+     "financing_cash_flow",
+     "buyback",
+     "m_and_a",
+     "equity_financing_reason",
+     "debt_maturity",
+     "debt_cost",
+     "NO_ROIC",
+     "NO_PROJECT_LEVEL_CAPEX",
+     "LATEST_OUTCOME_MAY_NOT_BE_OBSERVABLE",
+     "DIVIDEND_PIT_LIMITED",
+     "NO_DECLARATION_DATE",
+     "DEBT_MATURITY_MISSING",
+     "DEBT_COST_MISSING",
+     "NO_BORROWING_REPAYMENT_CASH_FLOW",
+     "EQUITY_FINANCING_REASON_UNKNOWN",
+     "INVESTMENT_CASH_FLOW_MISSING",
+     "FINANCING_CASH_FLOW_MISSING",
+     "CASH_USE_MISSING",
+     "BUYBACK_DATA_MISSING",
+     "M_AND_A_DATA_MISSING"
+    ],
+    "error": null
+   },
+   "normalized": {
+    "status": "READY",
+    "applicability": "LOW_VALUE_ADDED",
+    "insufficient_reason": null,
+    "error": null
+   },
+   "cycle": {
+    "status": "NOT_APPLICABLE",
+    "applicability": "NOT_APPLICABLE",
+    "not_applicable_reason": "适用性=LOW_VALUE_ADDED，不需要周期利润情景",
+    "error": null
+   },
+   "freshness": {
+    "market": "CN",
+    "stock_code": "600874.SH",
+    "research_as_of": "2026-09-02",
+    "overall_freshness": "STALE",
+    "modules": [
+     {
+      "module": "financial",
+      "title": "财务研究（特征/预测/叙述）",
+      "status": "STALE",
+      "stale_reason": "输入指纹已变化（新财报/行情/版本），确定性层待 prepare 换代",
+      "input_fingerprint": "044a7f600d302f78aad45ed795ff9beb1d31e035e2c39f8d398a4f97874c53b9",
+      "persisted_as_of": "2026-08-25"
+     },
+     {
+      "module": "business",
+      "title": "经营研究",
+      "status": "STALE",
+      "stale_reason": "画像/披露输入已变化",
+      "input_fingerprint": "5171570b095f9408ccf0b2311d20ecb9e7b0b1ce91c2c23aa1f00d057d470499",
+      "persisted_as_of": "2026-08-27"
+     },
+     {
+      "module": "valuation",
+      "title": "估值（价格区间/历史分位/入场/退出）",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "ffeaddf8c1bb1404f18f20b9b14670d19e8f9deb83912e96412a9b70e5ce7719",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "risk",
+      "title": "风险研究（规则引擎）",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "91398a7df47c24402a8810d5bc644bacd0794a0dd5c579e080ccba5d4f7f15ad",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "moat",
+      "title": "护城河（证据/研究）",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "7c4f618e35eb78af475cba9245b4dc27fd1a12c2c708c2bc569bb7df8c030e33",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "capital_allocation",
+      "title": "资本配置",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "23d8d250171356b86a3b95bb9e8896b40985762fe5d9939a3d915966c43afe51",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "thesis",
+      "title": "公司核心逻辑（Thesis/Evidence/Review）",
+      "status": "FRESH",
+      "stale_reason": "",
+      "input_fingerprint": null,
+      "persisted_as_of": "2026-08-27",
+      "thesis_version": 1,
+      "authority_status": "AI_PROVISIONAL",
+      "review_is_stale": false
+     },
+     {
+      "module": "risk_snapshot",
+      "title": "风险快照（低估池）",
+      "status": "FRESH",
+      "stale_reason": "",
+      "input_fingerprint": "91398a7df47c24402a8810d5bc644bacd0794a0dd5c579e080ccba5d4f7f15ad",
+      "persisted_as_of": "2026-09-01"
+     },
+     {
+      "module": "low_value_pool",
+      "title": "低估龙头池成员资格",
+      "status": "FRESH",
+      "stale_reason": "ACTIVE，池基准日 2026-09-01（EOD 按日幂等刷新）",
+      "input_fingerprint": null,
+      "persisted_as_of": "2026-09-01",
+      "valuation_status": "DEEPLY_UNDERVALUED",
+      "entry_level": "HIGH_ATTENTION"
+     },
+     {
+      "module": "daily_brief",
+      "title": "每日投研简报",
+      "status": "NOT_PERSISTED",
+      "stale_reason": "当日简报尚未生成",
+      "input_fingerprint": null,
+      "persisted_as_of": null
+     }
+    ],
+    "summary": {
+     "FRESH": 7,
+     "PARTIALLY_STALE": 0,
+     "STALE": 2,
+     "UNKNOWN": 0,
+     "INVALID": 0,
+     "NOT_PERSISTED": 1
+    }
+   }
+  },
+  "605108.SH": {
+   "in_pool": true,
+   "watchpoint": {
+    "error": null,
+    "top_count": 3,
+    "watchpoint_count": 13,
+    "data_gap_count": 7,
+    "primary_action": "PRIORITY_RESEARCH",
+    "focus_tier": "A",
+    "suggested_research_need": null,
+    "source_freshness": {
+     "focus_as_of": "2026-09-01",
+     "historical_valuation_as_of": "2026-09-01",
+     "low_value_as_of": "2026-09-01",
+     "market_price_as_of": "2026-09-01",
+     "notice": null,
+     "price_structure": {
+      "current_quote_date": "2026-09-01",
+      "gap_calendar_days": 13,
+      "gap_semantics": "CALENDAR_DAYS_FALLBACK",
+      "gap_trading_days": null,
+      "label": "已过期",
+      "last_bar_date": "2026-08-19",
+      "status": "EXPIRED"
+     },
+     "price_structure_as_of": "2026-08-19",
+     "risk_as_of": "2026-09-01",
+     "thesis_as_of": "2026-08-26",
+     "financial_as_of": "2026-08-31",
+     "normalized_as_of": "2026-09-01",
+     "business_as_of": "2026-08-25",
+     "moat_as_of": "2026-09-01",
+     "capital_as_of": "2026-09-01"
+    },
+    "categories": [
+     "CAPITAL",
+     "FINANCIAL",
+     "MOAT",
+     "RISK",
+     "THESIS",
+     "VALUATION"
+    ]
+   },
+   "deep_coverage": {
+    "market": "CN",
+    "stock_code": "605108.SH",
+    "research_as_of": null,
+    "dimensions": {
+     "financial": "READY",
+     "business_profile": "READY",
+     "business_research": "READY",
+     "valuation": "READY",
+     "risk": "READY",
+     "disclosure": "READY",
+     "moat_evidence": "READY",
+     "moat_research": "READY",
+     "thesis": "READY",
+     "capital_allocation": "READY",
+     "leader_quality": "READY"
+    },
+    "overall_coverage": "COMPLETE",
+    "layers": {
+     "P0": [
+      "financial",
+      "business_profile",
+      "business_research",
+      "valuation",
+      "risk"
+     ],
+     "P1": [
+      "disclosure",
+      "moat_evidence",
+      "moat_research",
+      "thesis"
+     ],
+     "P2": [
+      "capital_allocation",
+      "leader_quality"
+     ]
+    }
+   },
+   "moat": {
+    "status": "READY",
+    "dimension_count": 11,
+    "supported": 3,
+    "partial": 3,
+    "unknown": 5,
+    "challenged": 0,
+    "applicable": 7,
+    "challenges_count": 6,
+    "data_gaps": 12,
+    "error": null
+   },
+   "capital": {
+    "status": "READY",
+    "core_known": 4,
+    "dividend_status": "SUPPORTED",
+    "buyback_status": "UNKNOWN",
+    "mna_status": "UNKNOWN",
+    "data_gaps": [
+     "investment_cash_flow",
+     "financing_cash_flow",
+     "buyback",
+     "m_and_a",
+     "equity_financing_reason",
+     "debt_maturity",
+     "debt_cost",
+     "NO_ROIC",
+     "NO_PROJECT_LEVEL_CAPEX",
+     "LATEST_OUTCOME_MAY_NOT_BE_OBSERVABLE",
+     "DIVIDEND_PIT_LIMITED",
+     "NO_DECLARATION_DATE",
+     "DEBT_MATURITY_MISSING",
+     "DEBT_COST_MISSING",
+     "NO_BORROWING_REPAYMENT_CASH_FLOW",
+     "EQUITY_FINANCING_REASON_UNKNOWN",
+     "INVESTMENT_CASH_FLOW_MISSING",
+     "FINANCING_CASH_FLOW_MISSING",
+     "CASH_USE_MISSING",
+     "BUYBACK_DATA_MISSING",
+     "M_AND_A_DATA_MISSING"
+    ],
+    "error": null
+   },
+   "normalized": {
+    "status": "READY",
+    "applicability": "LOW_VALUE_ADDED",
+    "insufficient_reason": null,
+    "error": null
+   },
+   "cycle": {
+    "status": "NOT_APPLICABLE",
+    "applicability": "NOT_APPLICABLE",
+    "not_applicable_reason": "适用性=LOW_VALUE_ADDED，不需要周期利润情景",
+    "error": null
+   },
+   "freshness": {
+    "market": "CN",
+    "stock_code": "605108.SH",
+    "research_as_of": "2026-09-02",
+    "overall_freshness": "STALE",
+    "modules": [
+     {
+      "module": "financial",
+      "title": "财务研究（特征/预测/叙述）",
+      "status": "STALE",
+      "stale_reason": "输入指纹已变化（新财报/行情/版本），确定性层待 prepare 换代",
+      "input_fingerprint": "4b83d313bd09f396d5118341d0b723f8f55b5c82f6e307dcc3d1765ae4078c3f",
+      "persisted_as_of": "2026-08-31"
+     },
+     {
+      "module": "business",
+      "title": "经营研究",
+      "status": "STALE",
+      "stale_reason": "画像/披露输入已变化",
+      "input_fingerprint": "d995fb21a31b6949bc98bee6421ee50a2857a4580c885434a97c1f8a83729de9",
+      "persisted_as_of": "2026-08-25"
+     },
+     {
+      "module": "valuation",
+      "title": "估值（价格区间/历史分位/入场/退出）",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "ac2e5cc656d03e51023c1edc68f6c4a853b3158f3a6617da5356c13b46595c5e",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "risk",
+      "title": "风险研究（规则引擎）",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "10391213b083b993b88bfa174855d794c6240fbebdef1810decf238407a5c514",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "moat",
+      "title": "护城河（证据/研究）",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "d8cd19a140bde1a3701346f8c364f1463668644657b0f4fc4588c4459f26e3d5",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "capital_allocation",
+      "title": "资本配置",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "928cfd8f6254fb48737c6b95c18613fcd495a6cc03241ea62d9e637d233d59c5",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "thesis",
+      "title": "公司核心逻辑（Thesis/Evidence/Review）",
+      "status": "FRESH",
+      "stale_reason": "",
+      "input_fingerprint": null,
+      "persisted_as_of": "2026-08-26",
+      "thesis_version": 1,
+      "authority_status": "AI_PROVISIONAL",
+      "review_is_stale": false
+     },
+     {
+      "module": "risk_snapshot",
+      "title": "风险快照（低估池）",
+      "status": "FRESH",
+      "stale_reason": "",
+      "input_fingerprint": "10391213b083b993b88bfa174855d794c6240fbebdef1810decf238407a5c514",
+      "persisted_as_of": "2026-09-01"
+     },
+     {
+      "module": "low_value_pool",
+      "title": "低估龙头池成员资格",
+      "status": "FRESH",
+      "stale_reason": "ACTIVE，池基准日 2026-09-01（EOD 按日幂等刷新）",
+      "input_fingerprint": null,
+      "persisted_as_of": "2026-09-01",
+      "valuation_status": "DEEPLY_UNDERVALUED",
+      "entry_level": "WATCH"
+     },
+     {
+      "module": "daily_brief",
+      "title": "每日投研简报",
+      "status": "NOT_PERSISTED",
+      "stale_reason": "当日简报尚未生成",
+      "input_fingerprint": null,
+      "persisted_as_of": null
+     }
+    ],
+    "summary": {
+     "FRESH": 7,
+     "PARTIALLY_STALE": 0,
+     "STALE": 2,
+     "UNKNOWN": 0,
+     "INVALID": 0,
+     "NOT_PERSISTED": 1
+    }
+   }
+  },
+  "600460.SH": {
+   "in_pool": false,
+   "watchpoint": {
+    "error": null,
+    "top_count": 3,
+    "watchpoint_count": 7,
+    "data_gap_count": 9,
+    "primary_action": "OUTSIDE_VALUE_SCOPE",
+    "focus_tier": "NOT_APPLICABLE",
+    "suggested_research_need": null,
+    "source_freshness": {
+     "market_price_as_of": "2026-09-02",
+     "low_value_as_of": "2026-09-01",
+     "focus_as_of": "2026-09-01",
+     "historical_valuation_as_of": "2026-08-31",
+     "price_structure_as_of": null,
+     "risk_as_of": "2026-09-01",
+     "thesis_as_of": null,
+     "price_structure": {
+      "status": "UNKNOWN",
+      "label": "日期不足",
+      "last_bar_date": null,
+      "current_quote_date": "2026-09-02",
+      "gap_calendar_days": null,
+      "gap_trading_days": null,
+      "gap_semantics": "CALENDAR_DAYS_FALLBACK"
+     },
+     "notice": "日内行情已更新，研究优先级仍以最近完成的日终研究为准。",
+     "financial_as_of": "2026-08-31",
+     "normalized_as_of": "2026-09-01",
+     "business_as_of": "2026-09-01",
+     "moat_as_of": "2026-09-01",
+     "capital_as_of": "2026-09-01"
+    },
+    "categories": [
+     "CAPITAL",
+     "FINANCIAL",
+     "MOAT",
+     "RISK"
+    ]
+   },
+   "deep_coverage": {
+    "market": "CN",
+    "stock_code": "600460.SH",
+    "research_as_of": null,
+    "dimensions": {
+     "financial": "READY",
+     "business_profile": "READY",
+     "business_research": "PARTIAL",
+     "valuation": "READY",
+     "risk": "READY",
+     "disclosure": "READY",
+     "moat_evidence": "READY",
+     "moat_research": "READY",
+     "thesis": "MISSING",
+     "capital_allocation": "READY",
+     "leader_quality": "READY"
+    },
+    "overall_coverage": "PARTIAL",
+    "layers": {
+     "P0": [
+      "financial",
+      "business_profile",
+      "business_research",
+      "valuation",
+      "risk"
+     ],
+     "P1": [
+      "disclosure",
+      "moat_evidence",
+      "moat_research",
+      "thesis"
+     ],
+     "P2": [
+      "capital_allocation",
+      "leader_quality"
+     ]
+    }
+   },
+   "moat": {
+    "status": "READY",
+    "dimension_count": 11,
+    "supported": 3,
+    "partial": 2,
+    "unknown": 6,
+    "challenged": 0,
+    "applicable": 6,
+    "challenges_count": 2,
+    "data_gaps": 11,
+    "error": null
+   },
+   "capital": {
+    "status": "READY",
+    "core_known": 4,
+    "dividend_status": "UNKNOWN",
+    "buyback_status": "UNKNOWN",
+    "mna_status": "UNKNOWN",
+    "data_gaps": [
+     "investment_cash_flow",
+     "financing_cash_flow",
+     "buyback",
+     "m_and_a",
+     "equity_financing_reason",
+     "debt_maturity",
+     "debt_cost",
+     "NO_ROIC",
+     "NO_PROJECT_LEVEL_CAPEX",
+     "LATEST_OUTCOME_MAY_NOT_BE_OBSERVABLE",
+     "DIVIDEND_DATA_UNAVAILABLE",
+     "DEBT_MATURITY_MISSING",
+     "DEBT_COST_MISSING",
+     "NO_BORROWING_REPAYMENT_CASH_FLOW",
+     "EQUITY_FINANCING_REASON_UNKNOWN",
+     "INVESTMENT_CASH_FLOW_MISSING",
+     "FINANCING_CASH_FLOW_MISSING",
+     "CASH_USE_MISSING",
+     "BUYBACK_DATA_MISSING",
+     "M_AND_A_DATA_MISSING"
+    ],
+    "error": null
+   },
+   "normalized": {
+    "status": "READY",
+    "applicability": "CYCLICAL_RELEVANT",
+    "insufficient_reason": null,
+    "error": null
+   },
+   "cycle": {
+    "status": "READY",
+    "applicability": "CYCLICAL_RELEVANT",
+    "not_applicable_reason": null,
+    "error": null
+   },
+   "freshness": {
+    "market": "CN",
+    "stock_code": "600460.SH",
+    "research_as_of": "2026-09-02",
+    "overall_freshness": "STALE",
+    "modules": [
+     {
+      "module": "financial",
+      "title": "财务研究（特征/预测/叙述）",
+      "status": "STALE",
+      "stale_reason": "输入指纹已变化（新财报/行情/版本），确定性层待 prepare 换代",
+      "input_fingerprint": "9b31b33642d6fa0e6fe6dd1a7cba94504e7e8fbe2887dcb5fb5b04745405fde4",
+      "persisted_as_of": "2026-08-31"
+     },
+     {
+      "module": "business",
+      "title": "经营研究",
+      "status": "FRESH",
+      "stale_reason": "",
+      "input_fingerprint": "2d78dc834b92afa6d98b1f052216ad7479244b4b843d91d58ecfc43e457b0fa5",
+      "persisted_as_of": "2026-09-01"
+     },
+     {
+      "module": "valuation",
+      "title": "估值（价格区间/历史分位/入场/退出）",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "a0ab6ce2abac55686ba7b202f4d3e0fa79900bf3941299db02b204469047641a",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "risk",
+      "title": "风险研究（规则引擎）",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "7146e0b5b15b499f92e6524127dc23c0d855dfe92fe0f2225c9bc6f097fb63e5",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "moat",
+      "title": "护城河（证据/研究）",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "ba3db0555f58c337af88ab1142530a431dde00b7fa65665079d8263eb55e0aa6",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "capital_allocation",
+      "title": "资本配置",
+      "status": "FRESH",
+      "stale_reason": "确定性现算层，读取时重算，无过期概念",
+      "input_fingerprint": "4d700b5b875dfcc7ac6844385d4f702a49daf23479ce2e12f6fecb4a35d3f81c",
+      "persisted_as_of": null,
+      "projection": "live"
+     },
+     {
+      "module": "thesis",
+      "title": "公司核心逻辑（Thesis/Evidence/Review）",
+      "status": "NOT_PERSISTED",
+      "stale_reason": "尚未建立核心逻辑",
+      "input_fingerprint": null,
+      "persisted_as_of": null
+     },
+     {
+      "module": "risk_snapshot",
+      "title": "风险快照（低估池）",
+      "status": "UNKNOWN",
+      "stale_reason": "该写入器尚未记录输入指纹（旧数据或未刷新）",
+      "input_fingerprint": "7146e0b5b15b499f92e6524127dc23c0d855dfe92fe0f2225c9bc6f097fb63e5",
+      "persisted_as_of": null
+     },
+     {
+      "module": "low_value_pool",
+      "title": "低估龙头池成员资格",
+      "status": "NOT_PERSISTED",
+      "stale_reason": "不在当前低估池",
+      "input_fingerprint": null,
+      "persisted_as_of": null
+     },
+     {
+      "module": "daily_brief",
+      "title": "每日投研简报",
+      "status": "NOT_PERSISTED",
+      "stale_reason": "当日简报尚未生成",
+      "input_fingerprint": null,
+      "persisted_as_of": null
+     }
+    ],
+    "summary": {
+     "FRESH": 5,
+     "PARTIALLY_STALE": 0,
+     "STALE": 1,
+     "UNKNOWN": 1,
+     "INVALID": 0,
+     "NOT_PERSISTED": 3
+    }
+   }
+  }
+ }
+}

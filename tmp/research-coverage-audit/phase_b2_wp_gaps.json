@@ -1,0 +1,2167 @@
+{
+ "seconds": 24.93,
+ "gap_categories": {
+  "MOAT": 1223,
+  "CAPITAL": 423,
+  "RISK": 60,
+  "THESIS": 1
+ },
+ "gap_source_modules": {
+  "MOAT": 1223,
+  "CAPITAL": 423,
+  "RISK": 60,
+  "THESIS": 1
+ },
+ "suggested_research_need": {
+  "None": 144,
+  "继续观察，同时补齐风险证据。": 14,
+  "风险资料不足，建议补齐相关披露。": 46
+ },
+ "per_company": {
+  "600987.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600874.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  },
+  "605108.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK",
+    "FINANCIAL",
+    "VALUATION"
+   ]
+  },
+  "000544.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600210.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  },
+  "002697.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  },
+  "600335.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "VALUATION",
+    "RISK",
+    "FINANCIAL"
+   ]
+  },
+  "000733.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601717.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK",
+    "RISK",
+    "RISK"
+   ]
+  },
+  "300360.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601886.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  },
+  "600583.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "VALUATION",
+    "FINANCIAL"
+   ]
+  },
+  "600258.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  },
+  "600866.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "003012.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "VALUATION",
+    "FINANCIAL"
+   ]
+  },
+  "600582.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601877.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600133.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "300170.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "FINANCIAL",
+    "VALUATION"
+   ]
+  },
+  "601888.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002701.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603357.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600997.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600894.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK",
+    "RISK",
+    "FINANCIAL"
+   ]
+  },
+  "603511.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK",
+    "FINANCIAL",
+    "CAPITAL"
+   ]
+  },
+  "600704.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK",
+    "FINANCIAL"
+   ]
+  },
+  "002282.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK",
+    "FINANCIAL"
+   ]
+  },
+  "600028.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000869.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601766.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  },
+  "002004.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  },
+  "300193.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600968.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "FINANCIAL",
+    "CAPITAL"
+   ]
+  },
+  "688138.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK",
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  },
+  "600467.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601390.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "300133.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002679.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600108.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL",
+    "VALUATION",
+    "RISK"
+   ]
+  },
+  "603187.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  },
+  "002887.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK",
+    "CAPITAL",
+    "CAPITAL"
+   ]
+  },
+  "601117.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK",
+    "RISK",
+    "RISK"
+   ]
+  },
+  "603185.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601186.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL",
+    "FINANCIAL",
+    "RISK"
+   ]
+  },
+  "601808.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  },
+  "000567.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002116.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600522.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL",
+    "RISK"
+   ]
+  },
+  "000063.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002159.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603579.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL",
+    "RISK"
+   ]
+  },
+  "301199.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "继续观察，同时补齐风险证据。",
+   "top_categories": [
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  },
+  "688819.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL",
+    "RISK"
+   ]
+  },
+  "300310.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK",
+    "RISK"
+   ]
+  },
+  "600104.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600496.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "601311.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002978.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002093.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000913.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000810.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601038.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "600787.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "688249.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "920039.BJ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603206.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "001914.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "300358.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "000529.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002098.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "603102.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002918.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002186.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000663.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600970.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000786.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "300470.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601668.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603345.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002444.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "603508.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "001369.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000719.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "001386.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601211.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "603515.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002128.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "603365.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "603373.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "VALUATION"
+   ]
+  },
+  "600566.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000848.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "300596.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "000682.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "688093.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "603993.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002832.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002130.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "603899.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "600933.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601865.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002533.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002351.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "601827.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "300498.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603888.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002249.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002049.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "603889.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002152.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603799.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000801.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600690.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "603279.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601139.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "000156.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002959.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603112.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603055.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002154.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600060.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002375.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603368.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002145.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601958.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002008.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002611.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "000651.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "301267.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601811.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "300957.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002967.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603062.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000726.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "688336.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "600585.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "688526.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002772.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002011.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "003025.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600054.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "300773.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000725.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "000100.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "600827.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600150.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "600612.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "300861.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600875.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "600694.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000550.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "688472.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002223.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "001325.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600167.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "301283.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002658.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "VALUATION"
+   ]
+  },
+  "300973.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000591.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600356.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603529.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002929.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "605080.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "603029.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002546.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002206.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "002466.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002507.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "605009.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600754.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "600639.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600299.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "601636.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600489.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "603214.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002185.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "601118.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "600251.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601598.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002226.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "920792.BJ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603299.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601113.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "605077.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "300244.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "300146.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603955.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002752.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002661.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "603856.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000957.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "920121.BJ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000034.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "601333.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "FINANCIAL"
+   ]
+  },
+  "601601.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "VALUATION"
+   ]
+  },
+  "002035.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "300218.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000923.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "300777.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "000655.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "605189.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002696.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK"
+   ]
+  },
+  "002780.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "RISK"
+   ],
+   "need": "风险资料不足，建议补齐相关披露。",
+   "top_categories": [
+    "VALUATION"
+   ]
+  },
+  "600460.SH": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK",
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  },
+  "002371.SZ": {
+   "gap_categories": [
+    "CAPITAL",
+    "MOAT",
+    "THESIS"
+   ],
+   "need": null,
+   "top_categories": [
+    "RISK",
+    "FINANCIAL",
+    "FINANCIAL"
+   ]
+  }
+ }
+}

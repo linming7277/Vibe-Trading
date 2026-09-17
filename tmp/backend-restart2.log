@@ -1,0 +1,49 @@
+Not migrating D:\AI\hzstock\agent\runs\safe_run: C:\Users\Administrator\.vibe-trading\runs\safe_run already exists. Reconcile or delete the old copy manually.
+INFO:     Started server process [6048]
+INFO:     Waiting for application startup.
+Not migrating D:\AI\hzstock\agent\runs\safe_run: C:\Users\Administrator\.vibe-trading\runs\safe_run already exists. Reconcile or delete the old copy manually.
+[prod] Frontend served from D:\AI\hzstock\frontend\dist
+==================================================
+  恒值投资服务
+  API internal port: 8899 (use the frontend LAN address shown by the launcher)
+==================================================
+
+Preflight Check
+ OK   │ LLM (openrouter)   │ deepseek/deepseek-v4-pro via                      
+      │                    │ https://openrouter.ai |                           
+      │                    │ base=https://openrouter.ai timeout=120s retries=2 
+      │                    │ proxy=none                                        
+ OK   │ OKX API            │ reachable                                         
+ FAIL │ yfinance           │ YFRateLimitError: Too Many Requests. Rate         
+      │                    │ limited. Try after a while. (US/HK equity         
+      │                    │ backtest unavailable)                             
+ N/A  │ Tushare            │ TUSHARE_TOKEN not set (optional) (A-share data    
+      │                    │ unavailable)                                      
+ OK   │ akshare            │ installed                                         
+ OK   │ ccxt               │ installed                                         
+ OK   │ Content Filter     │ 5% (set via CONTENT_FILTER_WARNING_THRESHOLD)     
+      │ Threshold          │                                                   
+
+5/7 services ready
+
+INFO:     Application startup complete.
+ERROR:    [Errno 10048] error while attempting to bind on address ('127.0.0.1', 8899): 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。
+INFO:     Waiting for application shutdown.
+[Lark] [2026-08-28 16:13:07,394] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678992524379720687&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678992524379720687]
+[Lark] [2026-08-28 16:13:07,395] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678992539924728779&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678992539924728779]
+[Lark] [2026-08-28 16:13:07,402] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678992541929524192&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678992541929524192]
+[Lark] [2026-08-28 16:13:07,417] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678992537012947936&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678992537012947936]
+[Lark] [2026-08-28 16:13:07,444] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678992541135965163&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678992541135965163]
+[Lark] [2026-08-28 16:13:07,458] [ERROR] receive message loop exit, err: sent 1000 (OK); then received 1000 (OK) bye [conn_id=7678992524379720687]
+[Lark] [2026-08-28 16:13:07,458] [INFO] disconnected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678992524379720687&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678992524379720687]
+Task exception was never retrieved
+future: <Task finished name='Task-20' coro=<Client._receive_message_loop() done, defined at D:\AI\hzstock\.venv\Lib\site-packages\lark_oapi\ws\client.py:217> exception=ConnectionClosedOK(Close(code=1000, reason='bye'), Close(code=1000, reason=''), False)>
+Traceback (most recent call last):
+  File "D:\AI\hzstock\.venv\Lib\site-packages\lark_oapi\ws\client.py", line 230, in _receive_message_loop
+    raise e
+  File "D:\AI\hzstock\.venv\Lib\site-packages\lark_oapi\ws\client.py", line 222, in _receive_message_loop
+    msg = await self._conn.recv()
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AI\hzstock\.venv\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedOK: sent 1000 (OK); then received 1000 (OK) bye

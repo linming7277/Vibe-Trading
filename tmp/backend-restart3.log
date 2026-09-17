@@ -1,0 +1,49 @@
+Not migrating D:\AI\hzstock\agent\runs\safe_run: C:\Users\Administrator\.vibe-trading\runs\safe_run already exists. Reconcile or delete the old copy manually.
+INFO:     Started server process [28588]
+INFO:     Waiting for application startup.
+Not migrating D:\AI\hzstock\agent\runs\safe_run: C:\Users\Administrator\.vibe-trading\runs\safe_run already exists. Reconcile or delete the old copy manually.
+[prod] Frontend served from D:\AI\hzstock\frontend\dist
+==================================================
+  恒值投资服务
+  API internal port: 8899 (use the frontend LAN address shown by the launcher)
+==================================================
+
+Preflight Check
+ OK   │ LLM (openrouter)   │ deepseek/deepseek-v4-pro via                      
+      │                    │ https://openrouter.ai |                           
+      │                    │ base=https://openrouter.ai timeout=120s retries=2 
+      │                    │ proxy=none                                        
+ OK   │ OKX API            │ reachable                                         
+ FAIL │ yfinance           │ YFRateLimitError: Too Many Requests. Rate         
+      │                    │ limited. Try after a while. (US/HK equity         
+      │                    │ backtest unavailable)                             
+ N/A  │ Tushare            │ TUSHARE_TOKEN not set (optional) (A-share data    
+      │                    │ unavailable)                                      
+ OK   │ akshare            │ installed                                         
+ OK   │ ccxt               │ installed                                         
+ OK   │ Content Filter     │ 5% (set via CONTENT_FILTER_WARNING_THRESHOLD)     
+      │ Threshold          │                                                   
+
+5/7 services ready
+
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8899 (Press CTRL+C to quit)
+[Lark] [2026-08-28 16:13:48,649] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678992713551432663&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678992713551432663]
+[Lark] [2026-08-28 16:13:48,692] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678992722728307649&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678992722728307649]
+[Lark] [2026-08-28 16:13:48,708] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678992736590252987&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678992736590252987]
+[Lark] [2026-08-28 16:13:48,715] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678992714451569609&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678992714451569609]
+[Lark] [2026-08-28 16:13:48,718] [INFO] connected to wss://msg-frontier.feishu.cn/ws/v2?fpid=493&aid=552564&device_id=7678992706128186306&access_key=[REDACTED]&service_id=33554678&ticket=[REDACTED] [conn_id=7678992706128186306]
+INFO:     127.0.0.1:60354 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60480 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61358 - "GET /strategy/value/signals?market=CN HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61359 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61361 - "GET /strategy/value/signals?market=CN HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61362 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61357 - "GET /api/value/focus-selection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61365 - "GET /strategy/value/signals?market=CN HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61367 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61370 - "GET /strategy/value/signals?market=CN HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61372 - "GET /strategy/value/automation HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61368 - "GET /api/value/focus-selection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61374 - "GET /api/value/focus-selection HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61376 - "GET /api/value/focus-selection HTTP/1.1" 200 OK
