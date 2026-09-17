@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import threading
 from datetime import datetime, time
+from typing import Any
 from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,37 @@ def run_forward_refresh() -> dict:
     return summary
 
 
+def run_domestic_refresh() -> dict[str, Any]:
+    """国内宏观序列（SHIBOR/LPR/月度指标）经 AKShare 官方源刷新。
+
+    与跨市场通路（treasury/FRED）分属两套抓取器；缺此环节时 SHIBOR 与
+    月度指标停在最近一次手动刷新。fail-soft：单源失败不阻断调度。
+    """
+    from src.providers.llm import _ensure_dotenv
+
+    _ensure_dotenv()
+    from src.strategy_engines.macro_data import MacroDataService
+    from src.strategy_engines.value_data_store import ValueDataStore
+
+    result = MacroDataService(store=ValueDataStore()).refresh(date.today().isoformat())
+    logger.info(
+        "domestic macro refresh: status=%s rows=%s errors=%s",
+        result.get("status"), result.get("series_rows"), len(result.get("errors") or []),
+    )
+    return result
+
+
+def run_daily_refresh() -> dict[str, Any]:
+    """07:35 槽位的完整日更：跨市场 forward + 国内官方源，两者相互独立。"""
+    forward = run_forward_refresh()
+    try:
+        domestic = run_domestic_refresh()
+    except Exception:  # noqa: BLE001 - 国内源失败不阻断整体
+        logger.exception("domestic macro refresh failed")
+        domestic = {"status": "FAILED"}
+    return {"forward": forward, "domestic": domestic}
+
+
 class MacroSeriesRefreshScheduler:
     """60s 看钟；工作日 07:35 → run_forward_refresh() 一次。单线程。"""
 
@@ -73,8 +105,8 @@ class MacroSeriesRefreshScheduler:
         if not due_for_refresh(now, last_fire_date=self._last_fire_date):
             return {"status": "SKIP", "now": now.isoformat()}
         self._last_fire_date = now.date()
-        self._last_summary = run_forward_refresh()
-        return {"status": "REFRESHED", "overall": self._last_summary.get("overall")}
+        self._last_summary = run_daily_refresh()
+        return {"status": "REFRESHED"}
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():

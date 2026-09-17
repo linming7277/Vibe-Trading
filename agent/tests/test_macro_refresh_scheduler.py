@@ -41,9 +41,9 @@ def test_tick_skips_and_fires_once_per_slot(monkeypatch) -> None:
 
     def fake_refresh() -> dict:
         calls.append("run")
-        return {"overall": "READY", "sources": []}
+        return {"status": "REFRESHED"}
 
-    monkeypatch.setattr("src.macro_data.scheduler.run_forward_refresh", fake_refresh)
+    monkeypatch.setattr("src.macro_data.scheduler.run_daily_refresh", fake_refresh)
     scheduler = MacroSeriesRefreshScheduler()
 
     skipped = scheduler.tick(datetime(2026, 9, 15, 7, 34, tzinfo=ZONE))
@@ -52,7 +52,7 @@ def test_tick_skips_and_fires_once_per_slot(monkeypatch) -> None:
 
     fired = scheduler.tick(datetime(2026, 9, 15, 7, 35, tzinfo=ZONE))
     assert fired["status"] == "REFRESHED"
-    assert fired["overall"] == "READY"
+    assert calls == ["run"]
     assert calls == ["run"]
 
     again = scheduler.tick(datetime(2026, 9, 15, 7, 35, tzinfo=ZONE))
@@ -77,3 +77,28 @@ def test_forward_refresh_loads_dotenv_before_run(monkeypatch) -> None:
 
     assert summary["overall"] == "PARTIAL"
     assert order == ["dotenv", "run:forward"]
+
+
+def test_daily_refresh_runs_forward_and_domestic_independently(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake_forward() -> dict:
+        calls.append("forward")
+        return {"overall": "READY"}
+
+    def fake_domestic() -> dict:
+        calls.append("domestic")
+        raise RuntimeError("domestic source down")
+
+    monkeypatch.setattr("src.macro_data.scheduler.run_forward_refresh", fake_forward)
+    monkeypatch.setattr("src.macro_data.scheduler.run_domestic_refresh", fake_domestic)
+    from src.macro_data.scheduler import run_daily_refresh
+    result = run_daily_refresh()
+
+    assert result["forward"]["overall"] == "READY"
+    assert result["domestic"]["status"] == "FAILED"
+
+
+def na_run_daily():
+    from src.macro_data.scheduler import run_daily_refresh
+    return run_daily_refresh()

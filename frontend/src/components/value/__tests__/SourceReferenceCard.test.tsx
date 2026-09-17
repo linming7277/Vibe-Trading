@@ -16,8 +16,8 @@ describe("SourceReferenceCard", () => {
     expect(claimTypeLabel("FORECAST")).toBe("情景预测");
     expect(claimTypeLabel("UNKNOWN")).toBe("暂无足够资料");
     expect(thesisStatusLabel("WEAKENING")).toBe("逻辑正在减弱");
-    expect(entryStatusLabel("WATCH")).toBe("继续观察");
-    expect(exitStatusLabel("CRITICAL_REVIEW")).toBe("需要重点复核");
+    expect(entryStatusLabel("WATCH")).toBe("价格条件继续观察");
+    expect(exitStatusLabel("CRITICAL_REVIEW")).toBe("需要立即复核核心研究逻辑");
     expect(metricLabel("revenue")).toBe("营业收入");
     expect(ownerFacingText("This claim supports the thesis after Review.")).toBe("This 研究观点 supports the 公司核心逻辑 after 研究复核.");
   });

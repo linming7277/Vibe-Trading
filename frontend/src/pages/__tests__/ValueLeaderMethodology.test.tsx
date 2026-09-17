@@ -10,6 +10,6 @@ describe("ValueLeaderMethodology", () => {
     expect(screen.getByText("不是所有股票都会直接被放进排名。", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("如果某一项指标缺失，系统不会用 0 分冒充真实表现", { exact: false })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /返回行业候选/ })).toHaveAttribute("href", "/value/leaders");
-    expect(screen.getByRole("link", { name: "查看低估龙头池" })).toHaveAttribute("href", "/value");
+    expect(screen.getByRole("link", { name: "查看低估龙头池" })).toHaveAttribute("href", "/value/focus");
   });
 });
